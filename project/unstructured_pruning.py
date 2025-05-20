@@ -1,9 +1,7 @@
-
 import torch
 from abc import abstractmethod, ABC
 from utils import *
 import os
-from Wanda_utils import prune_wanda, check_sparsity, set_seed
 
 def layer_check(name, param):
     if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in ['fc', 'classifier', 'embeddings', 'conv1']):
@@ -267,30 +265,6 @@ PRUNER_DICT = {
     "wanda_pruning": WandaPrune
 }
 
-# class WandaPrune(Pruner):
-#     def __init__(self, tokenizer, dataloader, target_ratio, seed=0, nsamples=128, cache_dir="llm_weights", use_variant=False, hf_token=None, seqlen=2048, target_layer="no_target_layer"):
-#         super().__init__(1, target_ratio, target_layer)
-        
-#         self.tokenizer = tokenizer
-#         self.dataloader = dataloader
-        
-#         self.sparsity_ratio = target_ratio
-#         self.seed = seed
-#         self.nsamples = nsamples
-#         self.cache_dir = cache_dir
-#         self.use_variant = use_variant
-#         self.hf_token = hf_token
-#         set_seed(self.seed)
-#         self.seq_len = seqlen
 
-#         self.device = get_device()
 
-#     def prune(self, model):
-#         prune_wanda(args=self, model=model, dataloader=self.dataloader, tokenizer=self.tokenizer, device=self.device)
-#         current_sparsity = check_sparsity(model)
-#         print(f"[WandaPrune] Pruning complete. Model sparsity: {current_sparsity:.4f}")
-#         return model
 
-#     def check_sparsity(self, model):
-#         sparsity = check_sparsity(model)
-#         return sparsity
