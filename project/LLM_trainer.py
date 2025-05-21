@@ -21,11 +21,11 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 class LLMTrainingArguments:
     """Configuration class for training and pruning setting for LLM classifier.
         Args:
-        pruning_type (str): Type of pruning method to use.
-        target_sparsity (float): Desired sparsity level for pruning.
         model_name (str): Pretrained model name.
         model_task (str): Task/dataset name (e.g., GLUE task - sst2, qqp, etc).
         batch_size (int): Batch size for training.
+        pruning_type (str): Type of pruning method to use.
+        target_sparsity (float): Desired sparsity level for pruning.
         pruning_scheduler (str): Pruning schedule type.
         finetuned_weights (str or None): Path to pretrained weights to load.
         num_classes (int): Number of output classes.
@@ -46,11 +46,11 @@ class LLMTrainingArguments:
         db (bool): Use DBFS directory for saving weights if True.
     """
     def __init__(self, 
-                 pruning_type,
-                 target_sparsity,
                  model_name, 
                  model_task,
                  batch_size, 
+                 pruning_type=None,
+                 target_sparsity=0,
                  pruning_scheduler="linear",
                  finetuned_weights=None,
                  num_classes=2,
@@ -112,12 +112,14 @@ class LLMTrainingArguments:
             else:
                 self.pruner = PRUNER_DICT[pruning_type](self.pruning_epochs, target_sparsity, self.pruning_scheduler)
             print("[LLM TRAINER] Pruning enabled")
+            print(f"[LLM TRAINER] Pruning scheduler: {self.pruning_scheduler}")
+
         else:
             self.pruner = pruner
             print("[LLM TRAINER] Pruning disabled")
 
+
         print(f"[LLM TRAINER] Pruning type: {self.pruning_type}")
-        print(f"[LLM TRAINER] Pruning scheduler: {self.pruning_scheduler}")
         print(f"[LLM TRAINER] Model Sparsity: {check_model_sparsity(self.model):.2f}")
             
         # Load tokenizer and datasets
@@ -137,8 +139,8 @@ class LLMTrainingArguments:
         if prune:
             self.save_path = f"{base_dir}/research/{model_name}/{model_task}/{model_name}_{pruning_type}_{target_sparsity}.pt"
         else:
-            self.save_path = f"{base_dir}/research/{model_name}/{model_task}/{model_name}_{learning_type}_{target_sparsity}.pt"
-        print(f"[LLM TRAINER] Model saved at {self.save_path}")
+            self.save_path = f"{base_dir}/research/{model_name}/{model_task}/{model_name}_{learning_type}.pt"
+        print(f"[LLM TRAINER] Saving model at {self.save_path}")
 
         self.logger = Logger(model_name, learning_type) if self.log_epochs else None
         self.scaler = GradScaler() if self.enable_mixed_precision else None
