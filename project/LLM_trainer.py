@@ -107,8 +107,16 @@ class LLMTrainingArguments:
         
         # Initialize pruner if pruning enabled
         if prune:
+            print(self.pruning_type)
             if "wanda" in pruning_type:
                 self.pruner = PRUNER_DICT[pruning_type](self.pruning_epochs, target_sparsity, self.model, self.pruning_scheduler)
+            elif self.pruning_type == "movement_pruning":
+                self.pruner = PRUNER_DICT[pruning_type](
+                self.model,            
+                self.pruning_epochs,    
+                target_sparsity,        
+                self.pruning_scheduler  
+        ) 
             else:
                 self.pruner = PRUNER_DICT[pruning_type](self.pruning_epochs, target_sparsity, self.pruning_scheduler)
             print("[LLM TRAINER] Pruning enabled")
@@ -412,4 +420,3 @@ class LLMTrainer:
             'initial_sparsity': check_model_sparsity(self.model),
             'device': str(self.device)
         }
-
