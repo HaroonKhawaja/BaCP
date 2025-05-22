@@ -27,7 +27,7 @@ EPOCHS_VITB16 = 3
 EPOCHS_VITL16 = 6
 
 # Data settings
-BATCH_SIZE = 512     
+BATCH_SIZE = 128    
 NUM_WORKERS = 24     
 DATASET = 'cifar10'  
 SIZE = 32            
