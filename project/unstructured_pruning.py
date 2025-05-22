@@ -2,6 +2,7 @@ import torch
 from abc import abstractmethod, ABC
 from utils import *
 import os
+from functools import partial
 
 def layer_check(name, param):
     if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in ['fc', 'classifier', 'embeddings', 'conv1']):
@@ -112,30 +113,40 @@ class LocalMagnitudePrune(Pruner):
                 new_mask = torch.gt(importance.view(param.shape), threshold).float()
                 self.masks[name] = new_mask
 
-class MovementPrune(Pruner):
-    def prune(self, model):
-        all_importances = []
+class MovementPruner(Pruner):
+    def __init__(self, model, pruning_epochs, target_sparsity, scheduler="linear", momentum=0.9):
+        super().__init__(pruning_epochs, target_sparsity, scheduler)
+        self.momentum = momentum
+        self.scores   = {}
+        self.masks    = {}
         for name, param in model.named_parameters():
             if layer_check(name, param):
-                if name not in self.masks:
-                    self.masks[name] = torch.ones_like(param)
+                self.scores[name] = torch.zeros_like(param.data)
+                self.masks[name]  = torch.ones_like(param.data)
+                param.register_hook(partial(self._accumulate, name, param))
 
-                # Calculating importance
-                importance = torch.abs(self.masks[name] * param * param.grad)
-                all_importances.append(importance.view(-1))
-        
-        # Calculating global importance and threshold
-        global_importances = torch.cat(all_importances)
-        total_weights = global_importances.numel()
-        num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-        threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
+    def _accumulate(self, name, param, grad):
+        inst_move = param.data * grad
+        self.scores[name].mul_(self.momentum).add_(inst_move, alpha=1 - self.momentum)
+        return grad
 
-        # Updating masks
+    def prune(self, model):
+        all_scores = torch.cat([
+            torch.abs(self.scores[name] * self.masks[name]).view(-1)
+            for name in self.scores
+        ])
+        k = max(1, int(round(all_scores.numel() * self.ratio)))
+        thresh = torch.kthvalue(all_scores, k)[0].item()
         for name, param in model.named_parameters():
             if name in self.masks:
-                importance = torch.abs(self.masks[name] * param * param.grad)
-                new_mask = torch.gt(importance, threshold).float()
-                self.masks[name] = new_mask
+                score = torch.abs(self.scores[name] * self.masks[name])
+                mask  = (score > thresh).to(param.dtype)
+                self.masks[name] = mask
+                if param.grad is not None:
+                    param.grad.data.mul_(mask)
+        for name, param in model.named_parameters():
+            if name in self.masks:
+                param.data.mul_(self.masks[name])
 
 class LocalMovementPrune(Pruner):
     def prune(self, model):
