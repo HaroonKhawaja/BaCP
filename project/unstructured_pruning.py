@@ -113,7 +113,7 @@ class LocalMagnitudePrune(Pruner):
                 new_mask = torch.gt(importance.view(param.shape), threshold).float()
                 self.masks[name] = new_mask
 
-class MovementPruner(Pruner):
+class MovementPrune(Pruner):
     def __init__(self, model, pruning_epochs, target_sparsity, scheduler="linear", momentum=0.9):
         super().__init__(pruning_epochs, target_sparsity, scheduler)
         self.momentum = momentum
