@@ -62,7 +62,7 @@ class LLMTrainingArguments:
                  log_epochs=True,
                  enable_tqdm=True,
                  enable_mixed_precision=True,
-                 num_workers=4,
+                 num_workers=8,
                  prune=True,
                  pruner=None,
                  finetune=False,
