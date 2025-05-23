@@ -127,23 +127,34 @@ class MovementPrune(Pruner):
 
     def _accumulate(self, name, param, grad):
         inst_move = param.data * grad
-        self.scores[name].mul_(self.momentum).add_(inst_move, alpha=1 - self.momentum)
+        self.scores[name].mul_(self.momentum).add_(inst_move.to(self.scores[name].device), alpha=1.0 - self.momentum)
         return grad
 
     def prune(self, model):
+        # move all scores & masks onto the correct device
+        for name, param in model.named_parameters():
+            if name in self.scores:
+                dev = param.device
+                self.scores[name] = self.scores[name].to(dev)
+                self.masks[name]  = self.masks[name].to(dev)
+
         all_scores = torch.cat([
             torch.abs(self.scores[name] * self.masks[name]).view(-1)
             for name in self.scores
         ])
         k = max(1, int(round(all_scores.numel() * self.ratio)))
         thresh = torch.kthvalue(all_scores, k)[0].item()
+    
+        # 2) rebuild masks (still on correct devices) and apply them
         for name, param in model.named_parameters():
             if name in self.masks:
                 score = torch.abs(self.scores[name] * self.masks[name])
-                mask  = (score > thresh).to(param.dtype)
+                mask  = (score > thresh).to(param.dtype).to(param.device)
                 self.masks[name] = mask
                 if param.grad is not None:
                     param.grad.data.mul_(mask)
+    
+        # 3) zero‐out the weights
         for name, param in model.named_parameters():
             if name in self.masks:
                 param.data.mul_(self.masks[name])
@@ -275,7 +286,3 @@ PRUNER_DICT = {
     "local_movement_pruning": LocalMovementPrune,
     "wanda_pruning": WandaPrune
 }
-
-
-
-

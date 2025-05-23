@@ -62,7 +62,7 @@ class LLMTrainingArguments:
                  log_epochs=True,
                  enable_tqdm=True,
                  enable_mixed_precision=True,
-                 num_workers=8,
+                 num_workers=24,
                  prune=True,
                  pruner=None,
                  finetune=False,
@@ -104,13 +104,14 @@ class LLMTrainingArguments:
         if finetuned_weights:
             loaded = load_weights(self.model, finetuned_weights)
             print("[LLM TRAINER] Weights loaded" if loaded else "[LLM TRAINER] Failed to load weights")
+            print("type ",pruning_type)
         
         # Initialize pruner if pruning enabled
+        
         if prune:
-            print(self.pruning_type)
             if "wanda" in pruning_type:
                 self.pruner = PRUNER_DICT[pruning_type](self.pruning_epochs, target_sparsity, self.model, self.pruning_scheduler)
-            elif self.pruning_type == "movement_pruning":
+            elif pruning_type == "movement_pruning":
                 self.pruner = PRUNER_DICT[pruning_type](
                 self.model,            
                 self.pruning_epochs,    
