@@ -78,6 +78,7 @@ class EncoderProjectionNetwork(nn.Module):
         
     def forward(self, x):
         if self.model_type == "vision":
+            
             return F.normalize(self.model(x), dim=1)
         else:
             x = self.model(

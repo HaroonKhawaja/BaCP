@@ -2,41 +2,45 @@ from torchvision.datasets import  CIFAR10, SVHN, MNIST, FashionMNIST, Food101, F
 import torchvision.transforms as T
 from torchvision.transforms import AutoAugment, AutoAugmentPolicy
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import random_split
 from datasets import load_dataset 
 from utils import *
 from constants import *
+from functools import lru_cache
 
 VALID_DATASETS = {
-    'supcon': {
-        'cifar10': lambda: CIFAR10(self.root_folder, train=True, transform=AugmentData(self.get_transform('supcon', size, 'cifar10'), n_views), download=True),
-        'svhn': lambda: SVHN(self.root_folder, split='train', transform=AugmentData(self.get_transform('supcon', size, 'svhn'), n_views), download=True),
-        'mnist': lambda: MNIST(self.root_folder, train=True, transform=AugmentData(self.get_transform('supcon', size, 'mnist'), n_views), download=True),
-        'fmnist': lambda: FashionMNIST(self.root_folder, train=True, transform=AugmentData(self.get_transform('supcon', size, 'fmnist'), n_views), download=True),
-        'food101': lambda: Food101(self.root_folder, split='train', transform=AugmentData(self.get_transform('supcon', size), n_views), download=True),
-        'flowers102': lambda: Flowers102(self.root_folder, split='train', transform=AugmentData(self.get_transform('supcon', size), n_views), download=True),
-        'cifar100': lambda: CIFAR100(self.root_folder, train=True, transform=AugmentData(self.get_transform('supcon', size), n_views), download=True),
+    'contrastive': {
+        'cifar10': lambda root_folder, size, n_views: CIFAR10(root_folder, train=True, transform=AugmentData(get_transform('contrastive', size, 'cifar10'), n_views), download=True),
+        'svhn': lambda root_folder, size, n_views: SVHN(root_folder, split='train', transform=AugmentData(get_transform('contrastive', size, 'svhn'), n_views), download=True),
+        'mnist': lambda root_folder, size, n_views: MNIST(root_folder, train=True, transform=AugmentData(get_transform('contrastive', size, 'mnist'), n_views), download=True),
+        'fmnist': lambda root_folder, size, n_views: FashionMNIST(root_folder, train=True, transform=AugmentData(get_transform('contrastive', size, 'fmnist'), n_views), download=True),
+        'food101': lambda root_folder, size, n_views: Food101(root_folder, split='train', transform=AugmentData(get_transform('contrastive', size), n_views), download=True),
+        'flowers102': lambda root_folder, size, n_views: Flowers102(root_folder, split='train', transform=AugmentData(get_transform('contrastive', size), n_views), download=True),
+        'cifar100': lambda root_folder, size, n_views: CIFAR100(root_folder, train=True, transform=AugmentData(get_transform('contrastive', size), n_views), download=True),
     },
     
     'supervised': {
-        'cifar10': lambda: CIFAR10(self.root_folder, train=True, transform=AugmentData(self.get_transform('supervised', size, 'cifar10'), n_views=1), download=True),
-        'svhn': lambda: SVHN(self.root_folder, split='train', transform=AugmentData(self.get_transform('supervised', size, 'svhn'), n_views=1), download=True),
-        'mnist': lambda: MNIST(self.root_folder, train=True, transform=AugmentData(self.get_transform('supervised', size, 'mnist'), n_views=1), download=True),
-        'fmnist': lambda: FashionMNIST(self.root_folder, train=True, transform=AugmentData(self.get_transform('supervised', size, 'fmnist'), n_views=1), download=True),
-        'food101': lambda: Food101(self.root_folder, split='train', transform=AugmentData(self.get_transform('supervised', size), n_views=1), download=True),
-        'flowers102': lambda: Flowers102(self.root_folder, split='train', transform=AugmentData(self.get_transform('supervised', size), n_views=1), download=True),
-        'cifar100': lambda: CIFAR100(self.root_folder, train=True, transform=AugmentData(self.get_transform('supervised', size), n_views=1), download=True),
+        'cifar10': lambda root_folder, size, n_views: CIFAR10(root_folder, train=True, transform=AugmentData(get_transform('supervised', size, 'cifar10'), n_views), download=True),
+        'svhn': lambda root_folder, size, n_views: SVHN(root_folder, split='train', transform=AugmentData(get_transform('supervised', size, 'svhn'), n_views), download=True),
+        'mnist': lambda root_folder, size, n_views: MNIST(root_folder, train=True, transform=AugmentData(get_transform('supervised', size, 'mnist'), n_views), download=True),
+        'fmnist': lambda root_folder, size, n_views: FashionMNIST(root_folder, train=True, transform=AugmentData(get_transform('supervised', size, 'fmnist'), n_views), download=True),
+        'food101': lambda root_folder, size, n_views: Food101(root_folder, split='train', transform=AugmentData(get_transform('supervised', size), n_views), download=True),
+        'flowers102': lambda root_folder, size, n_views: Flowers102(root_folder, split='train', transform=AugmentData(get_transform('supervised', size), n_views), download=True),
+        'cifar100': lambda root_folder, size, n_views: CIFAR100(root_folder, train=True, transform=AugmentData(get_transform('supervised', size), n_views), download=True),
     },
     
     'testset': {
-        'cifar10': lambda: CIFAR10(self.root_folder, train=False, transform=AugmentData(self.get_transform('supervised', size, 'cifar10'), n_views=1), download=True),
-        'svhn': lambda: SVHN(self.root_folder, split='test', transform=AugmentData(self.get_transform('supervised', size, 'svhn'), n_views=1), download=True),
-        'mnist': lambda: MNIST(self.root_folder, train=False, transform=AugmentData(self.get_transform('supervised', size, 'mnist'), n_views=1), download=True),
-        'fmnist': lambda: FashionMNIST(self.root_folder, train=False, transform=AugmentData(self.get_transform('supervised', size, 'fmnist'), n_views=1), download=True),
-        'food101': lambda: Food101(self.root_folder, split='test', transform=AugmentData(self.get_transform('supervised', size), n_views=1), download=True),
-        'flowers102': lambda: Flowers102(self.root_folder, split='test', transform=AugmentData(self.get_transform('supervised', size), n_views=1), download=True),
-        'cifar100': lambda: CIFAR100(self.root_folder, train=False, transform=AugmentData(self.get_transform('supervised', size), n_views=1), download=True),
+        'cifar10': lambda root_folder, size, n_views: CIFAR10(root_folder, train=False, transform=AugmentData(get_transform('supervised', size, 'cifar10'), n_views), download=True),
+        'svhn': lambda root_folder, size, n_views: SVHN(root_folder, split='test', transform=AugmentData(get_transform('supervised', size, 'svhn'), n_views), download=True),
+        'mnist': lambda root_folder, size, n_views: MNIST(root_folder, train=False, transform=AugmentData(get_transform('supervised', size, 'mnist'), n_views), download=True),
+        'fmnist': lambda root_folder, size, n_views: FashionMNIST(root_folder, train=False, transform=AugmentData(get_transform('supervised', size, 'fmnist'), n_views), download=True),
+        'food101': lambda root_folder, size, n_views: Food101(root_folder, split='test', transform=AugmentData(get_transform('supervised', size), n_views), download=True),
+        'flowers102': lambda root_folder, size, n_views: Flowers102(root_folder, split='test', transform=AugmentData(get_transform('supervised', size), n_views), download=True),
+        'cifar100': lambda root_folder, size, n_views: CIFAR100(root_folder, train=False, transform=AugmentData(get_transform('supervised', size), n_views), download=True),
     }
 }
+
+CV_DATASETS = ['cifar10', 'svhn', 'mnist', 'fmnist', 'food101', 'flowers102', 'cifar100']
 
 class AugmentData(object):
     def __init__(self, base_transform, n_views=2):
@@ -48,72 +52,156 @@ class AugmentData(object):
             return self.base_transform(x)
         else:
             return [self.base_transform(x) for _ in range(self.n_views)]
-        
+
+def get_transform(learning_type, size=32, dataset_name="", s=1):
+    if learning_type == 'contrastive':   
+        if dataset_name == 'cifar10':
+            data_transforms = T.Compose([
+                T.Resize((size, size)),
+                AutoAugment(policy=AutoAugmentPolicy.CIFAR10),
+                T.ToTensor(),
+                T.Normalize(mean=MEAN_CIFAR10, std=STD_CIFAR10),
+                ])
+        elif dataset_name == 'cifar100':
+            color_jitter = T.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+            data_transforms = T.Compose([
+                T.RandomResizedCrop(size=size),
+                T.RandomHorizontalFlip(),
+                T.RandomApply([color_jitter], p=0.8),
+                T.RandomGrayscale(p=0.2), 
+                T.GaussianBlur(kernel_size=int(0.1 * size)),
+                T.ToTensor(),
+                T.Normalize(mean=MEAN_CIFAR100, std=STD_CIFAR100),
+                ])
+        elif dataset_name == 'svhn':
+            data_transforms = T.Compose([
+                T.Resize((size, size)),
+                T.RandomHorizontalFlip(),
+                T.ToTensor(),
+                ])
+        elif dataset_name in ['mnist', 'fmnist']:
+            data_transforms = T.Compose([
+                T.Resize((size, size)),
+                T.RandomRotation(10),
+                T.ToTensor(),
+                ])
+        else:
+            color_jitter = T.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+            data_transforms = T.Compose([
+                T.RandomResizedCrop(size=size),
+                T.RandomHorizontalFlip(),
+                T.RandomApply([color_jitter], p=0.8),
+                T.RandomGrayscale(p=0.2),
+                T.ToTensor(),
+                T.Normalize(mean=MEAN, std=STD),
+                ])
+    elif learning_type == 'supervised':
+        if dataset_name == 'cifar10':
+            data_transforms = T.Compose([
+                T.Resize((size, size)),
+                T.ToTensor(),
+                T.Normalize(mean=MEAN_CIFAR10, std=STD_CIFAR10),
+            ])
+        elif dataset_name == 'cifar100':
+            data_transforms = T.Compose([
+                T.Resize((size, size)),
+                T.ToTensor(),
+                T.Normalize(mean=MEAN_CIFAR100, std=STD_CIFAR100),
+            ])
+        elif dataset_name == 'svhn':
+            data_transforms = T.Compose([
+                T.Resize((size, size)),
+                T.ToTensor(),
+            ])
+        elif dataset_name in ['mnist', 'fmnist']:
+            data_transforms = T.Compose([
+                T.Resize((size, size)),
+                T.ToTensor(),
+            ])
+        else:
+            data_transforms = T.Compose([
+                T.Resize((size, size)),
+                T.ToTensor(),
+                T.Normalize(mean=MEAN, std=STD),
+            ])
+    return data_transforms
+
 class CreateDatasets:
-    def __init__(self, root_folder):
-        self.root_folder = root_folder
+    def __init__(self):
         self.valid_keys = {
-            'learning_types':  ['supcon', 'supervised', 'supervised_vit'],
-            'dataset_names': ['cifar10', 'svhn', 'mnist', 'fmnist', 'food101', 'flowers102', 'cifar100']
+            'learning_types':  ['contrastive', 'supervised'],
+            'dataset_names': CV_DATASETS
         }
 
-    def get_transform(self, learning_type, size=32, dataset_name="", s=1):
-        if learning_type == 'supcon':   
-            if dataset_name == 'cifar10':
-                data_transforms = T.Compose([
-                    T.Resize((size, size)),
-                    AutoAugment(policy=AutoAugmentPolicy.CIFAR10),
-                    T.ToTensor(),
-                    T.Normalize(mean=MEAN_CIFAR10, std=STD_CIFAR10),
-                    ])
-            elif dataset_name == 'cifar100':
-                color_jitter = T.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
-                data_transforms = T.Compose([
-                    T.RandomResizedCrop(size=size),
-                    T.RandomHorizontalFlip(),
-                    T.RandomApply([color_jitter], p=0.8),
-                    T.RandomGrayscale(p=0.2), 
-                    T.GaussianBlur(kernel_size=int(0.1 * size)),
-                    T.ToTensor(),
-                    T.Normalize(mean=MEAN_CIFAR100, std=STD_CIFAR100),
-                    ])
-
-        elif learning_type == 'supervised':
-            if dataset_name == 'cifar10':
-                data_transforms = T.Compose([
-                    T.Resize((size, size)),
-                    T.ToTensor(),
-                    T.Normalize(mean=MEAN_CIFAR10, std=STD_CIFAR10),
-                ])
-            elif dataset_name == 'cifar100':
-                data_transforms = T.Compose([
-                    T.Resize((size, size)),
-                    T.ToTensor(),
-                    T.Normalize(mean=MEAN_CIFAR100, std=STD_CIFAR100),
-                ])
-            if dataset_name in ['mnist', 'fmnist']:
-                data_transforms = T.Compose([
-                    T.Resize((size, size)),
-                    T.ToTensor(),
-                ])
-            else:   
-                data_transforms = T.Compose([
-                    T.Resize((size, size)),
-                    T.ToTensor(),
-                    T.Normalize(mean=MEAN, std=STD),
-                ])
-        return data_transforms
-
-
-    def get_dataset_fn(self, learning_type, dataset_name, size=32, n_views=2):
+    def get_dataset_fn(self, learning_type, dataset_name):
         assert learning_type in self.valid_keys['learning_types'], 'Learning type does not exist.'
         assert dataset_name in self.valid_keys['dataset_names'], 'dataset does not exist.'
-        
         train_dataset_fn = VALID_DATASETS[learning_type][dataset_name]
         test_dataset_fn = VALID_DATASETS['testset'][dataset_name]
-        
         return train_dataset_fn, test_dataset_fn
+
+@lru_cache()
+def load_cv_dataset(dataset_name, cache_dir="./data", learning_type='supervised', size=32):
+    """
+    Load computer vision dataset.
+    """
+    valid_datasets = ['cifar10', 'svhn', 'mnist', 'fmnist', 'food101', 'flowers102', 'cifar100']
+    assert dataset_name in valid_datasets, f"Unsupported CV dataset: {dataset_name}"
+
+    # Creating datasets
+    dataset = CreateDatasets()
+    train_dataset_fn, test_dataset_fn = dataset.get_dataset_fn(learning_type, dataset_name)
+    trainset = train_dataset_fn(cache_dir, size, 1 if learning_type == 'supervised' else 2)
+    testset = test_dataset_fn(cache_dir, size, 1)
     
+    # Creating validation set
+    if hasattr(trainset, 'data'):
+        train_size = len(trainset)
+        val_size = int(0.15 * train_size)
+        train_size = train_size - val_size
+        trainset, valset = random_split(trainset, [train_size, val_size])
+    
+    return {
+        'train': trainset,
+        'validation': valset,
+        'test': testset
+    }
+
+def get_cv_data(dataset_name, batch_size, size=32, num_workers=24, cache_dir="./data", learning_type='supervised'):
+    try:
+        # Loading datasets
+        datasets = load_cv_dataset(dataset_name, cache_dir=cache_dir, learning_type=learning_type, size=size)
+        print(f"[CV DATALOADERS] Loaded {dataset_name} with splits: {list(datasets.keys())}")
+        
+        loader_args = {
+            "batch_size": batch_size,
+            "num_workers": num_workers,
+            "pin_memory": True,
+            "persistent_workers": num_workers > 0,
+            "drop_last": True,
+        }
+        
+        # Creating dataloaders
+        trainloader = DataLoader(datasets["train"], shuffle=True, **loader_args)
+        valloader = DataLoader(datasets["validation"], shuffle=False, **loader_args)
+        testloader = DataLoader(datasets["test"], shuffle=False, **loader_args)
+        
+        data = {
+            "trainloader": trainloader,
+            "trainset": datasets["train"],
+            "valloader": valloader,
+            "valset": datasets["validation"],
+            "testloader": testloader,
+            "testset": datasets["test"]
+        }
+        return data
+
+    except Exception as e:
+        print(f"Error loading CV dataset {dataset_name}: {str(e)}")
+        raise e
+
+
+# LLM Datasets
 class GlueDataset(Dataset):
     def __init__(self, data):
         self.data = data
@@ -169,8 +257,4 @@ def get_glue_data(model_name, tokenizer, task_name, batch_size, num_workers=24):
         "testloader": testloader,
         "testset": testset
     }
-
     return data
-
-
-            

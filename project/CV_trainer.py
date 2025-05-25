@@ -11,47 +11,26 @@ from tqdm import tqdm
 from datasets.utils.logging import disable_progress_bar
 from unstructured_pruning import check_model_sparsity, PRUNER_DICT
 from models import ClassificationNetwork
-from dataset_utils import get_glue_data
+from dataset_utils import get_glue_data, get_cv_data, CV_DATASETS
 from datasets import get_dataset_config_names
+from torch.nn import CrossEntropyLoss
 
 disable_progress_bar()
 os.environ["HF_DATASETS_CACHE"] = "/dbfs/hf_datasets"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-class LLMTrainingArguments:
-    """Configuration class for training and pruning settings for LLM classifier.
-    Args:
-        model_name (str): Pretrained model name.
-        model_task (str): Task/dataset name (e.g., GLUE task - sst2, qqp, etc).
-        batch_size (int): Batch size for training.
-        pruning_type (str, optional): Type of pruning method to use. Defaults to None.
-        target_sparsity (float): Desired sparsity level for pruning. Defaults to 0.
-        sparsity_scheduler (str): Pruning schedule type. Defaults to "linear".
-        finetuned_weights (str, optional): Path to pretrained weights to load. Defaults to None.
-        num_classes (int): Number of output classes. Defaults to 2.
-        learning_rate (float): Learning rate. Defaults to 2e-5.
-        learning_type (str): Identifier for the learning method. Defaults to "".
-        epochs (int): Total number of training epochs. Defaults to 10.
-        pruning_epochs (int, optional): Number of pruning epochs, defaults to total epochs if None.
-        recovery_epochs (int): Number of finetuning epochs after pruning. Defaults to 5.
-        log_epochs (bool): Whether to log training info per epoch. Defaults to True.
-        enable_tqdm (bool): Whether to use tqdm progress bars. Defaults to True.
-        enable_mixed_precision (bool): Use mixed precision training. Defaults to True.
-        num_workers (int): DataLoader workers count. Defaults to 24.
-        pruner (object, optional): External pruner instance to use. Defaults to None.
-        finetune (bool): Flag for finetuning mode. Defaults to False.
-        delta_t (int): Steps interval for pruning schedule. Defaults to 500.
-        db (bool): Use DBFS directory for saving weights if True. Defaults to True.
-    """
+class CVTrainingArguments:
     def __init__(self, 
                  model_name, 
                  model_task,
                  batch_size, 
+                 image_size=32,
                  pruning_type=None,
                  target_sparsity=0,
                  sparsity_scheduler="linear",
                  finetuned_weights=None,
-                 num_classes=2,
+                 num_classes=10,
+                 criterion=CrossEntropyLoss(),
                  learning_rate=2e-5, 
                  learning_type="",
                  epochs=10, 
@@ -67,11 +46,12 @@ class LLMTrainingArguments:
                  db=True):
         
         # Base model configuration
-        self.model_type = 'llm'
+        self.model_type = 'cv'
         self.model_name = model_name
         self.model_task = model_task
         self.finetuned_weights = finetuned_weights
         self.num_classes = num_classes
+        self.criterion = criterion
 
         # Training parameters
         self.batch_size = batch_size
@@ -95,7 +75,7 @@ class LLMTrainingArguments:
         self._initialize_pruner(pruning_type, target_sparsity, sparsity_scheduler, delta_t, pruner)    
 
         # Initializing dataloaders
-        self._initialize_data_loaders(model_task, batch_size, num_workers)
+        self._initialize_data_loaders(model_task, batch_size, image_size, num_workers)
 
         # Initializing paths and logger
         self._initialize_paths_and_logger(db, learning_type, log_epochs)
@@ -103,15 +83,12 @@ class LLMTrainingArguments:
     
     def _initialize_model(self, model_name, finetuned_weights, num_classes):
         """Initialize the models required for training."""
-        print("[LLM TRAINER] Initializing model...")
+        print("[TRAINER] Initializing model")
         self.model = ClassificationNetwork(model_name, num_classes=num_classes)
         self.embedded_dim = self.model.embedding_dim
         if finetuned_weights:
             loaded = load_weights(self.model, finetuned_weights)
-            print("[LLM TRAINER] Weights loaded" if loaded else "[LLM TRAINER] Failed to load weights")
-
-        # Initializing tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            print("[TRAINER] Weights loaded" if loaded else "[TRAINER] Failed to load weights")
 
         # Initializing optimizer
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate)
@@ -138,29 +115,33 @@ class LLMTrainingArguments:
                     target_sparsity, 
                     self.sparsity_scheduler
                 )
-            print("[LLM TRAINER] Pruning enabled")
-            print(f"[LLM TRAINER] Initializing pruner for {pruning_type}")
-            print(f"[LLM TRAINER] Pruning scheduler: {self.sparsity_scheduler}")
-            print(f"[LLM TRAINER] Pruning target sparsity: {target_sparsity}")
+            print("[TRAINER] Pruning enabled")
+            print(f"[TRAINER] Initializing pruner for {pruning_type}")
+            print(f"[TRAINER] Pruning scheduler: {self.sparsity_scheduler}")
+            print(f"[TRAINER] Pruning target sparsity: {target_sparsity}")
         else:
             self.pruner = pruner
-            print("[LLM TRAINER] Pruning disabled")
+            self.pruning_epochs = 0
+            self.recovery_epochs = 0
+            print("[TRAINER] Pruning disabled")
         
         self.current_sparsity = check_model_sparsity(self.model)
-        print(f"[LLM TRAINER] Current model sparsity: {self.current_sparsity}")
+        print(f"[TRAINER] Current model sparsity: {self.current_sparsity}")
 
-    def _initialize_data_loaders(self, model_task, batch_size, num_workers):
+    def _initialize_data_loaders(self, model_task, batch_size, image_size, num_workers):
         """Initialize data loaders for the specified task."""
-        print(f"[LLM TRAINER] Initializing data loaders for {model_task}")
-        if model_task in get_dataset_config_names("glue"):
-            data = get_glue_data(self.model_name, self.tokenizer, model_task, batch_size, num_workers)
+        print(f"[TRAINER] Initializing data loaders for {model_task}")
+        if model_task in CV_DATASETS:
+            data = get_cv_data(model_task, batch_size, image_size, num_workers)
             if len(data) >= 2:
                 self.trainloader = data["trainloader"]
                 self.valloader = data["valloader"]
                 self.testloader = data.get("testloader", None)
             else:
                 raise ValueError(f"Expected at least trainloader and valloader for {model_task}, got {len(data)} loaders")
-
+        else:
+            raise ValueError(f"{model_task} dot not exist in cv models. Existing datasets are: {CV_DATASETS}")
+        
     def _initialize_paths_and_logger(self, db, learning_type, log_epochs):
         """Initialize weight paths and logger."""
         self.learning_type = learning_type
@@ -171,11 +152,12 @@ class LLMTrainingArguments:
             self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{self.model_name}_{learning_type}.pt"
         
         self.logger = Logger(self.model_name, learning_type) if log_epochs else None
-        print(f"[LLM TRAINER] Saving model checkpoints to {self.save_path}")
+        print(f"[TRAINER] Saving model checkpoints to {self.save_path}")
 
-class LLMTrainer:
+
+class Trainer:
     """
-    Trainer class for training, fine-tuning, and pruning an LLM classification models.
+    Trainer class for training, fine-tuning, and pruning an CV classification models.
     """
     def __init__(self, training_args):
         for key, value in vars(training_args).items():
@@ -195,6 +177,7 @@ class LLMTrainer:
             'model_name': getattr(self, 'model_name', None),
             'model_task': getattr(self, 'model_task', None),
             'num_classes': getattr(self, 'num_classes', None),
+            'criterion': getattr(self, 'criterion', None),
             'embedding_dim': getattr(self, 'embedded_dim', None),
             
             # Training parameters
@@ -237,8 +220,8 @@ class LLMTrainer:
             self.logger.log_hyperparameters(self.logger_params)
                 
         if self.enable_mixed_precision:
-            print("[LLM TRAINER] Training with mixed precision enabled")
-        print(f"[LLM TRAINER] Initial model sparsity: {check_model_sparsity(self.model):.2f}")
+            print("[TRAINER] Training with mixed precision enabled")
+        print(f"[TRAINER] Initial model sparsity: {check_model_sparsity(self.model):.2f}")
 
         for epoch in range(self.epochs):
             # Training
@@ -269,7 +252,7 @@ class LLMTrainer:
                 self.logger.log_epochs(info)
             
             if self.handle_save(epoch):
-                print(f"[LLM TRAINER] weights saved!")
+                print(f"[TRAINER] weights saved!")
 
             # Pruning and recovery schedule
             if self.prune and self.pruner and epoch < self.pruning_epochs:
@@ -314,13 +297,13 @@ class LLMTrainer:
         Load weights and evaluate the model on validation or test set.
         Returns accuracy in percentage.
         """
-        print(f"[LLM TRAINER] Loading weights: {self.save_path}")
+        print(f"[TRAINER] Loading weights: {self.save_path}")
         if self.save_path and load_weights(self.model, self.save_path):
-            print("[LLM TRAINER] Weights loaded successfully")
+            print("[TRAINER] Weights loaded successfully")
         else:
-            print("[LLM TRAINER] Failed to load weights")
+            print("[TRAINER] Failed to load weights")
 
-        print(f"[LLM TRAINER] Model Sparsity: {check_model_sparsity(self.model):.2f}")
+        print(f"[TRAINER] Model Sparsity: {check_model_sparsity(self.model):.2f}")
 
         self.model.eval()
         self.model.to(self.device)
@@ -332,8 +315,13 @@ class LLMTrainer:
 
         with torch.no_grad():
             for batch in batchloader:
-                batch = {k: v.to(self.device) for k, v in batch.items()}
-                labels = batch["label"]
+                if isinstance(batch, dict):
+                    batch = {k: v.to(self.device) for k, v in batch.items()}
+                    labels = batch["label"]
+
+                elif isinstance(batch, list):
+                    batch = [x.to(self.device) for x in batch]
+                    batch, labels = batch
 
                 if self.enable_mixed_precision:
                     with autocast(device_type=self.device):
@@ -341,7 +329,7 @@ class LLMTrainer:
                 else:
                     outputs = self.model(batch)
 
-                preds = torch.argmax(outputs.logits, dim=1)
+                preds = torch.argmax(outputs.logits, dim=1) if self.model_type == 'llm' else outputs.max(1)[1]
                 total_correct += (preds == labels).sum().item()
                 total_samples += labels.size(0)
 
@@ -361,16 +349,21 @@ class LLMTrainer:
 
         batchloader = tqdm(self.trainloader, desc=desc) if self.enable_tqdm else self.trainloader
         for step, batch in enumerate(batchloader):
-            batch = {k: v.to(self.device) for k, v in batch.items()}
+            if isinstance(batch, dict):
+                batch = {k: v.to(self.device) for k, v in batch.items()}
+            elif isinstance(batch, list):
+                batch = [x.to(self.device) for x in batch]
+                batch, labels = batch
+
             self.optimizer.zero_grad()
 
             if self.enable_mixed_precision:
                 with autocast(device_type=self.device):
                     outputs = self.model(batch)
-                    loss = outputs.loss
+                    loss = outputs.loss if self.model_type == 'llm' else self.criterion(outputs, labels)
             else:
                 outputs = self.model(batch)
-                loss = outputs.loss
+                loss = outputs.loss if self.model_type == 'llm' else self.criterion(outputs, labels)
 
             self.total_loss += loss.item()
 
@@ -380,16 +373,21 @@ class LLMTrainer:
             running_loss = self.total_loss / (step + 1)
             if self.enable_tqdm:
                 batchloader.set_postfix(Loss=f"{running_loss:.4f}", Sparsity=f"{check_model_sparsity(self.model):.2f}")
-
+            
     def run_validation_epoch(self, desc):
         """
         Run one full validation epoch.
         """
         batchloader = tqdm(self.valloader, desc=desc) if self.enable_tqdm else self.valloader
         with torch.no_grad():
-            for batch in batchloader:
-                batch = {k: v.to(self.device) for k, v in batch.items()}
-                labels = batch["label"]
+            for step, batch in enumerate(batchloader):
+                if isinstance(batch, dict):
+                    batch = {k: v.to(self.device) for k, v in batch.items()}
+                    labels = batch["label"]
+
+                elif isinstance(batch, list):
+                    batch = [x.to(self.device) for x in batch]
+                    batch, labels = batch
                 
                 if self.enable_mixed_precision:
                     with autocast(device_type=self.device):
@@ -397,7 +395,7 @@ class LLMTrainer:
                 else:
                     outputs = self.model(batch)
 
-                preds = torch.argmax(outputs.logits, dim=1)
+                preds = torch.argmax(outputs.logits, dim=1) if self.model_type == 'llm' else outputs.max(1)[1]
                 correct = (preds == labels).sum()
                 self.total_correct += correct.item()
                 self.total_samples += labels.size(0)
