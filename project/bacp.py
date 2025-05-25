@@ -114,7 +114,6 @@ class BaCPTrainingArgumentsLLM:
         # Initializing classification head and optimizer
         self.classification_head = nn.Linear(self.embedded_dim, self.num_classes).to(self.device)
         self.optimizer = optim.AdamW(self.current_model.parameters(), lr=self.learning_rate)
-        self.optimizer.add_param_group({'params': self.classification_head.parameters()})
     
     def _initialize_pruner(self, pruning_type, target_sparsity, sparsity_scheduler, delta_t):
         """Initialize the pruner based on the pruning type."""
@@ -125,28 +124,35 @@ class BaCPTrainingArgumentsLLM:
         self.prune = pruning_type is not None and target_sparsity > 0
 
         if "wanda" in pruning_type:
-            self.pruner = PRUNER_DICT[pruning_type](self.pruning_epochs, target_sparsity, self.current_model, self.sparsity_scheduler)
+            self.pruner = PRUNER_DICT[pruning_type](
+                self.pruning_epochs, 
+                target_sparsity,
+                self.current_model, 
+                self.sparsity_scheduler
+            )
         else:
-            self.pruner = PRUNER_DICT[pruning_type](self.pruning_epochs, target_sparsity, self.sparsity_scheduler)
+            self.pruner = PRUNER_DICT[pruning_type](
+                self.pruning_epochs, 
+                target_sparsity, 
+                self.sparsity_scheduler
+            )
 
-        print(f"[BaCP TRAINER] Initializing pruner for {pruning_type}...")
+        print(f"[BaCP TRAINER] Initializing pruner for {pruning_type}")
         print(f"[BaCP TRAINER] Pruning scheduler: {self.sparsity_scheduler}")
         if self.prune:
             print(f"[BaCP TRAINER] Pruning target sparsity: {target_sparsity}")
     
     def _initialize_data_loaders(self, model_task, batch_size, num_workers):
         """Initialize data loaders for the specified task."""
-        print(f"[BaCP TRAINER] Initializing data loaders for {model_task}...")
+        print(f"[BaCP TRAINER] Initializing data loaders for {model_task}")
         if model_task in get_dataset_config_names("glue"):
-            data = get_glue_data(
-                self.model_name, self.tokenizer, model_task, batch_size, num_workers)
-            
-            if len(data.keys()) >= 2:
+            data = get_glue_data(self.model_name, self.tokenizer, model_task, batch_size, num_workers)
+            if len(data) >= 2:
                 self.trainloader = data["trainloader"]
                 self.valloader = data["valloader"]
-                self.testloader = data["testloader"]
+                self.testloader = data.get("testloader", None)
             else:
-                raise ValueError(f"Invalid number of dataloaders for {model_task} task")
+                raise ValueError(f"Expected at least trainloader and valloader for {model_task}, got {len(data)} loaders")
     
     def _initialize_contrastive_learning(self):
         """Initialize contrastive loss functions."""
@@ -166,11 +172,7 @@ class BaCPTrainingArgumentsLLM:
         self.pm_save_path = f"{base_path}_pm.pt"
         self.fm_save_path = f"{base_path}_fm.pt"
         
-        if log_epochs:
-            self.logger = Logger(model_name, f"bacp_pruning/sparsity_{self.target_sparsity}")
-        else:
-            self.logger = None
-
+        self.logger = Logger(model_name, f"bacp_pruning/sparsity_{self.target_sparsity}") if log_epochs else None
         print(f"[BaCP TRAINER] Saving model checkpoints to {base_path}_cm/pm/fm.pt")
 
 class BaCPTrainer:

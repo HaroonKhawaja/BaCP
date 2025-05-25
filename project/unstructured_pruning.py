@@ -4,7 +4,7 @@ from utils import *
 import os
 
 def layer_check(name, param):
-    if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in ['fc', 'classifier', 'embeddings', 'conv1']):
+    if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in ['heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 'conv1', 'class_token', 'pos_embedding']):
         return True
     return False
 
@@ -26,7 +26,6 @@ class Pruner(ABC):
         self.amount = self.ratio
         self.masks = {}
         self.target_layer = target_layer
-        self.is_wanda = False
 
         assert sparsity_scheduler in ["linear", "cubic"], "Invalid sparsity scheduler"
         self.sparsity_scheduler = sparsity_scheduler
@@ -167,6 +166,7 @@ class WandaPrune(Pruner):
         if hasattr(model.model, 'distilbert') and hasattr(model.model.distilbert, 'transformer') and hasattr(model.model.distilbert.transformer, 'layer'):
             self.transformer_layers = model.model.distilbert.transformer.layer
             self.prefix = "distilbert.transformer.layer"
+        
         else:
             raise ValueError("Model does not contain layers.")
 
