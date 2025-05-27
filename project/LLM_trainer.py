@@ -168,7 +168,12 @@ class LLMTrainingArguments:
         if self.prune:
             self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{self.model_name}_{self.pruning_type}_{self.target_sparsity}.pt"
         else:
-            self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{self.model_name}_{learning_type}.pt"
+            if self.current_sparsity != 0 and self.pruning_type is not None:
+                weights_path = f"{self.model_name}_{learning_type}_{self.pruning_type}_{self.current_sparsity}"
+            else:
+                weights_path = f"{self.model_name}_{learning_type}"
+                
+            self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{weights_path}.pt"
         
         self.logger = Logger(self.model_name, learning_type) if log_epochs else None
         print(f"[LLM TRAINER] Saving model checkpoints to {self.save_path}")
