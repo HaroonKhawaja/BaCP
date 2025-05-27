@@ -335,7 +335,7 @@ class BaCPTrainer:
         self.recover = False
 
     def train_epoch_llm(self, desc):
-        if self.pruner is not None and self.pruner.is_wanda and not self.recover:
+        if (self.prune and self.pruner) and (hasattr(self.pruner, 'is_wanda') and self.pruner.is_wanda) and (not self.recover):
             self.pruner.register_hooks(self.current_model)
         
         self.total_loss = 0.0
