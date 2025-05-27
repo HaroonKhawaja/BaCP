@@ -45,7 +45,7 @@ class Pruner(ABC):
 
     def ratio_step(self):
         if self.sparsity_scheduler == "linear":
-            self.linear_ratio_step()
+            self.linear_scheduler()
         else:
             return
             
@@ -89,10 +89,11 @@ class MagnitudePrune(Pruner):
         
         # Updating masks
         for name, param in model.named_parameters():
-            if name in self.masks:
-                importance = torch.abs(self.masks[name] * param)
-                new_mask = torch.gt(importance, threshold).float()
-                self.masks[name] = new_mask
+            if layer_check(name, param):
+                if name in self.masks:
+                    importance = torch.abs(self.masks[name] * param)
+                    new_mask = torch.gt(importance, threshold).float()
+                    self.masks[name] = new_mask
 
 class LocalMagnitudePrune(Pruner):
     def prune(self, model):
@@ -131,10 +132,11 @@ class MovementPrune(Pruner):
 
         # Updating masks
         for name, param in model.named_parameters():
-            if name in self.masks:
-                importance = torch.abs(self.masks[name] * param * param.grad)
-                new_mask = torch.gt(importance, threshold).float()
-                self.masks[name] = new_mask
+            if layer_check(name, param):
+                if name in self.masks:
+                    importance = torch.abs(self.masks[name] * param * param.grad)
+                    new_mask = torch.gt(importance, threshold).float()
+                    self.masks[name] = new_mask
 
 class LocalMovementPrune(Pruner):
     def prune(self, model):

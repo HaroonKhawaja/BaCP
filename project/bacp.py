@@ -308,6 +308,8 @@ class BaCPTrainer:
     def retrain(self):
         self.recover = True
         for epoch in range(self.recovery_epochs):
+            self.current_epoch = epoch
+
             # Training phase
             if self.model_type == 'llm':
                 desc = f"Retraining epoch [{epoch+1}/{self.recovery_epochs}]"
@@ -399,7 +401,7 @@ class BaCPTrainer:
 
             if self.enable_tqdm:
                 batchloader.set_postfix({'PrC Loss': L_prc_total.item(), 'SnC Loss': L_snc_total.item(), 'FiC Loss': L_fic_total.item(), 'CE Loss': CE_loss.item(), 'Loss': self.total_loss.item()})
-
+        
         self.avg_losses[self.current_epoch].append(sum(losses) / len(losses))          
         self.avg_PrC[self.current_epoch].append(sum(prc_losses) / len(prc_losses))
         self.avg_SnC[self.current_epoch].append(sum(snc_losses) / len(snc_losses))
@@ -495,7 +497,7 @@ class BaCPTrainer:
             return True
         else:
             current_epoch_losses = self.avg_losses[self.current_epoch]
-            if len(current_epoch_losses) == 0:
+            if len(current_epoch_losses) >= 1:
                 torch.save(self.current_model.state_dict(), self.cm_save_path)
                 torch.save(self.pre_trained_model.state_dict(), self.pm_save_path)
                 torch.save(self.finetuned_model.state_dict(), self.fm_save_path)
