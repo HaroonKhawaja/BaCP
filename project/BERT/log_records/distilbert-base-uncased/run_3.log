@@ -34,3 +34,6 @@ save_path: /dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_.
 initial_sparsity: 0.9899480607774522
 device: cuda
 
+Epoch [1/3]: Avg Loss: 0.0799 | Avg Accuracy: 81.97 | Model Sparsity: 0.99
+Epoch [2/3]: Avg Loss: 0.0443 | Avg Accuracy: 81.85 | Model Sparsity: 0.99
+Epoch [3/3]: Avg Loss: 0.0399 | Avg Accuracy: 81.85 | Model Sparsity: 0.99
