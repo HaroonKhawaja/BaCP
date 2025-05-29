@@ -69,18 +69,17 @@ class CVTrainingArguments:
         self.scaler = GradScaler() if self.enable_mixed_precision else None
 
         # Initializing model, tokenizer, and other components
-        self._initialize_model(model_name, finetuned_weights, num_classes)
-
-        # Initializing pruner
-        self._initialize_pruner(pruning_type, target_sparsity, sparsity_scheduler, delta_t, pruner)    
+        self._initialize_model(model_name, finetuned_weights, num_classes) 
 
         # Initializing dataloaders
         self._initialize_data_loaders(model_task, batch_size, image_size, num_workers)
 
+        # Initializing pruner
+        self._initialize_pruner(pruning_type, target_sparsity, sparsity_scheduler, delta_t, pruner)   
+
         # Initializing paths and logger
         self._initialize_paths_and_logger(db, learning_type, log_epochs)
 
-    
     def _initialize_model(self, model_name, finetuned_weights, num_classes):
         """Initialize the models required for training."""
         print("[TRAINER] Initializing model")
@@ -93,12 +92,26 @@ class CVTrainingArguments:
         # Initializing optimizer
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate)
 
+    def _initialize_data_loaders(self, model_task, batch_size, image_size, num_workers):
+        """Initialize data loaders for the specified task."""
+        print(f"[TRAINER] Initializing data loaders for {model_task}")
+        if model_task in CV_DATASETS:
+            data = get_cv_data(model_task, batch_size, image_size, num_workers)
+            if len(data) >= 2:
+                self.trainloader = data["trainloader"]
+                self.valloader = data["valloader"]
+                self.testloader = data.get("testloader", None)
+            else:
+                raise ValueError(f"Expected at least trainloader and valloader for {model_task}, got {len(data)} loaders")
+        else:
+            raise ValueError(f"{model_task} dot not exist in cv models. Existing datasets are: {CV_DATASETS}")
+    
     def _initialize_pruner(self, pruning_type, target_sparsity, sparsity_scheduler, delta_t, pruner):
         """Initialize the pruner based on the pruning type."""
         self.pruning_type = pruning_type
         self.target_sparsity = target_sparsity
         self.sparsity_scheduler = sparsity_scheduler
-        self.delta_t = delta_t
+        self.delta_t = int(min(0.5 * len(self.trainloader), delta_t))
         self.prune = pruning_type is not None and target_sparsity > 0
 
         if self.prune:
@@ -128,20 +141,6 @@ class CVTrainingArguments:
         self.current_sparsity = check_model_sparsity(self.model)
         print(f"[TRAINER] Current model sparsity: {self.current_sparsity}")
 
-    def _initialize_data_loaders(self, model_task, batch_size, image_size, num_workers):
-        """Initialize data loaders for the specified task."""
-        print(f"[TRAINER] Initializing data loaders for {model_task}")
-        if model_task in CV_DATASETS:
-            data = get_cv_data(model_task, batch_size, image_size, num_workers)
-            if len(data) >= 2:
-                self.trainloader = data["trainloader"]
-                self.valloader = data["valloader"]
-                self.testloader = data.get("testloader", None)
-            else:
-                raise ValueError(f"Expected at least trainloader and valloader for {model_task}, got {len(data)} loaders")
-        else:
-            raise ValueError(f"{model_task} dot not exist in cv models. Existing datasets are: {CV_DATASETS}")
-        
     def _initialize_paths_and_logger(self, db, learning_type, log_epochs):
         """Initialize weight paths and logger."""
         self.learning_type = learning_type
@@ -224,6 +223,9 @@ class Trainer:
         print(f"[TRAINER] Initial model sparsity: {check_model_sparsity(self.model):.2f}")
 
         for epoch in range(self.epochs):
+            if self.prune and self.pruner:
+                self.val_accuracies = []
+
             # Training
             self.model.train()
             self.total_loss = 0.0
@@ -289,6 +291,9 @@ class Trainer:
 
             if self.logger is not None:
                 self.logger.log_epochs(info)
+
+            if self.handle_save(epoch):
+                print(f"[TRAINER] weights saved!")
 
         self.recover = False
 
@@ -431,7 +436,7 @@ class Trainer:
             
         elif self.pruner.sparsity_scheduler == "cubic":
             if step >= 0 and step % self.delta_t == 0:
-                self.pruner.cubic_scheduler(step, 0, self.delta_t, self.current_sparsity)
+                self.pruner.cubic_scheduler(step, 0, self.delta_t, check_model_sparsity(self.model))
                 self.pruner.prune(self.model)
 
     def handle_save(self, epoch):
@@ -439,7 +444,7 @@ class Trainer:
         if self.save_path:
             os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
 
-        if epoch == 0 or self.prune:
+        if epoch == 0:
             torch.save(self.model.state_dict(), self.save_path)
             return True
         else:

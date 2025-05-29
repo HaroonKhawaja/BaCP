@@ -53,14 +53,14 @@ class Pruner(ABC):
         if self.sparsity_scheduler == "linear":
             self.ratio += self.amount
             self.ratio = min(self.ratio, self.target_ratio)
-            print(f"\n[Pruner] Linear sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
+            print(f"[Pruner] Linear sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
 
     def cubic_scheduler(self, step, t0, delta_t, s_initial):
         if self.sparsity_scheduler == "cubic":
             progress = min(1.0, (step - t0) / (self.epochs * delta_t))
             self.ratio = self.target_ratio + (s_initial - self.target_ratio) * ((1 - progress)**3)
             self.ratio = min(self.ratio, self.target_ratio)
-            print(f"\n[Pruner] Cubic Sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
+            print(f"[Pruner] Cubic Sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
 
     def reset(self):
         self.ratio = self.target_ratio / self.epochs
@@ -163,26 +163,27 @@ class WandaPrune(Pruner):
         self.current_epoch = 0
         self.hooks = []
         self.is_wanda = True
-        self.device = model.model.device
+        self.device = model.model.device if hasattr(model.model, 'device') else get_device()
 
         if hasattr(model.model, 'distilbert') and hasattr(model.model.distilbert, 'transformer') and hasattr(model.model.distilbert.transformer, 'layer'):
-            self.transformer_layers = model.model.distilbert.transformer.layer
             self.prefix = "distilbert.transformer.layer"
-        
+        elif hasattr(model.model, 'roberta') and hasattr(model.model.roberta, 'encoder') and hasattr(model.model.roberta.encoder, 'layer'):
+            self.prefix = "roberta.encoder.layer"
+        elif hasattr(model.model, 'encoder') and hasattr(model.model.encoder, 'layers'):
+            self.prefix = "encoder.layers"
         else:
             raise ValueError("Model does not contain layers.")
 
         self.init_layers(model)
     
     def init_layers(self, model):
-        for layer_idx, layer in enumerate(self.transformer_layers):
-            for name, module in model.named_modules():
-                for child_name, child in module.named_children():
-                    if isinstance(child, torch.nn.Linear) and self.prefix in name:
-                        full_name = f"{name}.{child_name}"
-                        self.main_layers[full_name] = child.to(self.device)
-                        self.wrapped_layers[full_name] = self.WrappedLayer(child.to(self.device), full_name)
-
+        for name, module in model.named_modules():
+            for child_name, child in module.named_children():
+                if isinstance(child, torch.nn.Linear) and self.prefix in name:
+                    full_name = f"{name}.{child_name}"
+                    self.main_layers[full_name] = child.to(self.device)
+                    self.wrapped_layers[full_name] = self.WrappedLayer(child.to(self.device), full_name)
+            
     def register_hooks(self, model):
         print("[Pruner] Adding hooks")
         for name in self.wrapped_layers:
@@ -198,9 +199,8 @@ class WandaPrune(Pruner):
         def hook(_, inputs, outputs):
             if model.training:
                 input_tensor = inputs[0] if isinstance(inputs, tuple) else inputs
-                output_tensor = outputs[0] if isinstance(outputs, tuple) else outputs
                 if name in self.wrapped_layers:
-                    self.wrapped_layers[name].add_batch(input_tensor.data.to(self.device), output_tensor.data.to(self.device))
+                    self.wrapped_layers[name].add_batch(input_tensor.data.to(self.device))
         return hook
 
     def prune(self, model):
@@ -239,7 +239,7 @@ class WandaPrune(Pruner):
             self.layer_name = name
             self.nsamples = 0
 
-        def add_batch(self, input_tensor, output_tensor):
+        def add_batch(self, input_tensor):
             if self.scaler_row is None:
                 return
             
