@@ -101,7 +101,7 @@ class BaCPTrainingArgumentsLLM:
     
     def _initialize_models(self, model_name, finetuned_weights):
         """Initialize the models required for BaCP."""
-        print("[BaCP TRAINER] Initializing models...")
+        print("[BaCP TRAINER] Initializing models")
         models = create_models_for_bacp(model_name, finetuned_weights)
         self.current_model = models["curr_model"]
         self.pre_trained_model = models["pt_model"]
@@ -146,7 +146,7 @@ class BaCPTrainingArgumentsLLM:
         """Initialize data loaders for the specified task."""
         print(f"[BaCP TRAINER] Initializing data loaders for {model_task}")
         if model_task in get_dataset_config_names("glue"):
-            data = get_glue_data(self.model_name, self.tokenizer, model_task, batch_size, num_workers)
+            data = get_glue_data(self.tokenizer, model_task, batch_size, num_workers)
             if len(data) >= 2:
                 self.trainloader = data["trainloader"]
                 self.valloader = data["valloader"]
@@ -326,7 +326,7 @@ class BaCPTrainer:
                 f"Avg SnC Loss: {self.avg_SnC[self.current_epoch][-1]:.4f} | "
                 f"Avg FiC Loss: {self.avg_FiC[self.current_epoch][-1]:.4f} | "
                 f"Avg CE Loss: {self.avg_CE[self.current_epoch][-1]:.4f} | "
-                f"Model Sparsity: {sparsity:.3f}"
+                f"Model Sparsity: {sparsity:.3f}\n"
             )           
             print(info)
 

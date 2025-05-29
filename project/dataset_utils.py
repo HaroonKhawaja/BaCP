@@ -226,7 +226,7 @@ def get_squad_data(tokenizer, task_name, batch_size, num_workers=24):
         return tokenizer(example)
 
 
-def get_glue_data(model_name, tokenizer, task_name, batch_size, num_workers=24):
+def get_glue_data(tokenizer, task_name, batch_size, num_workers=24):
     assert task_name in ["mnli", "qqp", "sst2"], f"Unsupported task: {task_name}"
     dataset = load_dataset("glue", task_name, cache_dir="/dbfs/hf_datasets")
     print(f"[DATALOADERS] {[key for key in dataset]}")

@@ -122,7 +122,7 @@ class LLMTrainingArguments:
         self.target_sparsity = target_sparsity
         self.sparsity_scheduler = sparsity_scheduler
         self.delta_t = delta_t
-        self.prune = pruning_type is not None and target_sparsity > 0
+        self.prune = pruning_type is not None and target_sparsity > 0 and not self.finetune
 
         if self.prune:
             if "wanda" in pruning_type:
@@ -153,7 +153,7 @@ class LLMTrainingArguments:
         """Initialize data loaders for the specified task."""
         print(f"[LLM TRAINER] Initializing data loaders for {model_task}")
         if model_task in get_dataset_config_names("glue"):
-            data = get_glue_data(self.model_name, self.tokenizer, model_task, batch_size, num_workers)
+            data = get_glue_data(self.tokenizer, model_task, batch_size, num_workers)
             if len(data) >= 2:
                 self.trainloader = data["trainloader"]
                 self.valloader = data["valloader"]
@@ -168,8 +168,8 @@ class LLMTrainingArguments:
         if self.prune:
             self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{self.model_name}_{self.pruning_type}_{self.target_sparsity}.pt"
         else:
-            if self.current_sparsity != 0 and self.pruning_type is not None:
-                weights_path = f"{self.model_name}_{learning_type}_{self.pruning_type}_{self.current_sparsity}"
+            if self.finetune and self.pruning_type is not None:
+                weights_path = f"{self.model_name}_{learning_type}_{self.pruning_type}_{self.current_sparsity:.2f}"
             else:
                 weights_path = f"{self.model_name}_{learning_type}"
                 
@@ -331,7 +331,8 @@ class LLMTrainer:
         self.model.to(self.device)
 
         total_correct, total_samples = 0, 0
-        batchloader = self.testloader or self.valloader
+        # batchloader = self.testloader or self.valloader
+        batchloader = self.valloader    # Testloader is not accessable
         if self.enable_tqdm:
             batchloader = tqdm(batchloader, desc="Evaluating")
 

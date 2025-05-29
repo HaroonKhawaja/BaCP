@@ -9,38 +9,41 @@ from constants import *
 def get_device():
     return 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def check_sparsity_distribution(model):
+def check_sparsity_distribution(model, verbose=True):
     names = []
     sparsities = []
     num_non_zero = 0
+    total_params = 0
+
     for name, param in model.named_parameters():
         if param.requires_grad and param.dim() > 1:
             total_weights = param.data.numel()
             num_zero = torch.sum(param.data == 0).item()
+            layer_sparsity = num_zero / total_weights
 
             if "layer" in name:
                 num_non_zero += torch.sum(param.data != 0).item()
-
-            layer_sparsity = num_zero / total_weights
-            if "model." in name:
-                name = name.replace("model.", "")
-            if "distilbert." in name:
-                name = name.replace("distilbert.", "")
-            if "transformer." in name:
-                name = name.replace("transformer.", "")
-            if ".weight" in name:
-                name = name.replace(".weight", "")
-
+            
             names.append(name)
             sparsities.append(layer_sparsity)
+            total_params += total_weights
+
+            if verbose:
+                print(f"{name}: {(layer_sparsity*100):.2f}% sparsity ({num_zero}/{total_weights})")
+
+    overall_sparsity = sum(sparsities) / len(sparsities) if sparsities else 0   
+    if verbose:
+        print(f"\nOverall average sparsity: {overall_sparsity:.4f}")
+        print(f"Total parameters analyzed: {total_params}")
+        print(f"Non-zero parameters in 'layer' modules: {num_non_zero}")
     
-    print(f"Total number of non-zero weights: {num_non_zero}")
-    plt.figure(figsize=(15, 6))
-    plt.bar(range(len(sparsities)), sparsities)
-    plt.xticks(range(len(sparsities)), names, rotation=90, fontsize=8)
-    plt.ylabel("Sparsity (% zeroed weights)")
+    plt.figure(figsize=(10, 20))
+    bars = plt.barh(range(len(names)), sparsities, color='skyblue')
+    plt.yticks(range(len(names)), names)
+    plt.xlabel("Sparsity (Fraction of Zero Weights)")
     plt.title("Layer-wise Sparsity Distribution")
-    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.grid(axis="x", linestyle="--", alpha=0.5)
+    plt.xlim(0, max(sparsities) * 1.1 if sparsities else 1)
     plt.tight_layout()
     plt.show()
 
