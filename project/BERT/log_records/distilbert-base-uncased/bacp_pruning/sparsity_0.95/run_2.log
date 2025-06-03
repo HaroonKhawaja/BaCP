@@ -1,0 +1,29 @@
+Model : distilbert-base-uncased - Learning Type: bacp_pruning/sparsity_0.95
+Configuration:
+model_type: llm
+model_name: distilbert-base-uncased
+model_task: sst2
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 64
+learning_rate: 1e-05
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+n_views: 2
+temperature: 0.07
+base_temperature: 0.07
+num_classes: 2
+lambda1: 0.25
+lambda2: 0.25
+lambda3: 0.25
+lambda4: 0.25
+embedding_dim: 768
+save_path: {'current_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_magnitude_pruning_0.95_bacp_cm.pt', 'pretrained_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_magnitude_pruning_0.95_bacp_pm.pt', 'finetuned_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_magnitude_pruning_0.95_bacp_fm.pt'}
+
+Epoch [1/5]: Avg Total Loss: 5.3407 | Avg PrC Loss: 10.1890 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 10.4932 | Avg CE Loss: 0.6805 | Model Sparsity: 0.845
+Retraining Epoch [1/10]: Avg Total Loss: 7.4034 | Avg PrC Loss: 10.5320 | Avg SnC Loss: 7.6879 | Avg FiC Loss: 10.7134 | Avg CE Loss: 0.6805 | Model Sparsity: 0.845
+Retraining Epoch [2/10]: Avg Total Loss: 7.2721 | Avg PrC Loss: 10.4466 | Avg SnC Loss: 7.5863 | Avg FiC Loss: 10.3817 | Avg CE Loss: 0.6740 | Model Sparsity: 0.845
+Retraining Epoch [3/10]: Avg Total Loss: 7.2157 | Avg PrC Loss: 10.4165 | Avg SnC Loss: 7.5510 | Avg FiC Loss: 10.2275 | Avg CE Loss: 0.6676 | Model Sparsity: 0.845
+Retraining Epoch [4/10]: Avg Total Loss: 7.1758 | Avg PrC Loss: 10.3902 | Avg SnC Loss: 7.5331 | Avg FiC Loss: 10.1194 | Avg CE Loss: 0.6604 | Model Sparsity: 0.845
+Retraining Epoch [5/10]: Avg Total Loss: 7.1452 | Avg PrC Loss: 10.3756 | Avg SnC Loss: 7.5192 | Avg FiC Loss: 10.0338 | Avg CE Loss: 0.6521 | Model Sparsity: 0.845

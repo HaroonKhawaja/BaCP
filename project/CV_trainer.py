@@ -11,7 +11,7 @@ from tqdm import tqdm
 from datasets.utils.logging import disable_progress_bar
 from unstructured_pruning import check_model_sparsity, PRUNER_DICT
 from models import ClassificationNetwork
-from dataset_utils import get_glue_data, get_cv_data, CV_DATASETS
+from dataset_utils import get_glue_data, get_squad_data, get_cv_data, CV_DATASETS
 from datasets import get_dataset_config_names
 from torch.nn import CrossEntropyLoss
 
@@ -32,10 +32,11 @@ class CVTrainingArguments:
                  num_classes=10,
                  criterion=CrossEntropyLoss(),
                  learning_rate=2e-5, 
+                 optimizer_type='adamw',
                  learning_type="",
-                 epochs=10, 
+                 epochs=5, 
                  pruning_epochs=None,
-                 recovery_epochs=5,
+                 recovery_epochs=10,
                  log_epochs=True,
                  enable_tqdm=True,
                  enable_mixed_precision=True,
@@ -56,6 +57,7 @@ class CVTrainingArguments:
         # Training parameters
         self.batch_size = batch_size
         self.learning_rate = learning_rate
+        self.optimizer_type = optimizer_type
         self.epochs = epochs
         self.pruning_epochs = epochs if pruning_epochs is None else pruning_epochs
         self.recovery_epochs = recovery_epochs
@@ -90,7 +92,12 @@ class CVTrainingArguments:
             print("[TRAINER] Weights loaded" if loaded else "[TRAINER] Failed to load weights")
 
         # Initializing optimizer
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate)
+        if self.optimizer_type == 'adamw':
+            self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate)
+        elif self.optimizer_type == 'sgd':
+            self.optimizer = optim.SGD(self.model.parameters(), lr=self.learning_rate, momentum=0.9, weight_decay=5e-4)
+        else:
+            raise ValueError(f"Invalid optimizer type: {self.optimizer_type}")
 
     def _initialize_data_loaders(self, model_task, batch_size, image_size, num_workers):
         """Initialize data loaders for the specified task."""
@@ -112,7 +119,7 @@ class CVTrainingArguments:
         self.target_sparsity = target_sparsity
         self.sparsity_scheduler = sparsity_scheduler
         self.delta_t = int(min(0.5 * len(self.trainloader), delta_t))
-        self.prune = pruning_type is not None and target_sparsity > 0
+        self.prune = pruning_type is not None and target_sparsity > 0 and not self.finetune
 
         if self.prune:
             if "wanda" in pruning_type:
@@ -145,14 +152,19 @@ class CVTrainingArguments:
         """Initialize weight paths and logger."""
         self.learning_type = learning_type
         base_dir = "/dbfs" if db else "."
+
         if self.prune:
             self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{self.model_name}_{self.pruning_type}_{self.target_sparsity}.pt"
         else:
-            self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{self.model_name}_{learning_type}.pt"
-        
+            if self.finetune and self.pruning_type is not None:
+                weights_path = f"{self.model_name}_{learning_type}_{self.pruning_type}_{self.current_sparsity:.2f}"
+            else:
+                weights_path = f"{self.model_name}_{learning_type}"
+                
+            self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{weights_path}.pt"
+
         self.logger = Logger(self.model_name, learning_type) if log_epochs else None
         print(f"[TRAINER] Saving model checkpoints to {self.save_path}")
-
 
 class Trainer:
     """

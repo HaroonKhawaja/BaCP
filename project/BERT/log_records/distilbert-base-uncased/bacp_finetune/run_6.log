@@ -22,8 +22,6 @@ save_path: /dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_b
 finetuned_weights: /dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_magnitude_pruning_0.95_bacp_cm.pt
 current_sparsity: 0.9499842796796634
 
-Epoch [1/5]: Avg Loss: 0.0756 | Avg Accuracy: 83.05 | Model Sparsity: 0.95
-Epoch [2/5]: Avg Loss: 0.0568 | Avg Accuracy: 83.05 | Model Sparsity: 0.95
-Epoch [3/5]: Avg Loss: 0.0521 | Avg Accuracy: 83.05 | Model Sparsity: 0.95
-Epoch [4/5]: Avg Loss: 0.0478 | Avg Accuracy: 82.69 | Model Sparsity: 0.95
-Epoch [5/5]: Avg Loss: 0.0447 | Avg Accuracy: 81.61 | Model Sparsity: 0.95
+Epoch [1/5]: Avg Loss: 0.0753 | Avg Accuracy: 82.93 | Model Sparsity: 0.95
+Epoch [2/5]: Avg Loss: 0.0572 | Avg Accuracy: 82.33 | Model Sparsity: 0.95
+Epoch [3/5]: Avg Loss: 0.0526 | Avg Accuracy: 82.93 | Model Sparsity: 0.95

@@ -4,7 +4,7 @@ from utils import *
 import os
 
 def layer_check(name, param):
-    if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in ['heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 'conv1', 'class_token', 'pos_embedding']):
+    if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in ['heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 'class_token', 'pos_embedding']):
         return True
     return False
 

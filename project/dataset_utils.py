@@ -8,6 +8,7 @@ from utils import *
 from constants import *
 from functools import lru_cache
 
+
 VALID_DATASETS = {
     'contrastive': {
         'cifar10': lambda root_folder, size, n_views: CIFAR10(root_folder, train=True, transform=AugmentData(get_transform('contrastive', size, 'cifar10'), n_views), download=True),
@@ -99,6 +100,8 @@ def get_transform(learning_type, size=32, dataset_name="", s=1):
         if dataset_name == 'cifar10':
             data_transforms = T.Compose([
                 T.Resize((size, size)),
+                T.RandomCrop(size, padding=4),
+                T.RandomHorizontalFlip(),
                 T.ToTensor(),
                 T.Normalize(mean=MEAN_CIFAR10, std=STD_CIFAR10),
             ])
@@ -217,18 +220,13 @@ class GlueDataset(Dataset):
             "labels": example["label"]
         }
 
-
-def get_squad_data(tokenizer, task_name, batch_size, num_workers=24):
-    dataset = load_dataset("rajpurkar/squad")
-    print(f"[DATALOADERS] {[key for key in dataset]}")
-
-    def tokenize_fn(example):
-        return tokenizer(example)
-
+@lru_cache()
+def _load_glue_dataset(task_name, cache_dir="/dbfs/hf_datasets"):
+    return load_dataset("glue", task_name, cache_dir=cache_dir)
 
 def get_glue_data(tokenizer, task_name, batch_size, num_workers=24):
     assert task_name in ["mnli", "qqp", "sst2"], f"Unsupported task: {task_name}"
-    dataset = load_dataset("glue", task_name, cache_dir="/dbfs/hf_datasets")
+    dataset = _load_glue_dataset(task_name)
     print(f"[DATALOADERS] {[key for key in dataset]}")
 
     def tokenize_fn(example):
@@ -260,10 +258,134 @@ def get_glue_data(tokenizer, task_name, batch_size, num_workers=24):
   
     data = {
         "trainloader": trainloader,
-        "trainset": trainset,
         "valloader": validationloader,
-        "valset": valset,
         "testloader": testloader,
-        "testset": testset
+    }
+    return data
+
+class SquadDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        example = self.data[idx]
+        return {
+            "input_ids": example["input_ids"],
+            "attention_mask": example["attention_mask"],
+            "start_positions": example["start_positions"],
+            "end_positions": example["end_positions"]
+        }
+
+@lru_cache()
+def _load_squad_dataset(cache_dir="/dbfs/hf_datasets"):
+    return load_dataset("squad", cache_dir=cache_dir)
+
+def get_squad_data(tokenizer, batch_size, subset_ratio=1.0, num_workers=24, max_length=384, stride=128):
+    def prepare_data(example):
+        answer = example['answers']['text'][0]
+        example['answer_start'] = example['answers']['answer_start'][0]
+        example['answer_end'] = example['answer_start'] + len(answer)
+        return example
+
+    def tokenize_and_align_labels(examples):
+        questions = [q.strip() for q in examples["question"]]
+        inputs = tokenizer(
+            questions,
+            examples["context"],
+            max_length=max_length,
+            truncation="only_second",
+            stride=stride,
+            return_overflowing_tokens=True,
+            return_offsets_mapping=True,
+            padding="max_length",
+        )
+
+        offset_mapping = inputs.pop("offset_mapping")
+        sample_map = inputs.pop("overflow_to_sample_mapping")
+        start_positions = []
+        end_positions = []
+
+        for i, offset in enumerate(offset_mapping):
+            sample_idx = sample_map[i]
+            # Use the processed answer positions
+            start_char = examples["answer_start"][sample_idx]
+            end_char = examples["answer_end"][sample_idx]
+            sequence_ids = inputs.sequence_ids(i)
+
+            # Find context boundaries with bounds checking
+            idx = 0
+            while idx < len(sequence_ids) and sequence_ids[idx] != 1:
+                idx += 1
+            context_start = idx
+            
+            while idx < len(sequence_ids) and sequence_ids[idx] == 1:
+                idx += 1
+            context_end = idx - 1
+
+            # Check if answer spans are valid and within context
+            if (context_start >= len(offset) or context_end >= len(offset) or
+                offset[context_start][0] > start_char or offset[context_end][1] < end_char):
+                start_positions.append(0)
+                end_positions.append(0)
+            else:
+                # Find start position
+                idx = context_start
+                while idx <= context_end and offset[idx][0] <= start_char:
+                    idx += 1
+                start_positions.append(max(idx - 1, 0))
+
+                # Find end position
+                idx = context_end
+                while idx >= context_start and offset[idx][1] >= end_char:
+                    idx -= 1
+                end_positions.append(min(idx + 1, max_length - 1))
+
+        inputs["start_positions"] = start_positions
+        inputs["end_positions"] = end_positions
+        return inputs
+    
+    dataset = _load_squad_dataset()
+    dataset = dataset.remove_columns(['title'])
+    print(f"[DATALOADERS] {[key for key in dataset]}")
+    
+    # printing original dataset size
+    print(f"Size of original dataset: {dataset['train'].num_rows}")
+
+    for split_name in dataset:
+        if subset_ratio < 1.0 and subset_ratio > 0.0:
+            subset_size = int(len(dataset[split_name]) * subset_ratio)
+            dataset[split_name] = dataset[split_name].shuffle(seed=42).select(range(subset_size))
+    print(f"Size of data subset: {dataset['train'].num_rows}")
+
+    dataset = dataset.map(prepare_data, remove_columns=['answers'])
+    dataset = dataset.map(
+        tokenize_and_align_labels, 
+        batched=True, 
+        batch_size=128, 
+        num_proc=1,
+        remove_columns=dataset['train'].column_names
+    )
+    dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "start_positions", "end_positions"])
+
+    trainset = SquadDataset(dataset["train"])
+    valset = SquadDataset(dataset["validation"])
+
+    loader_args = {
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "pin_memory": True,
+        "persistent_workers": num_workers > 0,
+        "drop_last": True,
+    }
+
+    trainloader = DataLoader(trainset, shuffle=True, **loader_args)
+    valloader = DataLoader(valset, shuffle=False, **loader_args) 
+
+    data = {
+        'trainloader': trainloader,
+        'valloader': valloader,
     }
     return data
