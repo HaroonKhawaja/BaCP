@@ -1,0 +1,23 @@
+Model : distilbert-base-uncased - Learning Type: bacp_pruning/sparsity_0.99
+Configuration:
+model_type: llm
+model_name: distilbert-base-uncased
+model_task: sst2
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 64
+learning_rate: 2e-05
+pruning_type: movement_pruning
+target_sparsity: 0.99
+n_views: 2
+temperature: 0.07
+base_temperature: 0.07
+num_classes: 2
+lambda1: 0.25
+lambda2: 0.25
+lambda3: 0.25
+lambda4: 0.25
+embedding_dim: 768
+save_path: {'current_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_movement_pruning_0.99_bacp_cm.pt', 'pretrained_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_movement_pruning_0.99_bacp_pm.pt', 'finetuned_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_movement_pruning_0.99_bacp_fm.pt'}
+
