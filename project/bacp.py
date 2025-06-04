@@ -328,13 +328,13 @@ class BaCPTrainingArgumentsLLM:
         print(f"[BaCP TRAINER] Saving model checkpoints to {base_path}_cm/pm/fm.pt")
 
 class BaCPTrainer:
-    def __init__(self, bacp_training_args):
+    def __init__(self, bacp_training_args, lambdas=[0.25, 0.25, 0.25, 0.25]):
         for key, value in vars(bacp_training_args).items():
             setattr(self, key, value)
 
         self.classification_head = nn.Linear(128, self.num_classes).to(self.device)
         # self.classification_head = nn.Linear(self.embedded_dim, self.num_classes).to(self.device)
-        self._initialize_lambdas()
+        self._initialize_lambdas(lambdas)
         self._initialize_metric_lists()
         self._initialize_log_parameters()
         self.snapshots = []
