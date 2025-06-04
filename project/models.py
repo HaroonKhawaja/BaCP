@@ -56,16 +56,16 @@ def adapt_for_cifar(model):
         model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
 
 class EncoderProjectionNetwork(nn.Module):
-    def __init__(self, model_name, output_dims=128, pretrained=True, adapt_for_cifar10=True):
+    def __init__(self, model_name, output_dims=128, pretrained=True, adapt_for_cifar10=True, model_task='cls'):
         super().__init__()
         
         # Loading model components
-        components = get_model_components(model_name, pretrained, num_llm_labels=output_dims)
+        components = get_model_components(model_name, pretrained, num_llm_labels=output_dims, model_task=model_task)
         self.model = components["model"]
         self.embedding_dim = components["embedding_dim"]
         self.model_type = components["model_type"]
         self.model_family = components["model_family"]
-
+        self.model_task = model_task
         # Adapting the model for cifar10
         if adapt_for_cifar10 and self.model_family == "resnet":
             adapt_for_cifar(self.model)
@@ -81,16 +81,20 @@ class EncoderProjectionNetwork(nn.Module):
         
     def forward(self, x):
         if self.model_type == "vision":
-            
             return F.normalize(self.model(x), dim=1)
         else:
-            x = self.model(
-                input_ids=x["input_ids"], 
-                attention_mask=x["attention_mask"], 
-                output_hidden_states=True, 
-                return_dict=True
-                )
-            x.logits = F.normalize(x.logits, dim=1)
+            if self.model_task == 'squad':
+                x = self.model(**x)
+                x.logits = F.normalize(x.logits, dim=1)
+                return x
+            else:
+                x = self.model(
+                    input_ids=x["input_ids"], 
+                    attention_mask=x["attention_mask"], 
+                    output_hidden_states=True, 
+                    return_dict=True
+                    )
+                x.logits = F.normalize(x.logits, dim=1)
             return x
 
 class ClassificationNetwork(nn.Module):

@@ -17,8 +17,8 @@ from constants import *
 from unstructured_pruning import *
 import contextlib
 
-def create_models_for_bacp(model_name, finetuned_weights, output_dimensions=128):
-    pre_trained_model = EncoderProjectionNetwork(model_name, output_dimensions)
+def create_models_for_bacp(model_name, finetuned_weights, model_task, output_dimensions=128):
+    pre_trained_model = EncoderProjectionNetwork(model_name, output_dimensions, model_task)
     pre_trained_model.to(get_device())
 
     # Current projection model
@@ -233,7 +233,7 @@ class BaCPTrainingArgumentsLLM:
         self.scaler = GradScaler() if self.enable_mixed_precision else None
         
         # Initializing models, tokenizers, and other components
-        self._initialize_models(model_name, finetuned_weights)
+        self._initialize_models(model_name, finetuned_weights, model_task)
         
         # Initializing data loaders
         self._initialize_data_loaders(model_task, batch_size, num_workers)
@@ -247,10 +247,10 @@ class BaCPTrainingArgumentsLLM:
         # Initializing paths and logger
         self._initialize_paths_and_logger(db, model_name, model_task, pruning_type, target_sparsity, log_epochs)
         
-    def _initialize_models(self, model_name, finetuned_weights):
+    def _initialize_models(self, model_name, finetuned_weights, model_task):
         """Initialize the models required for BaCP."""
         print("[BaCP TRAINER] Initializing models")
-        models = create_models_for_bacp(model_name, finetuned_weights)
+        models = create_models_for_bacp(model_name, finetuned_weights, model_task)
         self.current_model = models["curr_model"]
         self.pre_trained_model = models["pt_model"]
         self.finetuned_model = models["ft_model"]
@@ -299,6 +299,15 @@ class BaCPTrainingArgumentsLLM:
         print(f"[BaCP TRAINER] Initializing data loaders for {model_task}")
         if model_task in get_dataset_config_names("glue"):
             data = get_glue_data(self.tokenizer, model_task, batch_size, num_workers)
+            if len(data) >= 2:
+                self.trainloader = data["trainloader"]
+                self.valloader = data["valloader"]
+                self.testloader = data.get("testloader", None)
+            else:
+                raise ValueError(f"Expected at least trainloader and valloader for {model_task}, got {len(data)} loaders")
+
+        elif model_task in 'squad':
+            data = get_squad_data(self.tokenizer, batch_size, 1.0, num_workers)
             if len(data) >= 2:
                 self.trainloader = data["trainloader"]
                 self.valloader = data["valloader"]
