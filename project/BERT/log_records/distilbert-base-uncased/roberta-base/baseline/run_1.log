@@ -1,0 +1,38 @@
+Model : roberta-base - Learning Type: baseline
+Configuration:
+model_name: roberta-base
+model_task: sst2
+num_classes: 2
+embedding_dim: 768
+batch_size: 64
+learning_rate: 2e-05
+learning_type: baseline
+epochs: 3
+optimizer: AdamW (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 2e-05
+    maximize: False
+    weight_decay: 0.01
+)
+enable_mixed_precision: True
+prune: False
+pruning_type: None
+pruning_scheduler: linear
+target_sparsity: 0
+pruning_epochs: 3
+recovery_epochs: 5
+delta_t: 500
+finetune: False
+save_path: ./research/roberta-base/sst2/roberta-base_baseline.pt
+initial_sparsity: 0.0
+device: cuda
+
+Epoch [1/3]: Avg Loss: 0.2018 | Avg Accuracy: 94.35 | Model Sparsity: 0.00
+Epoch [2/3]: Avg Loss: 0.1362 | Avg Accuracy: 94.23 | Model Sparsity: 0.00
