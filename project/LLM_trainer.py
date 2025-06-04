@@ -13,6 +13,7 @@ from unstructured_pruning import check_model_sparsity, PRUNER_DICT
 from models import ClassificationNetwork
 from dataset_utils import get_glue_data, get_squad_data
 from datasets import get_dataset_config_names
+import evaluate
 
 disable_progress_bar()
 os.environ["HF_DATASETS_CACHE"] = "/dbfs/hf_datasets"
@@ -89,21 +90,22 @@ class LLMTrainingArguments:
         self.scaler = GradScaler() if self.enable_mixed_precision else None
 
         # Initializing model, tokenizer, and other components
-        self._initialize_model(model_name, finetuned_weights, num_classes)
-
-        # Initializing pruner
-        self._initialize_pruner(pruning_type, target_sparsity, sparsity_scheduler, delta_t, pruner)    
+        self._initialize_model(model_name, finetuned_weights, model_task)
 
         # Initializing dataloaders
         self._initialize_data_loaders(model_task, batch_size, num_workers)
 
+        # Initializing pruner
+        self._initialize_pruner(pruning_type, target_sparsity, sparsity_scheduler, delta_t, pruner)    
+
         # Initializing paths and logger
         self._initialize_paths_and_logger(db, learning_type, log_epochs)
 
-    def _initialize_model(self, model_name, finetuned_weights, num_classes):
+    def _initialize_model(self, model_name, finetuned_weights, model_task):
         """Initialize the models required for training."""
-        print("[LLM TRAINER] Initializing model...")
-        self.model = ClassificationNetwork(model_name, num_classes=num_classes)
+        print("[LLM TRAINER] Initializing model")
+        self.model = ClassificationNetwork(model_name, model_task=model_task, num_classes=self.num_classes)
+
         self.embedded_dim = self.model.embedding_dim
         if finetuned_weights:
             loaded = load_weights(self.model, finetuned_weights)
@@ -120,7 +122,7 @@ class LLMTrainingArguments:
         self.pruning_type = pruning_type
         self.target_sparsity = target_sparsity
         self.sparsity_scheduler = sparsity_scheduler
-        self.delta_t = delta_t
+        self.delta_t = int(min(0.5 * len(self.trainloader), delta_t))
         self.prune = pruning_type is not None and target_sparsity > 0 and not self.finetune
 
         if self.prune:
@@ -179,7 +181,7 @@ class LLMTrainingArguments:
             if self.finetune and self.pruning_type is not None:
                 weights_path = f"{self.model_name}_{learning_type}_{self.pruning_type}_{self.current_sparsity:.2f}"
             else:
-                weights_path = f"{self.model_name}_{learning_type}"
+                weights_path = f"{self.model_name}_{self.model_task}_{learning_type}"
                 
             self.save_path = f"{base_dir}/research/{self.model_name}/{self.model_task}/{weights_path}.pt"
         
@@ -194,6 +196,9 @@ class LLMTrainer:
         for key, value in vars(training_args).items():
             setattr(self, key, value)
 
+        if self.model_task == 'squad':
+            self.squad_metric = evaluate.load(self.model_task)
+
         self.recover = False
         self.train_losses = []
         self.accuracy_per_sparsity = {}
@@ -202,7 +207,7 @@ class LLMTrainer:
     
     def _get_sparsity_key(self):
         return round(check_model_sparsity(self.model), 4)
-
+    
     def _initialize_log_parameters(self):
         """Initialize parameters for logging purposes."""
         logger_params = {
@@ -258,30 +263,23 @@ class LLMTrainer:
 
         for epoch in range(self.epochs):
             # Training
-            self.model.train()
-            self.total_loss = 0.0
             desc = f"Training Epoch [{epoch+1}/{self.epochs}]"
-            self._run_train_epoch(desc)
+            avg_loss = self._run_train_epoch(desc)
 
             # Validation
-            self.model.eval()
-            self.total_correct, self.total_samples = 0, 0
             desc = f"Validation Epoch [{epoch+1}/{self.epochs}]"
-            self._run_validation_epoch(desc)
-
-            avg_loss = self.total_loss / len(self.trainloader)
-            avg_acc = (self.total_correct / self.total_samples) * 100
+            avg_acc, avg_f1 = self._run_validation_epoch(desc)
 
             self.train_losses.append(avg_loss)
-
             sparsity_key = self._get_sparsity_key()
             if sparsity_key not in self.accuracy_per_sparsity:
                 self.accuracy_per_sparsity[sparsity_key] = []
             self.accuracy_per_sparsity[sparsity_key].append(avg_acc)
 
             info = (
-                f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
-                f"Avg Accuracy: {avg_acc:.2f} | Model Sparsity: {self._get_sparsity_key()}\n"
+                f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
+                f"Avg Accuracy: {avg_acc:.2f} | Avg F1: {avg_f1:.2f} | "
+                f"Model Sparsity: {self._get_sparsity_key()}\n"
             )
             print(info)
             
@@ -302,18 +300,11 @@ class LLMTrainer:
         """
         self.recover = True
         for epoch in range(self.recovery_epochs):
-            self.model.train()
-            self.total_loss = 0.0
             desc = f"Recovery Epoch [{epoch+1}/{self.recovery_epochs}]"
-            self._run_train_epoch(desc)
+            avg_loss = self._run_train_epoch(desc)
 
-            self.model.eval()
-            self.total_correct, self.total_samples = 0, 0
             desc = f"Validation Epoch [{epoch+1}/{self.recovery_epochs}]"
-            self._run_validation_epoch(desc)
-
-            avg_loss = self.total_loss / len(self.trainloader)
-            avg_acc = (self.total_correct / self.total_samples) * 100
+            avg_acc, avg_f1 = self._run_validation_epoch(desc)
 
             self.train_losses.append(avg_loss)
             sparsity_key = self._get_sparsity_key()
@@ -323,7 +314,8 @@ class LLMTrainer:
 
             info = (
                 f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
-                f"Avg Accuracy: {avg_acc:.2f} | Model Sparsity: {self._get_sparsity_key()}\n"
+                f"Avg Accuracy: {avg_acc:.2f} | Avg F1: {avg_f1:.2f} | "
+                f"Model Sparsity: {self._get_sparsity_key()}\n"
             )
             print(info)
 
@@ -335,50 +327,6 @@ class LLMTrainer:
 
         self.recover = False
 
-    def evaluate(self):
-        """
-        Load weights and evaluate the model on validation or test set.
-        Returns accuracy in percentage.
-        """
-        print(f"[LLM TRAINER] Loading weights: {self.save_path}")
-        if self.save_path and load_weights(self.model, self.save_path):
-            print("[LLM TRAINER] Weights loaded successfully")
-        else:
-            print("[LLM TRAINER] Failed to load weights")
-
-        print(f"[LLM TRAINER] Model Sparsity: {self._get_sparsity_key()}")
-
-        self.model.eval()
-        self.model.to(self.device)
-
-        total_correct, total_samples = 0, 0
-        # batchloader = self.testloader or self.valloader
-        batchloader = self.valloader    # Testloader is not accessable
-        if self.enable_tqdm:
-            batchloader = tqdm(batchloader, desc="Evaluating")
-
-        with torch.no_grad():
-            for batch in batchloader:
-                batch = {k: v.to(self.device) for k, v in batch.items()}
-                labels = batch["label"]
-
-                if self.enable_mixed_precision:
-                    with autocast(device_type=self.device):
-                        outputs = self.model(batch)
-                else:
-                    outputs = self.model(batch)
-
-                preds = torch.argmax(outputs.logits, dim=1)
-                total_correct += (preds == labels).sum().item()
-                total_samples += labels.size(0)
-
-                if self.enable_tqdm:
-                    running_acc = (total_correct / total_samples) * 100
-                    batchloader.set_postfix({"Acc": f"{running_acc:.2f}%"})
-
-        accuracy = round((total_correct / total_samples) * 100, 2)
-        return accuracy
-
     def _run_train_epoch(self, desc):
         """
         Run one full training epoch.
@@ -386,6 +334,8 @@ class LLMTrainer:
         if (self.prune and self.pruner) and (hasattr(self.pruner, 'is_wanda') and self.pruner.is_wanda) and (not self.recover):
             self.pruner.register_hooks(self.model)
 
+        self.model.train()
+        total_loss = 0
         batchloader = tqdm(self.trainloader, desc=desc) if self.enable_tqdm else self.trainloader
         for step, batch in enumerate(batchloader):
             batch = {k: v.to(self.device) for k, v in batch.items()}
@@ -399,40 +349,107 @@ class LLMTrainer:
                 outputs = self.model(batch)
                 loss = outputs.loss
 
-            self.total_loss += loss.item()
+            total_loss += loss.item()
 
             # Handling backprop, optimization, pruning, and logic
             self._handle_optimizer_and_pruning(loss, step)
 
-            running_loss = self.total_loss / (step + 1)
+            running_loss = total_loss / (step + 1)
             if self.enable_tqdm:
                 batchloader.set_postfix(Loss=f"{running_loss:.4f}", Sparsity=f"{self._get_sparsity_key()}")
 
+        avg_loss = total_loss / len(self.trainloader)    
+        return avg_loss
+
+    def _extract_answer(self, input_ids, start_idx, end_idx):
+        answer_ids = input_ids[start_idx: end_idx + 1]
+        return self.tokenizer.decode(answer_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
     def _run_validation_epoch(self, desc):
-        """
-        Run one full validation epoch.
-        """
+        """Run one full validation epoch."""
+        self.model.eval()
+        total_correct, total_f1, total_samples = 0, 0, 0
         batchloader = tqdm(self.valloader, desc=desc) if self.enable_tqdm else self.valloader
         with torch.no_grad():
             for batch in batchloader:
                 batch = {k: v.to(self.device) for k, v in batch.items()}
-                labels = batch["label"]
-                
+
                 if self.enable_mixed_precision:
                     with autocast(device_type=self.device):
                         outputs = self.model(batch)
                 else:
                     outputs = self.model(batch)
 
-                preds = torch.argmax(outputs.logits, dim=1)
-                correct = (preds == labels).sum()
-                self.total_correct += correct.item()
-                self.total_samples += labels.size(0)
+                if self.model_task == 'squad':
+                    predictions, references = [], [] 
+                    for i in range(batch["input_ids"].size(0)):
+                        input_ids = batch["input_ids"][i]
+                        start_logit = outputs.start_logits[i]
+                        end_logit = outputs.end_logits[i]
 
-                if self.enable_tqdm:
-                    running_acc = (self.total_correct / self.total_samples) * 100
-                    batchloader.set_postfix(Accuracy=f"{running_acc:.2f}", Sparsity=f"{self._get_sparsity_key()}")
+                        start_idx = torch.argmax(start_logit).item()
+                        end_idx = torch.argmax(end_logit).item()
+                        if start_idx > end_idx:
+                            end_idx = start_idx 
 
+                        pred_text = self._extract_answer(input_ids, start_idx, end_idx)
+                        true_text = self._extract_answer(input_ids, batch["start_positions"][i].item(), batch["end_positions"][i].item())
+
+                        predictions.append({"id": str(i), "prediction_text": pred_text})
+                        references.append({"id": str(i), "answers": {"text": [true_text], "answer_start": [0]}})
+                    
+                    metrics = self.squad_metric.compute(predictions=predictions, references=references)
+                    total_correct += metrics['exact_match']
+                    total_f1 += metrics['f1'] 
+                    total_samples += 1
+
+                    avg_acc = (total_correct / total_samples)
+                    avg_f1 = (total_f1 / total_samples)
+                    if self.enable_tqdm:
+                        batchloader.set_postfix(Accuracy=f"{avg_acc:.2f}", F1=f"{avg_f1:.2f}", Sparsity=f"{self._get_sparsity_key()}")
+
+                else:
+                    labels = batch["label"]
+                    preds = torch.argmax(outputs.logits, dim=1)
+                    correct = (preds == labels).sum()
+                    total_correct += correct.item()
+                    total_samples += batch['input_ids'].size(0)
+                    
+                    avg_acc = (total_correct / total_samples) * 100
+                    if self.enable_tqdm:
+                        batchloader.set_postfix(Accuracy=f"{avg_acc:.2f}", Sparsity=f"{self._get_sparsity_key()}")
+        
+        return avg_acc, avg_f1
+    
+    def evaluate(self, load=True):
+        """
+        Load weights and evaluate the model on validation or test set.
+        Returns accuracy in percentage.
+        """
+        if load:
+            print(f"[LLM TRAINER] Loading weights: {self.save_path}")
+            if self.save_path and load_weights(self.model, self.save_path):
+                print("[LLM TRAINER] Weights loaded successfully")
+            else:
+                print("[LLM TRAINER] Failed to load weights")
+
+        print(f"[LLM TRAINER] Model Sparsity: {self._get_sparsity_key()}")
+
+        self.model.eval()
+        self.model.to(self.device)
+
+        desc = "Evaluating"
+        avg_acc, avg_f1 = self._run_validation_epoch(desc)
+        if self.model_task == 'squad':
+            return {
+                "average_accuracy": avg_acc, 
+                "average_f1_score": avg_f1                
+            }
+        else:
+            return {
+                "average_accuracy": avg_acc, 
+            }
+    
     def _handle_optimizer_and_pruning(self, loss, step):
         """Handle backpropagation, pruning, and weight update in a single step."""
         if self.enable_mixed_precision:

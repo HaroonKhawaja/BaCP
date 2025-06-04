@@ -1,0 +1,23 @@
+Model : distilbert-base-uncased - Learning Type: baseline
+Configuration:
+model_type: llm
+model_name: distilbert-base-uncased
+model_task: squad
+num_classes: 2
+embedding_dim: 768
+epochs: 3
+pruning_epochs: 3
+recovery_epochs: 10
+batch_size: 64
+learning_rate: 2e-05
+learning_type: baseline
+prune: False
+target_sparsity: 0
+sparsity_scheduler: linear
+delta_t: 500
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/distilbert-base-uncased/squad/distilbert-base-uncased_squad_baseline.pt
+current_sparsity: 0.0
+
+Recovery epoch [1/10]: Avg Loss: 1.7377 | Avg Accuracy: 2.21 | Avg F1: 2.86 | Model Sparsity: 0.0
