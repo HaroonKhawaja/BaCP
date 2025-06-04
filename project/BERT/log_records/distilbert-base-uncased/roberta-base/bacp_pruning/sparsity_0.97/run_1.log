@@ -1,0 +1,83 @@
+Model : roberta-base - Learning Type: bacp_pruning/sparsity_0.97
+Configuration:
+model_type: llm
+model_name: roberta-base
+model_task: sst2
+epochs: 10
+pruning_epochs: 10
+recovery_epochs: 5
+batch_size: 64
+learning_rate: 1e-05
+pruning_type: magnitude_pruning
+target_sparsity: 0.97
+n_views: 2
+temperature: 0.07
+base_temperature: 0.07
+num_classes: 2
+lambda1: 0.25
+lambda2: 0.25
+lambda3: 0.25
+lambda4: 0.25
+embedding_dim: 768
+save_path: {'current_model': '/dbfs/research/roberta-base/sst2/roberta-base_magnitude_pruning_0.97_bacp_cm.pt', 'pretrained_model': '/dbfs/research/roberta-base/sst2/roberta-base_magnitude_pruning_0.97_bacp_pm.pt', 'finetuned_model': '/dbfs/research/roberta-base/sst2/roberta-base_magnitude_pruning_0.97_bacp_fm.pt'}
+
+Epoch [1/10]: Avg Total Loss: 5.5673 | Avg PrC Loss: 10.7974 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 10.8146 | Avg CE Loss: 0.6573 | Model Sparsity: 0.097
+Retraining Epoch [1/5]: Avg Total Loss: 7.5737 | Avg PrC Loss: 10.7641 | Avg SnC Loss: 8.2142 | Avg FiC Loss: 10.7412 | Avg CE Loss: 0.5752 | Model Sparsity: 0.097
+Retraining Epoch [2/5]: Avg Total Loss: 7.5306 | Avg PrC Loss: 10.7235 | Avg SnC Loss: 8.1358 | Avg FiC Loss: 10.7278 | Avg CE Loss: 0.5352 | Model Sparsity: 0.097
+Retraining Epoch [3/5]: Avg Total Loss: 7.5181 | Avg PrC Loss: 10.7317 | Avg SnC Loss: 8.1052 | Avg FiC Loss: 10.7219 | Avg CE Loss: 0.5137 | Model Sparsity: 0.097
+Retraining Epoch [4/5]: Avg Total Loss: 7.5051 | Avg PrC Loss: 10.6985 | Avg SnC Loss: 8.0878 | Avg FiC Loss: 10.7335 | Avg CE Loss: 0.5005 | Model Sparsity: 0.097
+Retraining Epoch [5/5]: Avg Total Loss: 7.4922 | Avg PrC Loss: 10.7018 | Avg SnC Loss: 8.0753 | Avg FiC Loss: 10.7011 | Avg CE Loss: 0.4905 | Model Sparsity: 0.097
+Epoch [2/10]: Avg Total Loss: 7.4970 | Avg PrC Loss: 10.7165 | Avg SnC Loss: 8.0722 | Avg FiC Loss: 10.7180 | Avg CE Loss: 0.4814 | Model Sparsity: 0.194
+Retraining Epoch [1/5]: Avg Total Loss: 9.2911 | Avg PrC Loss: 10.7584 | Avg SnC Loss: 15.1775 | Avg FiC Loss: 10.7346 | Avg CE Loss: 0.4938 | Model Sparsity: 0.194
+Retraining Epoch [2/5]: Avg Total Loss: 9.2850 | Avg PrC Loss: 10.7695 | Avg SnC Loss: 15.1403 | Avg FiC Loss: 10.7380 | Avg CE Loss: 0.4921 | Model Sparsity: 0.194
+Retraining Epoch [3/5]: Avg Total Loss: 9.2830 | Avg PrC Loss: 10.7774 | Avg SnC Loss: 15.1157 | Avg FiC Loss: 10.7507 | Avg CE Loss: 0.4882 | Model Sparsity: 0.194
+Retraining Epoch [4/5]: Avg Total Loss: 9.2689 | Avg PrC Loss: 10.7475 | Avg SnC Loss: 15.1025 | Avg FiC Loss: 10.7404 | Avg CE Loss: 0.4851 | Model Sparsity: 0.194
+Retraining Epoch [5/5]: Avg Total Loss: 9.2674 | Avg PrC Loss: 10.7447 | Avg SnC Loss: 15.0904 | Avg FiC Loss: 10.7524 | Avg CE Loss: 0.4822 | Model Sparsity: 0.194
+Epoch [3/10]: Avg Total Loss: 9.2720 | Avg PrC Loss: 10.7447 | Avg SnC Loss: 15.1108 | Avg FiC Loss: 10.7513 | Avg CE Loss: 0.4812 | Model Sparsity: 0.291
+Retraining Epoch [1/5]: Avg Total Loss: 10.9595 | Avg PrC Loss: 10.8195 | Avg SnC Loss: 21.7346 | Avg FiC Loss: 10.7956 | Avg CE Loss: 0.4884 | Model Sparsity: 0.291
+Retraining Epoch [2/5]: Avg Total Loss: 10.9570 | Avg PrC Loss: 10.8109 | Avg SnC Loss: 21.6997 | Avg FiC Loss: 10.8293 | Avg CE Loss: 0.4880 | Model Sparsity: 0.291
+Retraining Epoch [3/5]: Avg Total Loss: 10.9443 | Avg PrC Loss: 10.8032 | Avg SnC Loss: 21.6857 | Avg FiC Loss: 10.8020 | Avg CE Loss: 0.4864 | Model Sparsity: 0.291
+Retraining Epoch [4/5]: Avg Total Loss: 10.9330 | Avg PrC Loss: 10.7764 | Avg SnC Loss: 21.6683 | Avg FiC Loss: 10.8028 | Avg CE Loss: 0.4843 | Model Sparsity: 0.291
+Retraining Epoch [5/5]: Avg Total Loss: 10.9321 | Avg PrC Loss: 10.8106 | Avg SnC Loss: 21.6561 | Avg FiC Loss: 10.7795 | Avg CE Loss: 0.4823 | Model Sparsity: 0.291
+Epoch [4/10]: Avg Total Loss: 10.9573 | Avg PrC Loss: 10.8078 | Avg SnC Loss: 21.7348 | Avg FiC Loss: 10.8026 | Avg CE Loss: 0.4840 | Model Sparsity: 0.388
+Retraining Epoch [1/5]: Avg Total Loss: 12.5708 | Avg PrC Loss: 10.8632 | Avg SnC Loss: 28.0737 | Avg FiC Loss: 10.8573 | Avg CE Loss: 0.4891 | Model Sparsity: 0.388
+Retraining Epoch [2/5]: Avg Total Loss: 12.5644 | Avg PrC Loss: 10.8735 | Avg SnC Loss: 28.0362 | Avg FiC Loss: 10.8590 | Avg CE Loss: 0.4890 | Model Sparsity: 0.388
+Retraining Epoch [3/5]: Avg Total Loss: 12.5542 | Avg PrC Loss: 10.8751 | Avg SnC Loss: 28.0066 | Avg FiC Loss: 10.8473 | Avg CE Loss: 0.4876 | Model Sparsity: 0.388
+Retraining Epoch [4/5]: Avg Total Loss: 12.5434 | Avg PrC Loss: 10.8570 | Avg SnC Loss: 27.9872 | Avg FiC Loss: 10.8433 | Avg CE Loss: 0.4860 | Model Sparsity: 0.388
+Retraining Epoch [5/5]: Avg Total Loss: 12.5506 | Avg PrC Loss: 10.8693 | Avg SnC Loss: 27.9782 | Avg FiC Loss: 10.8701 | Avg CE Loss: 0.4846 | Model Sparsity: 0.388
+Epoch [5/10]: Avg Total Loss: 12.5887 | Avg PrC Loss: 10.8553 | Avg SnC Loss: 28.1580 | Avg FiC Loss: 10.8523 | Avg CE Loss: 0.4894 | Model Sparsity: 0.485
+Retraining Epoch [1/5]: Avg Total Loss: 14.1713 | Avg PrC Loss: 10.8978 | Avg SnC Loss: 34.4006 | Avg FiC Loss: 10.8932 | Avg CE Loss: 0.4934 | Model Sparsity: 0.485
+Retraining Epoch [2/5]: Avg Total Loss: 14.1591 | Avg PrC Loss: 10.9134 | Avg SnC Loss: 34.3225 | Avg FiC Loss: 10.9087 | Avg CE Loss: 0.4919 | Model Sparsity: 0.485
+Retraining Epoch [3/5]: Avg Total Loss: 14.1474 | Avg PrC Loss: 10.9099 | Avg SnC Loss: 34.2825 | Avg FiC Loss: 10.9069 | Avg CE Loss: 0.4904 | Model Sparsity: 0.485
+Retraining Epoch [4/5]: Avg Total Loss: 14.1433 | Avg PrC Loss: 10.9191 | Avg SnC Loss: 34.2604 | Avg FiC Loss: 10.9047 | Avg CE Loss: 0.4890 | Model Sparsity: 0.485
+Retraining Epoch [5/5]: Avg Total Loss: 14.1402 | Avg PrC Loss: 10.9231 | Avg SnC Loss: 34.2423 | Avg FiC Loss: 10.9074 | Avg CE Loss: 0.4877 | Model Sparsity: 0.485
+Epoch [6/10]: Avg Total Loss: 14.2491 | Avg PrC Loss: 10.9204 | Avg SnC Loss: 34.6574 | Avg FiC Loss: 10.9190 | Avg CE Loss: 0.4996 | Model Sparsity: 0.582
+Retraining Epoch [1/5]: Avg Total Loss: 15.8111 | Avg PrC Loss: 10.9627 | Avg SnC Loss: 40.8157 | Avg FiC Loss: 10.9637 | Avg CE Loss: 0.5024 | Model Sparsity: 0.582
+Retraining Epoch [2/5]: Avg Total Loss: 15.7803 | Avg PrC Loss: 10.9625 | Avg SnC Loss: 40.6809 | Avg FiC Loss: 10.9786 | Avg CE Loss: 0.4990 | Model Sparsity: 0.582
+Retraining Epoch [3/5]: Avg Total Loss: 15.7556 | Avg PrC Loss: 10.9552 | Avg SnC Loss: 40.6191 | Avg FiC Loss: 10.9510 | Avg CE Loss: 0.4972 | Model Sparsity: 0.582
+Retraining Epoch [4/5]: Avg Total Loss: 15.7425 | Avg PrC Loss: 10.9516 | Avg SnC Loss: 40.5688 | Avg FiC Loss: 10.9546 | Avg CE Loss: 0.4951 | Model Sparsity: 0.582
+Retraining Epoch [5/5]: Avg Total Loss: 15.7349 | Avg PrC Loss: 10.9610 | Avg SnC Loss: 40.5333 | Avg FiC Loss: 10.9515 | Avg CE Loss: 0.4938 | Model Sparsity: 0.582
+Epoch [7/10]: Avg Total Loss: 15.9616 | Avg PrC Loss: 10.9510 | Avg SnC Loss: 41.4074 | Avg FiC Loss: 10.9748 | Avg CE Loss: 0.5131 | Model Sparsity: 0.679
+Retraining Epoch [1/5]: Avg Total Loss: 17.5414 | Avg PrC Loss: 11.0120 | Avg SnC Loss: 47.6292 | Avg FiC Loss: 11.0054 | Avg CE Loss: 0.5189 | Model Sparsity: 0.679
+Retraining Epoch [2/5]: Avg Total Loss: 17.4765 | Avg PrC Loss: 11.0221 | Avg SnC Loss: 47.3721 | Avg FiC Loss: 10.9990 | Avg CE Loss: 0.5131 | Model Sparsity: 0.679
+Retraining Epoch [3/5]: Avg Total Loss: 17.4437 | Avg PrC Loss: 10.9992 | Avg SnC Loss: 47.2333 | Avg FiC Loss: 11.0327 | Avg CE Loss: 0.5096 | Model Sparsity: 0.679
+Retraining Epoch [4/5]: Avg Total Loss: 17.4181 | Avg PrC Loss: 11.0140 | Avg SnC Loss: 47.1463 | Avg FiC Loss: 11.0051 | Avg CE Loss: 0.5068 | Model Sparsity: 0.679
+Retraining Epoch [5/5]: Avg Total Loss: 17.4007 | Avg PrC Loss: 11.0218 | Avg SnC Loss: 47.0704 | Avg FiC Loss: 11.0057 | Avg CE Loss: 0.5048 | Model Sparsity: 0.679
+Epoch [8/10]: Avg Total Loss: 17.9228 | Avg PrC Loss: 11.0095 | Avg SnC Loss: 49.1067 | Avg FiC Loss: 11.0301 | Avg CE Loss: 0.5450 | Model Sparsity: 0.776
+Retraining Epoch [1/5]: Avg Total Loss: 19.5521 | Avg PrC Loss: 11.0614 | Avg SnC Loss: 55.5375 | Avg FiC Loss: 11.0507 | Avg CE Loss: 0.5590 | Model Sparsity: 0.776
+Retraining Epoch [2/5]: Avg Total Loss: 19.4083 | Avg PrC Loss: 11.0566 | Avg SnC Loss: 54.9734 | Avg FiC Loss: 11.0562 | Avg CE Loss: 0.5471 | Model Sparsity: 0.776
+Retraining Epoch [3/5]: Avg Total Loss: 19.3339 | Avg PrC Loss: 11.0594 | Avg SnC Loss: 54.6898 | Avg FiC Loss: 11.0461 | Avg CE Loss: 0.5403 | Model Sparsity: 0.776
+Retraining Epoch [4/5]: Avg Total Loss: 19.2863 | Avg PrC Loss: 11.0674 | Avg SnC Loss: 54.4942 | Avg FiC Loss: 11.0483 | Avg CE Loss: 0.5355 | Model Sparsity: 0.776
+Retraining Epoch [5/5]: Avg Total Loss: 19.2426 | Avg PrC Loss: 11.0519 | Avg SnC Loss: 54.3160 | Avg FiC Loss: 11.0715 | Avg CE Loss: 0.5308 | Model Sparsity: 0.776
+Epoch [9/10]: Avg Total Loss: 20.4293 | Avg PrC Loss: 11.0596 | Avg SnC Loss: 58.9894 | Avg FiC Loss: 11.0705 | Avg CE Loss: 0.5975 | Model Sparsity: 0.873
+Retraining Epoch [1/5]: Avg Total Loss: 22.1958 | Avg PrC Loss: 11.1379 | Avg SnC Loss: 65.9002 | Avg FiC Loss: 11.1110 | Avg CE Loss: 0.6340 | Model Sparsity: 0.873
+Retraining Epoch [2/5]: Avg Total Loss: 21.8766 | Avg PrC Loss: 11.1200 | Avg SnC Loss: 64.6663 | Avg FiC Loss: 11.0996 | Avg CE Loss: 0.6204 | Model Sparsity: 0.873
+Retraining Epoch [3/5]: Avg Total Loss: 21.6996 | Avg PrC Loss: 11.0966 | Avg SnC Loss: 63.9772 | Avg FiC Loss: 11.1134 | Avg CE Loss: 0.6114 | Model Sparsity: 0.873
+Retraining Epoch [4/5]: Avg Total Loss: 21.5814 | Avg PrC Loss: 11.0811 | Avg SnC Loss: 63.5413 | Avg FiC Loss: 11.0993 | Avg CE Loss: 0.6037 | Model Sparsity: 0.873
+Retraining Epoch [5/5]: Avg Total Loss: 21.5127 | Avg PrC Loss: 11.1061 | Avg SnC Loss: 63.2273 | Avg FiC Loss: 11.1199 | Avg CE Loss: 0.5977 | Model Sparsity: 0.873
+Epoch [10/10]: Avg Total Loss: 24.6697 | Avg PrC Loss: 11.0412 | Avg SnC Loss: 75.9346 | Avg FiC Loss: 11.0562 | Avg CE Loss: 0.6470 | Model Sparsity: 0.970
+Retraining Epoch [1/5]: Avg Total Loss: 28.4928 | Avg PrC Loss: 11.0164 | Avg SnC Loss: 91.2410 | Avg FiC Loss: 11.0183 | Avg CE Loss: 0.6954 | Model Sparsity: 0.970
+Retraining Epoch [2/5]: Avg Total Loss: 27.5539 | Avg PrC Loss: 11.0660 | Avg SnC Loss: 87.4052 | Avg FiC Loss: 11.0493 | Avg CE Loss: 0.6950 | Model Sparsity: 0.970
+Retraining Epoch [3/5]: Avg Total Loss: 26.9776 | Avg PrC Loss: 11.0483 | Avg SnC Loss: 85.1145 | Avg FiC Loss: 11.0527 | Avg CE Loss: 0.6947 | Model Sparsity: 0.970
+Retraining Epoch [4/5]: Avg Total Loss: 26.6009 | Avg PrC Loss: 11.0641 | Avg SnC Loss: 83.5723 | Avg FiC Loss: 11.0724 | Avg CE Loss: 0.6946 | Model Sparsity: 0.970
+Retraining Epoch [5/5]: Avg Total Loss: 26.3067 | Avg PrC Loss: 11.0717 | Avg SnC Loss: 82.3838 | Avg FiC Loss: 11.0767 | Avg CE Loss: 0.6944 | Model Sparsity: 0.970
