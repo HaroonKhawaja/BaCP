@@ -277,7 +277,7 @@ class LLMTrainer:
             self.accuracy_per_sparsity[sparsity_key].append(avg_acc)
 
             info = (
-                f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
+                f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
                 f"Avg Accuracy: {avg_acc:.2f} | Avg F1: {avg_f1:.2f} | "
                 f"Model Sparsity: {self._get_sparsity_key()}\n"
             )
@@ -361,14 +361,30 @@ class LLMTrainer:
         avg_loss = total_loss / len(self.trainloader)    
         return avg_loss
 
-    def _extract_answer(self, input_ids, start_idx, end_idx):
+    def _extract_normalized_answer(self, input_ids, start_idx, end_idx):
+        import string
+        import re
+
         answer_ids = input_ids[start_idx: end_idx + 1]
-        return self.tokenizer.decode(answer_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        answer = self.tokenizer.decode(answer_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+        def remove_articles(text):
+            regex = re.compile(r'\b(a|an|the)\b', re.IGNORECASE)
+            return re.sub(regex, ' ', text)
+        
+        def white_space_fix(text):
+            return ' '.join(text.split())
+        
+        def remove_punc(text):
+            exclude = set(string.punctuation)
+            return ''.join(char for char in text if char not in exclude)
+        
+        return white_space_fix(remove_articles(remove_punc(answer.lower())))
 
     def _run_validation_epoch(self, desc):
         """Run one full validation epoch."""
         self.model.eval()
-        total_correct, total_f1, total_samples = 0, 0, 0
+        total_correct, total_f1, total_samples, avg_f1 = 0, 0, 0, 0
         batchloader = tqdm(self.valloader, desc=desc) if self.enable_tqdm else self.valloader
         with torch.no_grad():
             for batch in batchloader:
@@ -392,8 +408,8 @@ class LLMTrainer:
                         if start_idx > end_idx:
                             end_idx = start_idx 
 
-                        pred_text = self._extract_answer(input_ids, start_idx, end_idx)
-                        true_text = self._extract_answer(input_ids, batch["start_positions"][i].item(), batch["end_positions"][i].item())
+                        pred_text = self._extract_normalized_answer(input_ids, start_idx, end_idx)
+                        true_text = self._extract_normalized_answer(input_ids, batch["start_positions"][i].item(), batch["end_positions"][i].item())
 
                         predictions.append({"id": str(i), "prediction_text": pred_text})
                         references.append({"id": str(i), "answers": {"text": [true_text], "answer_start": [0]}})
