@@ -21,4 +21,3 @@ lambda4: 0.25
 embedding_dim: 768
 save_path: {'current_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_magnitude_pruning_0.97_bacp_cm.pt', 'pretrained_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_magnitude_pruning_0.97_bacp_pm.pt', 'finetuned_model': '/dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_magnitude_pruning_0.97_bacp_fm.pt'}
 
-Epoch [1/5]: Avg Total Loss: 4.6221 | Avg PrC Loss: 8.8992 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 8.8992 | Avg CE Loss: 0.6901 | Model Sparsity: 0.8627
