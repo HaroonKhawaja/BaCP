@@ -439,3 +439,22 @@ class Trainer:
                     torch.save(self.model.state_dict(), self.save_path)
                     return True
             return False
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
