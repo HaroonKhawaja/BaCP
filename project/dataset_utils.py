@@ -4,6 +4,7 @@ from torchvision.transforms import AutoAugment, AutoAugmentPolicy
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data import random_split
 from datasets import load_dataset 
+from transformers import DataCollatorForLanguageModeling
 from utils import *
 from constants import *
 from functools import lru_cache
@@ -203,7 +204,6 @@ def get_cv_data(dataset_name, batch_size, size=32, num_workers=24, cache_dir="./
         print(f"Error loading CV dataset {dataset_name}: {str(e)}")
         raise e
 
-
 # LLM Datasets
 class GlueDataset(Dataset):
     def __init__(self, data):
@@ -238,7 +238,7 @@ def get_glue_data(tokenizer, task_name, batch_size, num_workers=24):
             return tokenizer(example["sentence"], truncation=True, padding="max_length")
         
     dataset = dataset.map(tokenize_fn, batched=True, batch_size=512, num_proc=1)
-    dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+    dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
 
     trainset = GlueDataset(dataset["train"])
     valset = GlueDataset(dataset["validation"])
@@ -253,13 +253,12 @@ def get_glue_data(tokenizer, task_name, batch_size, num_workers=24):
     }
 
     trainloader = DataLoader(dataset["train"], shuffle=True, **loader_args)
-    validationloader = DataLoader(dataset["validation"], **loader_args)
+    valloader = DataLoader(dataset["validation"], **loader_args)
     testloader = DataLoader(dataset["test"], **loader_args)
   
     data = {
         "trainloader": trainloader,
-        "valloader": validationloader,
-        "testloader": testloader,
+        "valloader": valloader,
     }
     return data
 
@@ -389,3 +388,52 @@ def get_squad_data(tokenizer, batch_size, subset_ratio=1.0, num_workers=24, max_
         'valloader': valloader,
     }
     return data
+
+@lru_cache()
+def _load_wikitext2_dataset(cache_dir="/dbfs/hf_datasets"):
+    return load_dataset('wikitext', 'wikitext-2-raw-v1')
+
+def get_wikitext2_data(tokenizer, batch_size, num_workers=24):
+    def tokenize_fn(examples):
+        return tokenizer(examples["text"], truncation=True, return_special_tokens_mask=True)
+
+    def group_texts(examples):
+        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        block_size = tokenizer.model_max_length  
+        total_length = len(concatenated_examples["input_ids"])
+        total_length = (total_length // block_size) * block_size
+        return {
+            k: [t[i:i + block_size] for i in range(0, total_length, block_size)]
+            for k, t in concatenated_examples.items()
+        }
+
+    dataset = _load_wikitext2_dataset()
+    dataset = dataset.map(tokenize_fn, batched=True, batch_size=512, remove_columns=["text"])
+    dataset = dataset.map(group_texts, batched=True, batch_size=512)
+
+    trainset = dataset['train']
+    testset = dataset['test']
+    valset = dataset['validation']
+
+    loader_args = {
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "pin_memory": True,
+        "persistent_workers": num_workers > 0,
+        "drop_last": True,
+    }
+
+    collator = DataCollatorForLanguageModeling(tokenizer, mlm_probability=0.15)
+
+    trainloader = DataLoader(trainset, shuffle=True, collate_fn=collator, **loader_args)
+    testloader = DataLoader(testset, shuffle=False, collate_fn=collator, **loader_args)
+    valloader = DataLoader(valset, shuffle=False, collate_fn=collator, **loader_args)
+
+    data = {
+        "trainloader": trainloader,
+        "valloader": valloader,
+        "testloader": testloader
+    }
+    return data
+
+

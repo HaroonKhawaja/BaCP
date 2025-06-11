@@ -1,0 +1,36 @@
+Model : distilbert-base-uncased - Learning Type: baseline
+Configuration:
+model_type: llm
+model_name: distilbert-base-uncased
+model_task: wikitext2
+num_classes: 2
+embedding_dim: 768
+epochs: 10
+pruning_epochs: 10
+recovery_epochs: 10
+batch_size: 64
+learning_rate: 1e-05
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: adamw
+total_steps: 710
+warmup_steps: 71
+prune: False
+target_sparsity: 0
+sparsity_scheduler: linear
+delta_t: 35
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/distilbert-base-uncased/wikitext2/distilbert-base-uncased_wikitext2_baseline.pt
+current_sparsity: 0.0
+
+Epoch [1/10]: Avg Loss: 2.5778 | Avg Accuracy: 8.54 | Model Sparsity: 0.0
+Epoch [2/10]: Avg Loss: 2.1668 | Avg Accuracy: 8.80 | Model Sparsity: 0.0
+Epoch [3/10]: Avg Loss: 2.0795 | Avg Accuracy: 8.82 | Model Sparsity: 0.0
+Epoch [4/10]: Avg Loss: 2.0480 | Avg Accuracy: 9.02 | Model Sparsity: 0.0
+Epoch [5/10]: Avg Loss: 2.0182 | Avg Accuracy: 9.01 | Model Sparsity: 0.0
+Epoch [6/10]: Avg Loss: 2.0011 | Avg Accuracy: 8.98 | Model Sparsity: 0.0
+Epoch [7/10]: Avg Loss: 1.9985 | Avg Accuracy: 8.95 | Model Sparsity: 0.0
+Epoch [8/10]: Avg Loss: 1.9898 | Avg Accuracy: 9.09 | Model Sparsity: 0.0
+Epoch [9/10]: Avg Loss: 1.9850 | Avg Accuracy: 9.01 | Model Sparsity: 0.0
+Epoch [10/10]: Avg Loss: 1.9745 | Avg Accuracy: 9.11 | Model Sparsity: 0.0

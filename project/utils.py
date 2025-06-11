@@ -64,13 +64,6 @@ def set_optimizer(opt_type, config):
     else:
         raise ValueError(f"Invalid optimizer type: {opt_type}")
     
-def warmup_lr(epoch, idx, batch_id, total_batches, optimizer):
-    if WARM and epoch < WARM_EPOCHS:
-        p = (batch_id + (epoch - 1) * total_batches) / (WARM_EPOCHS * total_batches)
-        lr = lr * (1 + p * (WARMUP_TO - 1))
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-
 def preview_dataloader(dataloader):
     images, _ = next(iter(dataloader))
     if isinstance(images, (list, tuple)) and len(images) == 2:
@@ -93,22 +86,28 @@ def freeze_weights(model):
         
 def load_weights(model, path):
     if not os.path.exists(path):
-        return False
+        print(f"[ERROR] Could not load weights. Path does not exist: {path}")
+        raise Exception("Error loading weights: {path}")
     try:
         state_dict = torch.load(path, map_location=get_device())
         model.load_state_dict(state_dict)
         return True
     except:
-        print(f"-> Error loading weights: {path}")
-        print(f"-> Attempting partial load\n")
-
+        print(f"[ERROR] Could not load weights: {path}")
+        print(f"[ERROR] Attempting partial load")
+    
         state_dict = torch.load(path, map_location=get_device())
         filtered_state_dict = {
             k: v for k, v in state_dict.items() 
-            if not any(head_key in k for head_key in ['fc', 'classifier', 'head'])
+            if not any(head_key in k for head_key in ['fc', 'classifier', 'head', 'vocab_projector'])
             }
-        model.load_state_dict(filtered_state_dict, strict=False)
-        return True
+        try:
+            model.load_state_dict(filtered_state_dict, strict=False)
+            return True
+        except:
+            raise Exception("Error loading weights: {path}")
+    
+    return False
               
 def load_projection_model_weights(model, path):
     if not os.path.exists(path):

@@ -4,7 +4,10 @@ from utils import *
 import os
 
 def layer_check(name, param):
-    if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in ['heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 'class_token', 'pos_embedding']):
+    if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in [
+        'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
+        'class_token', 'pos_embedding', 'vocab_transform', 'lm_head'
+        ]):
         return True
     return False
 
@@ -22,8 +25,7 @@ class Pruner(ABC):
         # assert target_layer in ['no_target_layer', 'self_attention'], 'Invalid layer name'
         self.epochs = epochs
         self.target_ratio = target_ratio
-        self.ratio = target_ratio / epochs
-        self.amount = self.ratio
+        self.ratio = 0.0
         self.masks = {}
         self.target_layer = target_layer
 
@@ -43,24 +45,23 @@ class Pruner(ABC):
                     if param.grad is not None:
                         param.grad.data *= self.masks[name]
 
-    def ratio_step(self):
-        if self.sparsity_scheduler == "linear":
+    def ratio_step(self, epoch, epochs, initial_sparsity, target_sparsity):
+        if self.sparsity_scheduler == 'linear':
             self.linear_scheduler()
-        else:
-            return
+        elif self.sparsity_scheduler == 'cubic':
+            self.cubic_scheduler(epoch, epochs, initial_sparsity, target_sparsity)
             
-    def linear_scheduler(self):
-        if self.sparsity_scheduler == "linear":
-            self.ratio += self.amount
-            self.ratio = min(self.ratio, self.target_ratio)
-            print(f"[Pruner] Linear sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
+    def linear_scheduler(self, epoch, total_epochs, initial_sparsity, final_sparsity):
+        t = epoch + 1
+        sparsity = (final_sparsity / total_epochs) * t
+        self.ratio = min(sparsity, self.target_ratio)
+        print(f"[Pruner] Linear sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
 
-    def cubic_scheduler(self, step, t0, delta_t, s_initial):
-        if self.sparsity_scheduler == "cubic":
-            progress = min(1.0, (step - t0) / (self.epochs * delta_t))
-            self.ratio = self.target_ratio + (s_initial - self.target_ratio) * ((1 - progress)**3)
-            self.ratio = min(self.ratio, self.target_ratio)
-            print(f"[Pruner] Cubic Sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
+    def cubic_scheduler(self, epoch, total_epochs, initial_sparsity, final_sparsity):
+        t = epoch + 1
+        sparsity = final_sparsity + (initial_sparsity - final_sparsity) * ((1 - t / total_epochs) ** 3)
+        self.ratio = min(sparsity, self.target_ratio)
+        print(f"[Pruner] Cubic Sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
 
     def reset(self):
         self.ratio = self.target_ratio / self.epochs

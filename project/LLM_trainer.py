@@ -48,12 +48,14 @@ class LLMTrainingArguments:
                  model_name, 
                  model_task,
                  batch_size, 
+                 learning_rate, 
                  pruning_type=None,
                  target_sparsity=0,
                  sparsity_scheduler="linear",
                  finetuned_weights=None,
                  num_classes=2,
-                 learning_rate=2e-5, 
+                 optimizer_type='adamw',
+                 scheduler_type=None,
                  learning_type="",
                  epochs=5, 
                  pruning_epochs=None,
@@ -339,7 +341,6 @@ class LLMTrainer:
         batchloader = tqdm(self.trainloader, desc=desc) if self.enable_tqdm else self.trainloader
         for step, batch in enumerate(batchloader):
             batch = {k: v.to(self.device) for k, v in batch.items()}
-            self.optimizer.zero_grad()
 
             if self.enable_mixed_precision:
                 with autocast(device_type=self.device):
@@ -430,8 +431,8 @@ class LLMTrainer:
                     correct = (preds == labels).sum()
                     total_correct += correct.item()
                     total_samples += batch['input_ids'].size(0)
-                    
                     avg_acc = (total_correct / total_samples) * 100
+                    
                     if self.enable_tqdm:
                         batchloader.set_postfix(Accuracy=f"{avg_acc:.2f}", Sparsity=f"{self._get_sparsity_key()}")
         
@@ -468,6 +469,8 @@ class LLMTrainer:
     
     def _handle_optimizer_and_pruning(self, loss, step):
         """Handle backpropagation, pruning, and weight update in a single step."""
+        self.optimizer.zero_grad()
+
         if self.enable_mixed_precision:
             self.scaler.scale(loss).backward()
             self._apply_pruning(step)

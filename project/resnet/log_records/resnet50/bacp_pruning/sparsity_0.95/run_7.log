@@ -1,0 +1,24 @@
+Model : resnet50 - Learning Type: bacp_pruning/sparsity_0.95
+Configuration:
+model_type: cnn
+model_name: resnet50
+model_task: cifar10
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.1
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+n_views: 2
+temperature: 0.07
+base_temperature: 0.07
+num_classes: 10
+lambda1: 0.25
+lambda2: 0.25
+lambda3: 0.25
+lambda4: 0.25
+embedding_dim: 2048
+save_path: {'current_model': '/dbfs/research/resnet50/cifar10/resnet50_magnitude_pruning_0.95_bacp_cm.pt', 'pretrained_model': '/dbfs/research/resnet50/cifar10/resnet50_magnitude_pruning_0.95_bacp_pm.pt', 'finetuned_model': '/dbfs/research/resnet50/cifar10/resnet50_magnitude_pruning_0.95_bacp_fm.pt'}
+
+Epoch [1/5]: Avg Total Loss: 8.4431 | Avg PrC Loss: 3.8663 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 4.2066 | Avg CE Loss: 0.3702 | Model Sparsity: 0.0

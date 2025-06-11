@@ -1,0 +1,27 @@
+Model : vitb16 - Learning Type: bacp_finetune
+Configuration:
+model_type: cv
+model_name: vitb16
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 768
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.0001
+learning_type: bacp_finetune
+optimizer_type: adamw
+use_scheduler: False
+prune: False
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: linear
+delta_t: 41
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vitb16/cifar10/vitb16_bacp_finetune_magnitude_pruning_0.99.pt
+finetuned_weights: /dbfs/research/vitb16/cifar10/vitb16_magnitude_pruning_0.95_bacp_cm.pt
+current_sparsity: 0.9899839589625229
+

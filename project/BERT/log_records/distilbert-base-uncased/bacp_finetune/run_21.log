@@ -1,0 +1,28 @@
+Model : distilbert-base-uncased - Learning Type: bacp_finetune
+Configuration:
+model_type: llm
+model_name: distilbert-base-uncased
+model_task: sst2
+num_classes: 2
+embedding_dim: 768
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 64
+learning_rate: 2e-06
+learning_type: bacp_finetune
+prune: False
+pruning_type: magnitude_pruning
+target_sparsity: 0.97
+sparsity_scheduler: linear
+delta_t: 500
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_bacp_finetune_magnitude_pruning_0.97.pt
+finetuned_weights: /dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_magnitude_pruning_0.97_bacp_cm.pt
+current_sparsity: 0.9699839603753737
+
+Epoch [1/5]: Avg Loss: 0.3368 | Avg Accuracy: 81.37 | Avg F1: 0.00 | Model Sparsity: 0.97
+Epoch [2/5]: Avg Loss: 0.0903 | Avg Accuracy: 81.37 | Avg F1: 0.00 | Model Sparsity: 0.97
+Epoch [3/5]: Avg Loss: 0.0571 | Avg Accuracy: 81.73 | Avg F1: 0.00 | Model Sparsity: 0.97
+Epoch [4/5]: Avg Loss: 0.0493 | Avg Accuracy: 81.61 | Avg F1: 0.00 | Model Sparsity: 0.97
