@@ -1,0 +1,70 @@
+Model : resnet50 - Learning Type: bacp_finetune
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.0001
+learning_type: bacp_finetune
+optimizer_type: adamw
+use_scheduler: False
+prune: False
+pruning_type: movement_pruning
+target_sparsity: 0.95
+sparsity_scheduler: linear
+delta_t: 41
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/cifar10/resnet50_bacp_finetune_movement_pruning_0.95.pt
+finetuned_weights: /dbfs/research/resnet50/cifar10/resnet50_movement_pruning_0.95_bacp_cm.pt
+current_sparsity: 0.9499842881240737
+
+Epoch [1/50]: Avg Loss: 1.0327 | Avg Accuracy: 90.69 | Model Sparsity: 0.95
+Epoch [2/50]: Avg Loss: 0.3154 | Avg Accuracy: 92.33 | Model Sparsity: 0.95
+Epoch [3/50]: Avg Loss: 0.2462 | Avg Accuracy: 92.75 | Model Sparsity: 0.95
+Epoch [4/50]: Avg Loss: 0.2226 | Avg Accuracy: 92.10 | Model Sparsity: 0.95
+Epoch [5/50]: Avg Loss: 0.2027 | Avg Accuracy: 93.33 | Model Sparsity: 0.95
+Epoch [6/50]: Avg Loss: 0.1872 | Avg Accuracy: 92.83 | Model Sparsity: 0.95
+Epoch [7/50]: Avg Loss: 0.1768 | Avg Accuracy: 93.25 | Model Sparsity: 0.95
+Epoch [8/50]: Avg Loss: 0.1663 | Avg Accuracy: 93.09 | Model Sparsity: 0.95
+Epoch [9/50]: Avg Loss: 0.1596 | Avg Accuracy: 93.40 | Model Sparsity: 0.95
+Epoch [10/50]: Avg Loss: 0.1514 | Avg Accuracy: 93.07 | Model Sparsity: 0.95
+Epoch [11/50]: Avg Loss: 0.1463 | Avg Accuracy: 93.54 | Model Sparsity: 0.95
+Epoch [12/50]: Avg Loss: 0.1407 | Avg Accuracy: 93.36 | Model Sparsity: 0.95
+Epoch [13/50]: Avg Loss: 0.1326 | Avg Accuracy: 93.43 | Model Sparsity: 0.95
+Epoch [14/50]: Avg Loss: 0.1266 | Avg Accuracy: 93.26 | Model Sparsity: 0.95
+Epoch [15/50]: Avg Loss: 0.1194 | Avg Accuracy: 93.69 | Model Sparsity: 0.95
+Epoch [16/50]: Avg Loss: 0.1168 | Avg Accuracy: 93.79 | Model Sparsity: 0.95
+Epoch [17/50]: Avg Loss: 0.1095 | Avg Accuracy: 93.85 | Model Sparsity: 0.95
+Epoch [18/50]: Avg Loss: 0.1096 | Avg Accuracy: 93.02 | Model Sparsity: 0.95
+Epoch [19/50]: Avg Loss: 0.1058 | Avg Accuracy: 93.47 | Model Sparsity: 0.95
+Epoch [20/50]: Avg Loss: 0.0969 | Avg Accuracy: 93.85 | Model Sparsity: 0.95
+Epoch [21/50]: Avg Loss: 0.0947 | Avg Accuracy: 93.58 | Model Sparsity: 0.95
+Epoch [22/50]: Avg Loss: 0.0915 | Avg Accuracy: 94.13 | Model Sparsity: 0.95
+Epoch [23/50]: Avg Loss: 0.0880 | Avg Accuracy: 94.49 | Model Sparsity: 0.95
+Epoch [24/50]: Avg Loss: 0.0853 | Avg Accuracy: 93.81 | Model Sparsity: 0.95
+Epoch [25/50]: Avg Loss: 0.0833 | Avg Accuracy: 93.95 | Model Sparsity: 0.95
+Epoch [26/50]: Avg Loss: 0.0772 | Avg Accuracy: 93.64 | Model Sparsity: 0.95
+Epoch [27/50]: Avg Loss: 0.0724 | Avg Accuracy: 93.71 | Model Sparsity: 0.95
+Epoch [28/50]: Avg Loss: 0.0722 | Avg Accuracy: 93.79 | Model Sparsity: 0.95
+Epoch [29/50]: Avg Loss: 0.0667 | Avg Accuracy: 94.08 | Model Sparsity: 0.95
+Epoch [30/50]: Avg Loss: 0.0663 | Avg Accuracy: 94.17 | Model Sparsity: 0.95
+Epoch [31/50]: Avg Loss: 0.0629 | Avg Accuracy: 93.64 | Model Sparsity: 0.95
+Epoch [32/50]: Avg Loss: 0.0610 | Avg Accuracy: 93.69 | Model Sparsity: 0.95
+Epoch [33/50]: Avg Loss: 0.0598 | Avg Accuracy: 93.46 | Model Sparsity: 0.95
+Epoch [34/50]: Avg Loss: 0.0599 | Avg Accuracy: 94.21 | Model Sparsity: 0.95
+Epoch [35/50]: Avg Loss: 0.0555 | Avg Accuracy: 93.75 | Model Sparsity: 0.95
+Epoch [36/50]: Avg Loss: 0.0530 | Avg Accuracy: 93.50 | Model Sparsity: 0.95
+Epoch [37/50]: Avg Loss: 0.0508 | Avg Accuracy: 93.81 | Model Sparsity: 0.95
+Epoch [38/50]: Avg Loss: 0.0523 | Avg Accuracy: 94.14 | Model Sparsity: 0.95
+Epoch [39/50]: Avg Loss: 0.0466 | Avg Accuracy: 93.68 | Model Sparsity: 0.95
+Epoch [40/50]: Avg Loss: 0.0463 | Avg Accuracy: 93.43 | Model Sparsity: 0.95
+Epoch [41/50]: Avg Loss: 0.0452 | Avg Accuracy: 93.30 | Model Sparsity: 0.95
+Epoch [42/50]: Avg Loss: 0.0439 | Avg Accuracy: 94.03 | Model Sparsity: 0.95
+Epoch [43/50]: Avg Loss: 0.0415 | Avg Accuracy: 93.53 | Model Sparsity: 0.95

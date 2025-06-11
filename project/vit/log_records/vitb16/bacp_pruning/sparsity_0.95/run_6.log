@@ -1,0 +1,23 @@
+Model : vitb16 - Learning Type: bacp_pruning/sparsity_0.95
+Configuration:
+model_type: cnn
+model_name: vitb16
+model_task: cifar10
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.001
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+n_views: 2
+temperature: 0.07
+base_temperature: 0.07
+num_classes: 10
+lambda1: 0.25
+lambda2: 0.25
+lambda3: 0.25
+lambda4: 0.25
+embedding_dim: 768
+save_path: {'current_model': '/dbfs/research/vitb16/cifar10/vitb16_magnitude_pruning_0.95_bacp_cm.pt', 'pretrained_model': '/dbfs/research/vitb16/cifar10/vitb16_magnitude_pruning_0.95_bacp_pm.pt', 'finetuned_model': '/dbfs/research/vitb16/cifar10/vitb16_magnitude_pruning_0.95_bacp_fm.pt'}
+

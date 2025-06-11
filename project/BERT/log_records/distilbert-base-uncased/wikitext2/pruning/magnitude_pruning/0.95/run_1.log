@@ -1,0 +1,27 @@
+Model : distilbert-base-uncased - Learning Type: wikitext2/pruning/magnitude_pruning/0.95
+Configuration:
+model_type: llm
+model_name: distilbert-base-uncased
+model_task: wikitext2
+embedding_dim: 768
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 0
+batch_size: 64
+learning_rate: 5e-05
+learning_type: pruning
+optimizer_type: adamw
+prune: True
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+enable_mixed_precision: True
+device: cuda
+save_path: /dbds/research/distilbert-base-uncased/wikitext2/distilbert-base-uncased_wikitext2_magnitude_pruning_0.95_pruning.pt
+finetuned_weights: /dbfs/research/distilbert-base-uncased/wikitext2/distilbert-base-uncased_wikitext2_baseline.pt
+
+Epoch [1/5]: Avg Loss: 1.4188 | Avg Accuracy: 58.93 | Model Sparsity: 0.4636
+Epoch [2/5]: Avg Loss: 4.5682 | Avg Accuracy: 38.68 | Model Sparsity: 0.7448
+Epoch [3/5]: Avg Loss: 6.5418 | Avg Accuracy: 18.12 | Model Sparsity: 0.8892
+Epoch [4/5]: Avg Loss: 6.6475 | Avg Accuracy: 15.12 | Model Sparsity: 0.9424
+Epoch [5/5]: Avg Loss: 6.5881 | Avg Accuracy: 14.98 | Model Sparsity: 0.95

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet50, resnet101, vgg11, vgg19, vit_b_16, vit_l_16
 from torchvision.models import ResNet50_Weights, ResNet101_Weights, VGG11_Weights, VGG19_Weights, ViT_B_16_Weights, ViT_L_16_Weights
-from transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoTokenizer
+from transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoModelForMaskedLM, AutoTokenizer
 
 from functools import lru_cache
 from utils import freeze_weights
@@ -32,10 +32,10 @@ def get_model_components(model_name, pretrained=True, num_llm_labels=2, model_ta
     else:
         if model_task == 'squad':
             model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+        elif model_task == 'wikitext2':
+            model = AutoModelForMaskedLM.from_pretrained(model_name)
         else:
             model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_llm_labels)
-        
-
     return {
         "model": model,
         "embedding_dim": spec["dim"],
@@ -66,6 +66,7 @@ class EncoderProjectionNetwork(nn.Module):
         self.model_type = components["model_type"]
         self.model_family = components["model_family"]
         self.model_task = model_task
+
         # Adapting the model for cifar10
         if adapt_for_cifar10 and self.model_family == "resnet":
             adapt_for_cifar(self.model)
@@ -78,23 +79,23 @@ class EncoderProjectionNetwork(nn.Module):
                 nn.Linear(self.embedding_dim, output_dims)
             )
             adapt_head_for_model(self.model, projection_head, self.model_family)
+        else:
+            if self.model_task == 'wikitext2':
+                if hasattr(self.model, 'vocab_projector'):
+                    self.model.vocab_projector = nn.Linear(self.embedding_dim, output_dims)
+                elif hasattr(self.model, 'lm_head') and hasattr(self.model.lm_head, 'decoder'):
+                    self.model.lm_head.decoder = nn.Linear(self.embedding_dim, output_dims)
         
     def forward(self, x):
         if self.model_type == "vision":
             return F.normalize(self.model(x), dim=1)
         else:
-            if self.model_task == 'squad':
-                x = self.model(**x)
-                x.logits = F.normalize(x.logits, dim=1)
-                return x
-            else:
-                x = self.model(
-                    input_ids=x["input_ids"], 
-                    attention_mask=x["attention_mask"], 
-                    output_hidden_states=True, 
-                    return_dict=True
-                    )
-                x.logits = F.normalize(x.logits, dim=1)
+            x = self.model(
+                **x,
+                output_hidden_states=True, 
+                return_dict=True
+                )
+            x.logits = F.normalize(x.logits, dim=1)
             return x
 
 class ClassificationNetwork(nn.Module):
@@ -126,11 +127,5 @@ class ClassificationNetwork(nn.Module):
         if self.model_type == "vision":
             return self.model(x)
         else:
-            if self.model_task == 'squad':
-                return self.model(**x)
-            else:
-                return self.model(
-                    input_ids=x["input_ids"],
-                    attention_mask=x["attention_mask"],
-                    labels=x["label"]
-                )
+            return self.model(**x)
+

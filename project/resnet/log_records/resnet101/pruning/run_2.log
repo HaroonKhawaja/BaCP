@@ -1,0 +1,82 @@
+Model : resnet101 - Learning Type: pruning
+Configuration:
+model_type: cv
+model_name: resnet101
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.01
+learning_type: pruning
+optimizer_type: sgd
+use_scheduler: False
+prune: True
+pruning_type: magnitude_pruning
+target_sparsity: 0.97
+sparsity_scheduler: cubic
+delta_t: 41
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet101/cifar10/resnet101_magnitude_pruning_0.97.pt
+finetuned_weights: /dbfs/research/resnet101/cifar10/resnet101_cifar10_baseline.pt
+current_sparsity: 0.0
+
+Epoch [1/5]: Avg Loss: 0.0196 | Avg Accuracy: 14.86 | Model Sparsity: 0.8627
+Recovery epoch [1/10]: Avg Loss: 0.2540 | Avg Accuracy: 86.57 | Model Sparsity: 0.8627
+Recovery epoch [2/10]: Avg Loss: 0.1457 | Avg Accuracy: 88.67 | Model Sparsity: 0.8627
+Recovery epoch [3/10]: Avg Loss: 0.1173 | Avg Accuracy: 88.73 | Model Sparsity: 0.8627
+Recovery epoch [4/10]: Avg Loss: 0.0943 | Avg Accuracy: 88.20 | Model Sparsity: 0.8627
+Recovery epoch [5/10]: Avg Loss: 0.0805 | Avg Accuracy: 89.08 | Model Sparsity: 0.8627
+Recovery epoch [6/10]: Avg Loss: 0.0688 | Avg Accuracy: 89.41 | Model Sparsity: 0.8627
+Recovery epoch [7/10]: Avg Loss: 0.0643 | Avg Accuracy: 89.89 | Model Sparsity: 0.8627
+Recovery epoch [8/10]: Avg Loss: 0.0541 | Avg Accuracy: 90.08 | Model Sparsity: 0.8627
+Recovery epoch [9/10]: Avg Loss: 0.0533 | Avg Accuracy: 89.55 | Model Sparsity: 0.8627
+Recovery epoch [10/10]: Avg Loss: 0.0469 | Avg Accuracy: 90.54 | Model Sparsity: 0.8627
+Epoch [2/5]: Avg Loss: 0.1076 | Avg Accuracy: 27.25 | Model Sparsity: 0.9581
+Recovery epoch [1/10]: Avg Loss: 0.3553 | Avg Accuracy: 86.45 | Model Sparsity: 0.9581
+Recovery epoch [2/10]: Avg Loss: 0.1965 | Avg Accuracy: 88.00 | Model Sparsity: 0.9581
+Recovery epoch [3/10]: Avg Loss: 0.1641 | Avg Accuracy: 89.29 | Model Sparsity: 0.9581
+Recovery epoch [4/10]: Avg Loss: 0.1434 | Avg Accuracy: 89.01 | Model Sparsity: 0.9581
+Recovery epoch [5/10]: Avg Loss: 0.1189 | Avg Accuracy: 88.90 | Model Sparsity: 0.9581
+Recovery epoch [6/10]: Avg Loss: 0.1104 | Avg Accuracy: 89.38 | Model Sparsity: 0.9581
+Recovery epoch [7/10]: Avg Loss: 0.0966 | Avg Accuracy: 90.15 | Model Sparsity: 0.9581
+Recovery epoch [8/10]: Avg Loss: 0.0856 | Avg Accuracy: 89.61 | Model Sparsity: 0.9581
+Recovery epoch [9/10]: Avg Loss: 0.0846 | Avg Accuracy: 89.43 | Model Sparsity: 0.9581
+Recovery epoch [10/10]: Avg Loss: 0.0779 | Avg Accuracy: 89.45 | Model Sparsity: 0.9581
+Epoch [3/5]: Avg Loss: 0.1149 | Avg Accuracy: 83.26 | Model Sparsity: 0.9687
+Recovery epoch [1/10]: Avg Loss: 0.1473 | Avg Accuracy: 89.70 | Model Sparsity: 0.9687
+Recovery epoch [2/10]: Avg Loss: 0.0930 | Avg Accuracy: 90.01 | Model Sparsity: 0.9687
+Recovery epoch [3/10]: Avg Loss: 0.0806 | Avg Accuracy: 89.94 | Model Sparsity: 0.9687
+Recovery epoch [4/10]: Avg Loss: 0.0688 | Avg Accuracy: 90.47 | Model Sparsity: 0.9687
+Recovery epoch [5/10]: Avg Loss: 0.0663 | Avg Accuracy: 90.22 | Model Sparsity: 0.9687
+Recovery epoch [6/10]: Avg Loss: 0.0600 | Avg Accuracy: 89.79 | Model Sparsity: 0.9687
+Recovery epoch [7/10]: Avg Loss: 0.0541 | Avg Accuracy: 89.77 | Model Sparsity: 0.9687
+Recovery epoch [8/10]: Avg Loss: 0.0530 | Avg Accuracy: 90.32 | Model Sparsity: 0.9687
+Recovery epoch [9/10]: Avg Loss: 0.0470 | Avg Accuracy: 90.15 | Model Sparsity: 0.9687
+Recovery epoch [10/10]: Avg Loss: 0.0483 | Avg Accuracy: 90.36 | Model Sparsity: 0.9687
+Epoch [4/5]: Avg Loss: 0.0499 | Avg Accuracy: 88.84 | Model Sparsity: 0.9699
+Recovery epoch [1/10]: Avg Loss: 0.0560 | Avg Accuracy: 89.93 | Model Sparsity: 0.9699
+Recovery epoch [2/10]: Avg Loss: 0.0471 | Avg Accuracy: 90.79 | Model Sparsity: 0.9699
+Recovery epoch [3/10]: Avg Loss: 0.0448 | Avg Accuracy: 90.40 | Model Sparsity: 0.9699
+Recovery epoch [4/10]: Avg Loss: 0.0383 | Avg Accuracy: 90.37 | Model Sparsity: 0.9699
+Recovery epoch [5/10]: Avg Loss: 0.0347 | Avg Accuracy: 90.69 | Model Sparsity: 0.9699
+Recovery epoch [6/10]: Avg Loss: 0.0355 | Avg Accuracy: 90.21 | Model Sparsity: 0.9699
+Recovery epoch [7/10]: Avg Loss: 0.0337 | Avg Accuracy: 89.45 | Model Sparsity: 0.9699
+Recovery epoch [8/10]: Avg Loss: 0.0346 | Avg Accuracy: 90.37 | Model Sparsity: 0.9699
+Recovery epoch [9/10]: Avg Loss: 0.0339 | Avg Accuracy: 90.36 | Model Sparsity: 0.9699
+Recovery epoch [10/10]: Avg Loss: 0.0303 | Avg Accuracy: 90.29 | Model Sparsity: 0.9699
+Epoch [5/5]: Avg Loss: 0.0313 | Avg Accuracy: 90.30 | Model Sparsity: 0.97
+Recovery epoch [1/10]: Avg Loss: 0.0287 | Avg Accuracy: 90.75 | Model Sparsity: 0.97
+Recovery epoch [2/10]: Avg Loss: 0.0316 | Avg Accuracy: 89.80 | Model Sparsity: 0.97
+Recovery epoch [3/10]: Avg Loss: 0.0281 | Avg Accuracy: 90.54 | Model Sparsity: 0.97
+Recovery epoch [4/10]: Avg Loss: 0.0293 | Avg Accuracy: 90.76 | Model Sparsity: 0.97
+Recovery epoch [5/10]: Avg Loss: 0.0255 | Avg Accuracy: 91.24 | Model Sparsity: 0.97
+Recovery epoch [6/10]: Avg Loss: 0.0229 | Avg Accuracy: 90.69 | Model Sparsity: 0.97
+Recovery epoch [7/10]: Avg Loss: 0.0270 | Avg Accuracy: 91.02 | Model Sparsity: 0.97
+Recovery epoch [8/10]: Avg Loss: 0.0246 | Avg Accuracy: 91.07 | Model Sparsity: 0.97
+Recovery epoch [9/10]: Avg Loss: 0.0248 | Avg Accuracy: 90.21 | Model Sparsity: 0.97
+Recovery epoch [10/10]: Avg Loss: 0.0229 | Avg Accuracy: 90.21 | Model Sparsity: 0.97

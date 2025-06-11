@@ -1,0 +1,35 @@
+Model : roberta-base - Learning Type: baseline
+Configuration:
+model_type: llm
+model_name: roberta-base
+model_task: wikitext2
+num_classes: 2
+embedding_dim: 768
+epochs: 10
+pruning_epochs: 10
+recovery_epochs: 10
+batch_size: 64
+learning_rate: 0.0001
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: adamw
+total_steps: 740
+warmup_steps: 74
+prune: False
+target_sparsity: 0
+sparsity_scheduler: linear
+delta_t: 37
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/roberta-base/wikitext2/roberta-base_wikitext2_baseline.pt
+current_sparsity: 0.0
+
+Epoch [1/10]: Avg Loss: 1.4380 | Avg Accuracy: 69.28 | Model Sparsity: 0.0
+Epoch [2/10]: Avg Loss: 1.3644 | Avg Accuracy: 69.66 | Model Sparsity: 0.0
+Epoch [3/10]: Avg Loss: 1.3231 | Avg Accuracy: 69.98 | Model Sparsity: 0.0
+Epoch [4/10]: Avg Loss: 1.2878 | Avg Accuracy: 70.63 | Model Sparsity: 0.0
+Epoch [5/10]: Avg Loss: 1.2608 | Avg Accuracy: 70.10 | Model Sparsity: 0.0
+Epoch [6/10]: Avg Loss: 1.2334 | Avg Accuracy: 70.40 | Model Sparsity: 0.0
+Epoch [7/10]: Avg Loss: 1.2154 | Avg Accuracy: 71.36 | Model Sparsity: 0.0
+Epoch [8/10]: Avg Loss: 1.1935 | Avg Accuracy: 70.53 | Model Sparsity: 0.0
+Epoch [9/10]: Avg Loss: 1.1845 | Avg Accuracy: 71.27 | Model Sparsity: 0.0

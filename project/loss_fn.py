@@ -18,6 +18,7 @@ class SupConLoss(nn.Module):
     def forward(self, features, labels):
         # Total number of feature vectors (batch_size * n_views)
         multiview_batch_size = features.shape[0]
+        batch_size = multiview_batch_size // self.n_views
         
         # Duplicate labels to match the multiple views of each sample
         labels = labels.view(-1, 1)
@@ -53,7 +54,7 @@ class SupConLoss(nn.Module):
         
         # Scaling loss by temperature ratio and average across the batch
         loss = -(self.temperature / self.base_temperature) * mean_log_prob_positive
-        loss = loss.view(self.n_views, self.batch_size).mean()
+        loss = loss.view(self.n_views, batch_size).mean()
         return loss 
 
 class NTXentLoss(nn.Module):

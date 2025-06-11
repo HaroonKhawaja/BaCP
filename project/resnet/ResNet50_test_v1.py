@@ -21,17 +21,12 @@ import os
 sys.path.append(os.path.abspath('..'))
 
 from bacp import BaCPTrainer, BaCPTrainingArgumentsLLM, BaCPTrainingArgumentsCNN
-from models import EncoderProjectionNetwork, ClassificationNetwork
-from unstructured_pruning import MagnitudePrune, MovementPrune, LocalMagnitudePrune, LocalMovementPrune, WandaPrune, PRUNER_DICT, check_model_sparsity
 from LLM_trainer import LLMTrainer, LLMTrainingArguments
 from CV_trainer import Trainer, CVTrainingArguments
-from dataset_utils import get_glue_data
-from logger import Logger
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from tqdm import tqdm
 from torchinfo import summary
@@ -66,12 +61,11 @@ training_args = CVTrainingArguments(
     batch_size=BATCH_SIZE,
     epochs=EPOCHS_RESNET50,
     learning_type="baseline",
-    learning_rate=0.01,
     optimizer_type='sgd',
+    learning_rate=0.01,
+    scheduler_type='linear_with_warmup'
 )
-
 trainer = Trainer(training_args=training_args)
-
 if False:
     trainer.train()
 
@@ -95,7 +89,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = "magnitude_pruning"
@@ -123,8 +117,6 @@ if True:
 acc = trainer.evaluate()
 print(f"\nAccuracy = {acc}")
 
-check_sparsity_distribution(trainer.model, verbose=False)
-
 # COMMAND ----------
 
 # Model initialization
@@ -132,7 +124,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = "magnitude_pruning"
@@ -167,7 +159,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = "magnitude_pruning"
@@ -207,7 +199,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'movement_pruning'
@@ -242,7 +234,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'movement_pruning'
@@ -278,7 +270,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'movement_pruning'
@@ -324,7 +316,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'magnitude_pruning'
@@ -338,8 +330,8 @@ bacp_training_args = BaCPTrainingArgumentsCNN(
     finetuned_weights=finetuned_weights,
     pruning_type=pruning_type,
     target_sparsity=target_sparsity,
-    learning_rate=0.1,
     optimizer_type='sgd',
+    learning_rate=0.1,
     sparsity_scheduler='cubic'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
@@ -358,10 +350,11 @@ training_args = CVTrainingArguments(
     target_sparsity=bacp_trainer.target_sparsity,
     finetuned_weights=bacp_trainer.cm_save_path,
     epochs=50,
-    learning_rate=0.0001,
     pruner=pruner,
     finetune=True,
-    learning_type="bacp_finetune"
+    learning_type="bacp_finetune",
+    optimizer_type='adamw',
+    learning_rate=0.0001,
 )
 trainer = Trainer(training_args)
 if True:
@@ -383,7 +376,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'magnitude_pruning'
@@ -397,12 +390,12 @@ bacp_training_args = BaCPTrainingArgumentsCNN(
     finetuned_weights=finetuned_weights,
     pruning_type=pruning_type,
     target_sparsity=target_sparsity,
-    learning_rate=0.1,
     optimizer_type='sgd',
+    learning_rate=0.1,
     sparsity_scheduler='cubic'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -417,10 +410,11 @@ training_args = CVTrainingArguments(
     target_sparsity=bacp_trainer.target_sparsity,
     finetuned_weights=bacp_trainer.cm_save_path,
     epochs=50,
-    learning_rate=0.0001,
     pruner=pruner,
     finetune=True,
-    learning_type="bacp_finetune"
+    learning_type="bacp_finetune",
+    optimizer_type='adamw',
+    learning_rate=0.0001,
 )
 trainer = Trainer(training_args)
 if True:
@@ -437,7 +431,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'magnitude_pruning'
@@ -451,12 +445,12 @@ bacp_training_args = BaCPTrainingArgumentsCNN(
     finetuned_weights=finetuned_weights,
     pruning_type=pruning_type,
     target_sparsity=target_sparsity,
-    learning_rate=0.1,
     optimizer_type='sgd',
+    learning_rate=0.1,
     sparsity_scheduler='cubic'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -471,10 +465,11 @@ training_args = CVTrainingArguments(
     target_sparsity=bacp_trainer.target_sparsity,
     finetuned_weights=bacp_trainer.cm_save_path,
     epochs=50,
-    learning_rate=0.0001,
     pruner=pruner,
     finetune=True,
-    learning_type="bacp_finetune"
+    learning_type="bacp_finetune",
+    optimizer_type='adamw',
+    learning_rate=0.0001,
 )
 trainer = Trainer(training_args)
 if True:
@@ -496,7 +491,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'movement_pruning'
@@ -510,12 +505,12 @@ bacp_training_args = BaCPTrainingArgumentsCNN(
     finetuned_weights=finetuned_weights,
     pruning_type=pruning_type,
     target_sparsity=target_sparsity,
-    learning_rate=0.1,
     optimizer_type='sgd',
+    learning_rate=0.1,
     sparsity_scheduler='cubic'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -530,13 +525,14 @@ training_args = CVTrainingArguments(
     target_sparsity=bacp_trainer.target_sparsity,
     finetuned_weights=bacp_trainer.cm_save_path,
     epochs=50,
-    learning_rate=0.0001,
     pruner=pruner,
     finetune=True,
-    learning_type="bacp_finetune"
+    learning_type="bacp_finetune",
+    optimizer_type='adamw',
+    learning_rate=0.0001,
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 acc = trainer.evaluate()
@@ -550,7 +546,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'movement_pruning'
@@ -564,12 +560,12 @@ bacp_training_args = BaCPTrainingArgumentsCNN(
     finetuned_weights=finetuned_weights,
     pruning_type=pruning_type,
     target_sparsity=target_sparsity,
-    learning_rate=0.1,
     optimizer_type='sgd',
+    learning_rate=0.1,
     sparsity_scheduler='cubic'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -584,13 +580,14 @@ training_args = CVTrainingArguments(
     target_sparsity=bacp_trainer.target_sparsity,
     finetuned_weights=bacp_trainer.cm_save_path,
     epochs=50,
-    learning_rate=0.0001,
     pruner=pruner,
     finetune=True,
-    learning_type="bacp_finetune"
+    learning_type="bacp_finetune",
+    optimizer_type='adamw',
+    learning_rate=0.0001,
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 acc = trainer.evaluate()
@@ -604,7 +601,7 @@ model_name = "resnet50"
 model_task = "cifar10"
 
 # Initializing finetuned weights path
-finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_baseline.pt"
+finetuned_weights = f"/dbfs/research/{model_name}/{model_task}/{model_name}_{model_task}_baseline.pt"
 
 # Initializing pruning args
 pruning_type = 'movement_pruning'
@@ -618,12 +615,12 @@ bacp_training_args = BaCPTrainingArgumentsCNN(
     finetuned_weights=finetuned_weights,
     pruning_type=pruning_type,
     target_sparsity=target_sparsity,
-    learning_rate=0.1,
     optimizer_type='sgd',
+    learning_rate=0.1,
     sparsity_scheduler='cubic'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -638,13 +635,14 @@ training_args = CVTrainingArguments(
     target_sparsity=bacp_trainer.target_sparsity,
     finetuned_weights=bacp_trainer.cm_save_path,
     epochs=50,
-    learning_rate=0.0001,
     pruner=pruner,
     finetune=True,
-    learning_type="bacp_finetune"
+    learning_type="bacp_finetune",
+    optimizer_type='adamw',
+    learning_rate=0.0001,
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 acc = trainer.evaluate()
