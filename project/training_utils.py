@@ -31,7 +31,7 @@ def _detect_num_classes(args):
         'cifar10': 10,
         'sst2': 2,
         'qqp': 2,
-        'wikitext2': 30522,
+        'wikitext2': args.tokenizer.vocab_size,
     }
     if args.model_task in task_num_classes:
         args.num_classes = task_num_classes[args.model_task]
@@ -193,7 +193,7 @@ def _initialize_paths_and_logger(args):
     db = '/dbfs' if args.db else '.'
     args.base_path = os.path.join(db, 'research', args.model_name, args.model_task)
 
-    if args.prune:
+    if args.prune or args.finetune:
         weights_path = f'{args.model_name}_{args.model_task}_{args.pruning_type}_{args.target_sparsity}_{args.learning_type}.pt'
         logger_path = os.path.join(args.model_task, args.learning_type, args.pruning_type, str(args.target_sparsity))
     else:
