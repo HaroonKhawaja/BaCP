@@ -21,6 +21,7 @@ from utils import get_device, load_weights
 def _detect_model_type(args):
     if args.model_task in [get_dataset_config_names("glue"), 'squad', 'wikitext2']:
         args.model_type = 'llm'
+        args.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     elif args.model_task in CV_DATASETS:
         args.model_type = 'cv'
     else:
@@ -125,7 +126,6 @@ def _initialize_scheduler(args):
 
 def _initialize_data_loaders(args):
     if args.model_type == 'llm':
-        args.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
         if args.model_task in get_dataset_config_names("glue"):
             data = get_glue_data(args.tokenizer)
         elif args.model_task == 'squad':

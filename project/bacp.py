@@ -79,6 +79,7 @@ class BaCPTrainingArguments:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         _detect_model_type(self)
+        _detect_num_classes(self)
         _detect_cv_image_size(self)
         _initialize_models(self)
         _initialize_optimizer(self)
@@ -87,7 +88,6 @@ class BaCPTrainingArguments:
         _initialize_pruner(self)
         _initialize_contrastive_losses(self)
         _initialize_paths_and_logger(self)
-        _detect_num_classes(self)
 
 class BaCPTrainer:
     def __init__(self, bacp_training_args, lambdas=[0.25, 0.25, 0.25, 0.25]):
