@@ -56,79 +56,104 @@ class AugmentData(object):
             return [self.base_transform(x) for _ in range(self.n_views)]
 
 def get_transform(learning_type, size=32, dataset_name="", s=1):
-    if learning_type == 'contrastive':   
+    DATASET_STATS = {
+        "cifar10": ([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]),
+        "cifar100": ([0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]),
+        "svhn": ([0.4380, 0.4440, 0.4730], [0.1751, 0.1771, 0.1744]),
+        "mnist": ([0.1307], [0.3081]),
+        "fmnist": ([0.2860], [0.3530]),
+    } 
+    GRAYSCALE_DATASETS = {"mnist", "fmnist"}
+
+    def normalize_data(dataset_name, mean, std):
+        if dataset_name in GRAYSCALE_DATASETS:
+            return [
+                T.ToTensor(),
+                T.Lambda(lambda x: x.repeat(3, 1, 1)),
+                T.Normalize(mean*3, std*3)
+            ]
+        else:
+            return [
+                T.ToTensor(),
+                T.Normalize(mean, std)
+            ]
+
+    def get_supervised_transform(dataset_name, size):
+        mean, std = DATASET_STATS[dataset_name]
+        if dataset_name == 'cifar10' or dataset_name == 'cifar100':
+            transforms = [
+                T.Resize((size, size)),
+                T.RandomCrop(size, padding=4),
+                T.RandomHorizontalFlip(),
+            ]
+        elif dataset_name == 'svhn':
+            transforms = [
+                T.Resize((size, size)),
+                T.RandomCrop(size, padding=4),
+                T.ColorJitter(0.2, 0.2, 0.2),
+            ]
+        elif dataset_name == 'mnist':
+            transforms = [
+                T.Resize((size, size)),
+                T.RandomRotation(10)
+            ]
+        elif dataset_name == "fmnist":
+            transforms = [
+                T.Resize((size, size)),
+                T.RandomRotation(10)
+            ]
+        else:
+            raise ValueError(f"Unsupported dataset: {dataset_name}")
+        
+        transforms.append(normalize_data(dataset_name, mean, std))
+        return T.Compose(transforms)
+    
+    def get_contrastive_transform(dataset_name, size, s):
+        mean, std = DATASET_STATS[dataset_name]
         if dataset_name == 'cifar10':
-            data_transforms = T.Compose([
+            transforms = [
                 T.Resize((size, size)),
                 AutoAugment(policy=AutoAugmentPolicy.CIFAR10),
-                T.ToTensor(),
-                T.Normalize(mean=MEAN_CIFAR10, std=STD_CIFAR10),
-                ])
+            ]
         elif dataset_name == 'cifar100':
             color_jitter = T.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
-            data_transforms = T.Compose([
-                T.RandomResizedCrop(size=size),
-                T.RandomHorizontalFlip(),
-                T.RandomApply([color_jitter], p=0.8),
-                T.RandomGrayscale(p=0.2), 
-                T.GaussianBlur(kernel_size=int(0.1 * size)),
-                T.ToTensor(),
-                T.Normalize(mean=MEAN_CIFAR100, std=STD_CIFAR100),
-                ])
-        elif dataset_name == 'svhn':
-            data_transforms = T.Compose([
-                T.Resize((size, size)),
-                T.RandomHorizontalFlip(),
-                T.ToTensor(),
-                ])
-        elif dataset_name in ['mnist', 'fmnist']:
-            data_transforms = T.Compose([
-                T.Resize((size, size)),
-                T.RandomRotation(10),
-                T.ToTensor(),
-                ])
-        else:
-            color_jitter = T.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
-            data_transforms = T.Compose([
+            transforms = [
                 T.RandomResizedCrop(size=size),
                 T.RandomHorizontalFlip(),
                 T.RandomApply([color_jitter], p=0.8),
                 T.RandomGrayscale(p=0.2),
-                T.ToTensor(),
-                T.Normalize(mean=MEAN, std=STD),
-                ])
-    elif learning_type == 'supervised':
-        if dataset_name == 'cifar10':
-            data_transforms = T.Compose([
+                T.GaussianBlur(kernel_size=int(0.1 * size))
+            ]
+        elif dataset_name == 'svhn':
+            color_jitter = T.ColorJitter(0.4 * s, 0.4 * s, 0.4 * s, 0.1 * s)
+            transforms = [
                 T.Resize((size, size)),
                 T.RandomCrop(size, padding=4),
-                T.RandomHorizontalFlip(),
-                T.ToTensor(),
-                T.Normalize(mean=MEAN_CIFAR10, std=STD_CIFAR10),
-            ])
-        elif dataset_name == 'cifar100':
-            data_transforms = T.Compose([
+                T.RandomRotation(10),
+                T.RandomApply([color_jitter], p=0.6),
+                T.RandomGrayscale(p=0.1),
+                T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))
+            ]
+        elif dataset_name == 'mnist' or dataset_name == 'fmnist':
+            transforms = [
                 T.Resize((size, size)),
-                T.ToTensor(),
-                T.Normalize(mean=MEAN_CIFAR100, std=STD_CIFAR100),
-            ])
-        elif dataset_name == 'svhn':
-            data_transforms = T.Compose([
-                T.Resize((size, size)),
-                T.ToTensor(),
-            ])
-        elif dataset_name in ['mnist', 'fmnist']:
-            data_transforms = T.Compose([
-                T.Resize((size, size)),
-                T.ToTensor(),
-            ])
+                T.RandomRotation(10),
+                T.RandomApply([T.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))], p=0.3)
+            ]
         else:
-            data_transforms = T.Compose([
-                T.Resize((size, size)),
-                T.ToTensor(),
-                T.Normalize(mean=MEAN, std=STD),
-            ])
-    return data_transforms
+            raise ValueError(f"Unsupported dataset: {dataset_name}")
+        
+        transforms.append(normalize_data(dataset_name, mean, std))
+        return T.Compose(transforms)
+
+    if dataset_name not in DATASET_STATS:
+        raise ValueError(f"Unsupported dataset: {dataset_name}")
+    if learning_type == 'supervised':
+        return get_supervised_transform(dataset_name, size)
+    elif learning_type == 'contrastive':
+        return get_contrastive_transform(dataset_name, size, s)
+    else:
+        raise ValueError(f"Unsupported learning type: {learning_type}")    
 
 class CreateDatasets:
     def __init__(self):
@@ -192,11 +217,8 @@ def get_cv_data(dataset_name, batch_size, size=32, num_workers=24, cache_dir="./
         
         data = {
             "trainloader": trainloader,
-            "trainset": datasets["train"],
             "valloader": valloader,
-            "valset": datasets["validation"],
             "testloader": testloader,
-            "testset": datasets["test"]
         }
         return data
 
@@ -238,7 +260,8 @@ def get_glue_data(tokenizer, task_name, batch_size, num_workers=24):
             return tokenizer(example["sentence"], truncation=True, padding="max_length")
         
     dataset = dataset.map(tokenize_fn, batched=True, batch_size=512, num_proc=1)
-    dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+    dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+    dataset = dataset.rename_column("label", "labels")
 
     trainset = GlueDataset(dataset["train"])
     valset = GlueDataset(dataset["validation"])

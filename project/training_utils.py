@@ -19,7 +19,7 @@ from unstructured_pruning import check_model_sparsity, PRUNER_DICT
 from utils import get_device, load_weights
 
 def _detect_model_type(args):
-    if args.model_task in [get_dataset_config_names("glue"), 'squad', 'wikitext2']:
+    if args.model_task in [get_dataset_config_names("glue"), 'squad', 'wikitext2', 'sst2']:
         args.model_type = 'llm'
         args.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     elif args.model_task in CV_DATASETS:
@@ -30,9 +30,10 @@ def _detect_model_type(args):
 def _detect_num_classes(args):
     task_num_classes = {
         'cifar10': 10,
+        'svhn': 10,
         'sst2': 2,
         'qqp': 2,
-        'wikitext2': args.tokenizer.vocab_size,
+        'wikitext2': args.tokenizer.vocab_size if hasattr(args, 'tokenizer') else None,
     }
     if args.model_task in task_num_classes:
         args.num_classes = task_num_classes[args.model_task]
@@ -103,8 +104,7 @@ def _initialize_optimizer(args):
     else:
         raise ValueError(f"Invalid optimizer type: {args.optimizer_type}")
 
-    print('[Trainer] Initialized optimizer:', args.optimizer_type)
-    print('[Trainer] Optimizer learning rate:', args.learning_rate)
+    print(f'[TRAINER] Optimizer type w/ learning rate: ({args.optimizer_type}, {args.learning_rate})')
     
 def _initialize_scheduler(args):
     if args.scheduler_type:
@@ -127,7 +127,7 @@ def _initialize_scheduler(args):
 def _initialize_data_loaders(args):
     if args.model_type == 'llm':
         if args.model_task in get_dataset_config_names("glue"):
-            data = get_glue_data(args.tokenizer)
+            data = get_glue_data(args.tokenizer, args.model_task, args.batch_size)
         elif args.model_task == 'squad':
             data = get_squad_data(args.tokenizer, args.batch_size, 1.0, args.num_workers)
         elif args.model_task == 'wikitext2':
@@ -141,7 +141,7 @@ def _initialize_data_loaders(args):
 
     args.trainloader = data["trainloader"]
     args.valloader = data["valloader"]
-    args.testloader = data["testloader"] if args.model_task == 'sst2' else None
+    args.testloader = data["testloader"] if args.model_task != 'sst2' else None
 
     print('[TRAINER] Data Initialized for model task:', args.model_task)
     print('[TRAINER] Batch size:', args.batch_size)

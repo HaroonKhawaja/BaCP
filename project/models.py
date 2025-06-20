@@ -51,12 +51,12 @@ def adapt_head_for_model(model, head, family):
     elif family == "resnet":
         model.fc = head
 
-def adapt_for_cifar(model):
+def adapt_resnet_for_small_images(model):
     if hasattr(model, 'conv1'):
         model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
 
 class EncoderProjectionNetwork(nn.Module):
-    def __init__(self, model_name, output_dims=128, pretrained=True, adapt_for_cifar10=True, model_task='cls'):
+    def __init__(self, model_name, output_dims=128, pretrained=True, adapt=True, model_task='cls'):
         super().__init__()
         
         # Loading model components
@@ -68,8 +68,8 @@ class EncoderProjectionNetwork(nn.Module):
         self.model_task = model_task
 
         # Adapting the model for cifar10
-        if adapt_for_cifar10 and self.model_family == "resnet":
-            adapt_for_cifar(self.model)
+        if adapt and self.model_family == "resnet":
+            adapt_resnet_for_small_images(self.model)
 
         # Attaching the classification head if its a vision model
         if self.model_type == "vision":
@@ -99,7 +99,7 @@ class EncoderProjectionNetwork(nn.Module):
             return x
 
 class ClassificationNetwork(nn.Module):
-    def __init__(self, model_name, num_classes=10, freeze=False, adapt_for_cifar10=True, model_task='cls'):
+    def __init__(self, model_name, num_classes=10, freeze=False, adapt=True, model_task='cls'):
         super().__init__()
         
         # Loading model components
@@ -115,8 +115,8 @@ class ClassificationNetwork(nn.Module):
             freeze_weights(self.model)
         
         # Adapting the model for cifar10
-        if adapt_for_cifar10 and self.model_family == "resnet":
-            adapt_for_cifar(self.model)
+        if adapt and self.model_family == "resnet":
+            adapt_resnet_for_small_images(self.model)
         
         # Attaching the classification head if its a vision model
         if self.model_type == "vision":

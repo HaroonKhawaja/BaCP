@@ -354,7 +354,6 @@ class Trainer:
                         total_samples += batch['input_ids'].size(0)
                         avg_acc = (total_correct / total_samples) * 100
                 else:
-                    labels = batch["labels"]
                     preds = outputs.max(1)[1]
                     correct = (preds == labels).sum()
                     total_correct += correct.item()

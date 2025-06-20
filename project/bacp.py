@@ -288,9 +288,11 @@ class BaCPTrainer:
                     if self.model_type == 'llm':
                         pretrained_embeddings = self.pre_trained_model(batch).logits
                         finetuned_embeddings = self.finetuned_model(batch).logits
-                    elif self.model_type == 'cnn':
+                    elif self.model_type == 'cv':
                         pretrained_embeddings = self.pre_trained_model(batch['data1'])
                         finetuned_embeddings = self.finetuned_model(batch['data1'])
+                    else:
+                        raise Exception("Model type not supported")
 
                 if mask is not None:
                     labels = labels[mask]
