@@ -1,0 +1,24 @@
+Model : roberta-base - Learning Type: wikitext2/bacp_finetune/movement_pruning/0.99
+Configuration:
+model_type: llm
+model_name: roberta-base
+model_task: wikitext2
+num_classes: 50265
+embedding_dim: 768
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 64
+learning_rate: 0.01
+learning_type: bacp_finetune
+optimizer_type: adamw
+prune: False
+pruning_type: movement_pruning
+target_sparsity: 0.99
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/roberta-base/wikitext2/roberta-base_wikitext2_movement_pruning_0.99_bacp_finetune.pt
+finetuned_weights: /dbfs/research/roberta-base/wikitext2/roberta-base_wikitext2_movement_pruning_0.99_bacp_pruning.pt
+
+Epoch [1/50]: Avg Loss: 8.1800 | Avg Accuracy: 5.37 | Model Sparsity: 0.99
