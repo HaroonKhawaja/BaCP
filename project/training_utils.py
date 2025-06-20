@@ -30,7 +30,12 @@ def _detect_model_type(args):
 def _detect_num_classes(args):
     task_num_classes = {
         'cifar10': 10,
+        'cifar100': 100,
         'svhn': 10,
+        'mnist': 10,
+        'fmnist': 10,
+        'food101': 101,
+        'flowers102': 102,
         'sst2': 2,
         'qqp': 2,
         'wikitext2': args.tokenizer.vocab_size if hasattr(args, 'tokenizer') else None,

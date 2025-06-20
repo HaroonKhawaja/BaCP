@@ -105,7 +105,7 @@ def get_transform(learning_type, size=32, dataset_name="", s=1):
         else:
             raise ValueError(f"Unsupported dataset: {dataset_name}")
         
-        transforms.append(normalize_data(dataset_name, mean, std))
+        transforms.extend(normalize_data(dataset_name, mean, std))
         return T.Compose(transforms)
     
     def get_contrastive_transform(dataset_name, size, s):
@@ -143,7 +143,7 @@ def get_transform(learning_type, size=32, dataset_name="", s=1):
         else:
             raise ValueError(f"Unsupported dataset: {dataset_name}")
         
-        transforms.append(normalize_data(dataset_name, mean, std))
+        transforms.extend(normalize_data(dataset_name, mean, std))
         return T.Compose(transforms)
 
     if dataset_name not in DATASET_STATS:

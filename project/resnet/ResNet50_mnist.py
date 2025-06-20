@@ -56,7 +56,7 @@ training_args = TrainingArguments(
     learning_type="baseline"
 )
 trainer = Trainer(training_args=training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -89,7 +89,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -114,7 +114,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -137,7 +137,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -165,7 +165,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -188,7 +188,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -211,7 +211,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -245,7 +245,7 @@ bacp_training_args = BaCPTrainingArguments(
     learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -270,6 +270,7 @@ if True:
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
+check_sparsity_distribution(trainer.model)
 
 
 # COMMAND ----------
