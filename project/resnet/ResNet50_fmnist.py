@@ -36,7 +36,7 @@ print(f"{device = }")
 
 # Notebook specific variables
 MODEL_NAME = 'resnet50'
-MODEL_TASK = 'svhn'
+MODEL_TASK = 'fmnist'
 
 # COMMAND ----------
 

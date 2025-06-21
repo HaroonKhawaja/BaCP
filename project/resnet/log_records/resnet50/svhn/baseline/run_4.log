@@ -1,0 +1,26 @@
+Model : resnet50 - Learning Type: svhn/baseline
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: svhn
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 100
+pruning_epochs: 100
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.01
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 12100
+warmup_steps: 1210
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/svhn/resnet50_svhn_baseline.pt
+
+Epoch [1/100]: Avg Loss: 2.2361 | Avg Accuracy: 27.46 | Model Sparsity: 0.0
