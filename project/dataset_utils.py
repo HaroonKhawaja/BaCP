@@ -13,32 +13,32 @@ from functools import lru_cache
 VALID_DATASETS = {
     'contrastive': {
         'cifar10': lambda root_folder, size, n_views: CIFAR10(root_folder, train=True, transform=AugmentData(get_train_transform('contrastive', size, 'cifar10'), n_views), download=True),
+        'cifar100': lambda root_folder, size, n_views: CIFAR100(root_folder, train=True, transform=AugmentData(get_train_transform('contrastive', size, 'cifar100'), n_views), download=True),
         'svhn': lambda root_folder, size, n_views: SVHN(root_folder, split='train', transform=AugmentData(get_train_transform('contrastive', size, 'svhn'), n_views), download=True),
         'mnist': lambda root_folder, size, n_views: MNIST(root_folder, train=True, transform=AugmentData(get_train_transform('contrastive', size, 'mnist'), n_views), download=True),
         'fmnist': lambda root_folder, size, n_views: FashionMNIST(root_folder, train=True, transform=AugmentData(get_train_transform('contrastive', size, 'fmnist'), n_views), download=True),
         'food101': lambda root_folder, size, n_views: Food101(root_folder, split='train', transform=AugmentData(get_train_transform('contrastive', size, 'food101'), n_views), download=True),
         'flowers102': lambda root_folder, size, n_views: Flowers102(root_folder, split='train', transform=AugmentData(get_train_transform('contrastive', size, 'flowers102'), n_views), download=True),
-        'cifar100': lambda root_folder, size, n_views: CIFAR100(root_folder, train=True, transform=AugmentData(get_train_transform('contrastive', size, 'cifar100'), n_views), download=True),
     },
     
     'supervised': {
         'cifar10': lambda root_folder, size, n_views: CIFAR10(root_folder, train=True, transform=AugmentData(get_train_transform('supervised', size, 'cifar10'), n_views), download=True),
+        'cifar100': lambda root_folder, size, n_views: CIFAR100(root_folder, train=True, transform=AugmentData(get_train_transform('supervised', size, 'cifar100'), n_views), download=True),
         'svhn': lambda root_folder, size, n_views: SVHN(root_folder, split='train', transform=AugmentData(get_train_transform('supervised', size, 'svhn'), n_views), download=True),
         'mnist': lambda root_folder, size, n_views: MNIST(root_folder, train=True, transform=AugmentData(get_train_transform('supervised', size, 'mnist'), n_views), download=True),
         'fmnist': lambda root_folder, size, n_views: FashionMNIST(root_folder, train=True, transform=AugmentData(get_train_transform('supervised', size, 'fmnist'), n_views), download=True),
         'food101': lambda root_folder, size, n_views: Food101(root_folder, split='train', transform=AugmentData(get_train_transform('supervised', size, 'food101'), n_views), download=True),
         'flowers102': lambda root_folder, size, n_views: Flowers102(root_folder, split='train', transform=AugmentData(get_train_transform('supervised', size, 'flowers102'), n_views), download=True),
-        'cifar100': lambda root_folder, size, n_views: CIFAR100(root_folder, train=True, transform=AugmentData(get_train_transform('supervised', size, 'cifar100'), n_views), download=True),
     },
     
     'testset': {
         'cifar10': lambda root_folder, size: CIFAR10(root_folder, train=False, transform=get_eval_transform('cifar10', size), download=True),
+        'cifar100': lambda root_folder, size: CIFAR100(root_folder, train=False, transform=get_eval_transform('cifar100', size), download=True),
         'svhn': lambda root_folder, size: SVHN(root_folder, split='test', transform=get_eval_transform('svhn', size), download=True),
         'mnist': lambda root_folder, size: MNIST(root_folder, train=False, transform=get_eval_transform('mnist', size), download=True),
         'fmnist': lambda root_folder, size: FashionMNIST(root_folder, train=False, transform=get_eval_transform('fmnist', size), download=True),
         'food101': lambda root_folder, size: Food101(root_folder, split='test', transform=get_eval_transform('food101', size), download=True),
         'flowers102': lambda root_folder, size: Flowers102(root_folder, split='test', transform=get_eval_transform('flowers102', size), download=True),
-        'cifar100': lambda root_folder, size: CIFAR100(root_folder, train=False, transform=get_eval_transform('cifar100', size), download=True),
     }
 }
 
@@ -49,6 +49,8 @@ DATASET_STATS = {
     "svhn": ([0.4380, 0.4440, 0.4730], [0.1751, 0.1771, 0.1744]),
     "mnist": ([0.1307], [0.3081]),
     "fmnist": ([0.2860], [0.3530]),
+    "food101": ([0.5568, 0.4387, 0.3214], [0.2334, 0.2348, 0.2458]),
+    "flowers102": ([0.4349, 0.3836, 0.2968], [0.2963, 0.2458, 0.2686]),
 } 
 GRAYSCALE_DATASETS = {"mnist", "fmnist"}
 
@@ -109,6 +111,13 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.Resize((size, size)),
                 T.RandomRotation(10)
             ]
+        elif dataset_name == 'food101' or dataset_name == 'flowers102':
+            transforms = [
+                T.Resize((size, size)),
+                T.RandomCrop(size, padding=4),
+                T.RandomHorizontalFlip(),
+                T.RandomRotation(10),
+            ]
         else:
             raise ValueError(f"Unsupported dataset: {dataset_name}")
         
@@ -129,7 +138,7 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.RandomHorizontalFlip(),
                 T.RandomApply([color_jitter], p=0.8),
                 T.RandomGrayscale(p=0.2),
-                T.GaussianBlur(kernel_size=int(0.1 * size))
+                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
             ]
         elif dataset_name == 'svhn':
             color_jitter = T.ColorJitter(0.4 * s, 0.4 * s, 0.4 * s, 0.1 * s)
@@ -139,13 +148,21 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.RandomRotation(10),
                 T.RandomApply([color_jitter], p=0.6),
                 T.RandomGrayscale(p=0.1),
-                T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))
+                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
             ]
         elif dataset_name == 'mnist' or dataset_name == 'fmnist':
             transforms = [
                 T.Resize((size, size)),
                 T.RandomRotation(10),
                 T.RandomApply([T.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))], p=0.3)
+            ]
+        elif dataset_name == 'food101' or dataset_name == 'flowers102':
+            transforms = [
+                T.Resize((size, size)),
+                T.RandomHorizontalFlip(),
+                T.RandomApply([color_jitter], p=0.8),
+                T.RandomGrayscale(p=0.2),
+                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
             ]
         else:
             raise ValueError(f"Unsupported dataset: {dataset_name}")
@@ -186,14 +203,13 @@ def load_cv_dataset(dataset_name, cache_dir, learning_type, size):
     train_dataset_fn, test_dataset_fn = dataset.get_dataset_fn(learning_type, dataset_name)
     trainset = train_dataset_fn(cache_dir, size, 1 if learning_type == 'supervised' else 2)
     testset = test_dataset_fn(cache_dir, size)
-    
+
     # Creating validation set
-    if hasattr(trainset, 'data'):
-        train_size = len(trainset)
-        val_size = int(0.15 * train_size)
-        train_size = train_size - val_size
-        trainset, valset = random_split(trainset, [train_size, val_size])
-    
+    train_size = len(trainset)
+    val_size = int(0.15 * train_size)
+    train_size = train_size - val_size
+    trainset, valset = random_split(trainset, [train_size, val_size])
+
     return {
         'train': trainset,
         'validation': valset,

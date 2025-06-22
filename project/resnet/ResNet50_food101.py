@@ -36,7 +36,7 @@ print(f"{device = }")
 
 # Notebook specific variables
 MODEL_NAME = 'resnet50'
-MODEL_TASK = 'svhn'
+MODEL_TASK = 'food101'
 
 # COMMAND ----------
 
@@ -53,10 +53,11 @@ training_args = TrainingArguments(
     learning_rate=0.01,
     scheduler_type='linear_with_warmup',
     epochs=EPOCHS_RESNET50,
-    learning_type="baseline"
+    learning_type="baseline",
+    patience=50,
 )
 trainer = Trainer(training_args=training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -89,7 +90,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -112,7 +113,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -135,7 +136,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -163,7 +164,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -186,7 +187,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -209,7 +210,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -269,11 +270,6 @@ if True:
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
 
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC
 
 # COMMAND ----------
 

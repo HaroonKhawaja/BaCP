@@ -272,11 +272,6 @@ print(f"\n{metrics}")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC
-
-# COMMAND ----------
-
 # Initializing finetuned weights path
 finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
 
