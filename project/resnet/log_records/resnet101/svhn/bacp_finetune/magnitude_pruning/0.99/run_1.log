@@ -58,3 +58,8 @@ Epoch [33/50]: Avg Loss: 0.0283 | Avg Accuracy: 97.31 | Model Sparsity: 0.99
 Epoch [34/50]: Avg Loss: 0.0287 | Avg Accuracy: 97.14 | Model Sparsity: 0.99
 Epoch [35/50]: Avg Loss: 0.0261 | Avg Accuracy: 97.19 | Model Sparsity: 0.99
 Epoch [36/50]: Avg Loss: 0.0252 | Avg Accuracy: 97.28 | Model Sparsity: 0.99
+Epoch [37/50]: Avg Loss: 0.0252 | Avg Accuracy: 97.10 | Model Sparsity: 0.99
+Epoch [38/50]: Avg Loss: 0.0250 | Avg Accuracy: 97.20 | Model Sparsity: 0.99
+Epoch [39/50]: Avg Loss: 0.0250 | Avg Accuracy: 97.14 | Model Sparsity: 0.99
+Epoch [40/50]: Avg Loss: 0.0225 | Avg Accuracy: 97.22 | Model Sparsity: 0.99
+Epoch [41/50]: Avg Loss: 0.0218 | Avg Accuracy: 97.41 | Model Sparsity: 0.99

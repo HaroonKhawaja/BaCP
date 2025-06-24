@@ -1,6 +1,11 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # ResNet-50 Testing Notebook
+# MAGIC # VGG-19 Testing Notebook
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # VGG-19 Testing Notebook
 
 # COMMAND ----------
 
@@ -35,8 +40,8 @@ print(f"{device = }")
 # COMMAND ----------
 
 # Notebook specific variables
-MODEL_NAME = 'resnet101'
-MODEL_TASK = 'mnist'
+MODEL_NAME = 'vgg19'
+MODEL_TASK = 'cifar10'
 
 # COMMAND ----------
 
@@ -52,8 +57,9 @@ training_args = TrainingArguments(
     optimizer_type='sgd',
     learning_rate=0.01,
     scheduler_type='linear_with_warmup',
-    epochs=EPOCHS_RESNET101,
-    learning_type="baseline"
+    epochs=EPOCHS_VGG19,
+    learning_type="baseline",
+    patience=50,
 )
 trainer = Trainer(training_args=training_args)
 if True:
@@ -272,11 +278,6 @@ print(f"\n{metrics}")
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC
-
-# COMMAND ----------
-
 # Initializing finetuned weights path
 finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
 
@@ -458,8 +459,6 @@ if True:
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
-check_sparsity_distribution(trainer.model)
 
 
 # COMMAND ----------
