@@ -36,7 +36,7 @@ print(f"{device = }")
 
 # Notebook specific variables
 MODEL_NAME = 'resnet50'
-MODEL_TASK = 'food101'
+MODEL_TASK = 'flowers102'
 
 # COMMAND ----------
 
@@ -48,13 +48,13 @@ MODEL_TASK = 'food101'
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=0.0001,
     scheduler_type='linear_with_warmup',
-    epochs=EPOCHS_RESNET50,
+    epochs=50,
     learning_type="baseline",
-    patience=50,
+    patience=10,
 )
 trainer = Trainer(training_args=training_args)
 if True:
@@ -80,7 +80,7 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=16,
     optimizer_type='sgd',
     learning_rate=0.01,
     pruning_type="magnitude_pruning",
@@ -103,9 +103,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-5,
     pruning_type="magnitude_pruning",
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
@@ -126,9 +126,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-5,
     pruning_type="magnitude_pruning",
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
@@ -154,9 +154,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-5,
     pruning_type="movement_pruning",
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
@@ -177,9 +177,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-5,
     pruning_type="movement_pruning",
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
@@ -200,9 +200,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-5,
     pruning_type="movement_pruning",
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
@@ -234,9 +234,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.1,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-3,
     pruning_type='magnitude_pruning',
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
@@ -273,15 +273,20 @@ print(f"\n{metrics}")
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC
+
+# COMMAND ----------
+
 # Initializing finetuned weights path
 finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
 
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.1,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-3,
     pruning_type='magnitude_pruning',
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
@@ -324,9 +329,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.1,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-3,
     pruning_type='magnitude_pruning',
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
@@ -374,9 +379,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.1,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-3,
     pruning_type='movement_pruning',
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
@@ -419,9 +424,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.1,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-3,
     pruning_type='movement_pruning',
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
@@ -464,9 +469,9 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
-    optimizer_type='sgd',
-    learning_rate=0.1,
+    batch_size=16,
+    optimizer_type='adamw',
+    learning_rate=1e-3,
     pruning_type='movement_pruning',
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',

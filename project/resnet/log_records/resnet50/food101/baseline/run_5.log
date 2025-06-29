@@ -1,0 +1,25 @@
+Model : resnet50 - Learning Type: food101/baseline
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: food101
+num_classes: 101
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 20
+pruning_epochs: 20
+recovery_epochs: 10
+batch_size: 128
+learning_rate: 0.01
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 10060
+warmup_steps: 1006
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/food101/resnet50_food101_baseline.pt
+

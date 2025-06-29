@@ -1,0 +1,37 @@
+Model : resnet50 - Learning Type: flowers102/baseline
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: flowers102
+num_classes: 102
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 100
+pruning_epochs: 100
+recovery_epochs: 10
+batch_size: 128
+learning_rate: 0.01
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 600
+warmup_steps: 60
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/flowers102/resnet50_flowers102_baseline.pt
+
+Epoch [1/100]: Avg Loss: 4.6657 | Avg Accuracy: 2.34 | Model Sparsity: 0.0
+Epoch [2/100]: Avg Loss: 4.6366 | Avg Accuracy: 0.00 | Model Sparsity: 0.0
+Epoch [3/100]: Avg Loss: 4.5581 | Avg Accuracy: 0.78 | Model Sparsity: 0.0
+Epoch [4/100]: Avg Loss: 4.4281 | Avg Accuracy: 2.34 | Model Sparsity: 0.0
+Epoch [5/100]: Avg Loss: 4.2612 | Avg Accuracy: 5.47 | Model Sparsity: 0.0
+Epoch [6/100]: Avg Loss: 4.0238 | Avg Accuracy: 8.59 | Model Sparsity: 0.0
+Epoch [7/100]: Avg Loss: 3.7348 | Avg Accuracy: 16.41 | Model Sparsity: 0.0
+Epoch [8/100]: Avg Loss: 3.4098 | Avg Accuracy: 21.09 | Model Sparsity: 0.0
+Epoch [9/100]: Avg Loss: 3.0263 | Avg Accuracy: 22.66 | Model Sparsity: 0.0
+Epoch [10/100]: Avg Loss: 2.7015 | Avg Accuracy: 28.91 | Model Sparsity: 0.0
+Epoch [11/100]: Avg Loss: 2.3385 | Avg Accuracy: 34.38 | Model Sparsity: 0.0
+Epoch [12/100]: Avg Loss: 2.0098 | Avg Accuracy: 32.81 | Model Sparsity: 0.0

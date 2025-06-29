@@ -34,6 +34,7 @@ def _detect_num_classes(args):
         'svhn': 10,
         'mnist': 10,
         'fmnist': 10,
+        'emnist': 47,
         'food101': 101,
         'flowers102': 102,
         'sst2': 2,
@@ -52,16 +53,19 @@ def _detect_criterion(args):
 
 def _detect_cv_image_size(args):
     if args.model_type == 'cv':
-        if args.model_name.startswith('vit'):
+        if args.model_name.startswith('vit') or args.model_task in ['food101']:
             args.image_size = 224
+        elif args.model_task == 'flowers102':
+            args.image_size = 256
         else:
             args.image_size = 32
     else:
         args.image_size = None
+    print(f'[TRAINER] Image size: {args.image_size}')
 
 def _initialize_models(args):
     if args.is_bacp:
-        models = create_models_for_bacp(args.model_name, args.model_task, args.finetuned_weights, args.device)
+        models = create_models_for_bacp(args.model_name, args.model_task, args.image_size, args.finetuned_weights, args.device)
         args.model = models["curr_model"]
         args.pre_trained_model = models["pt_model"]
         args.finetuned_model = models["ft_model"]
@@ -69,7 +73,12 @@ def _initialize_models(args):
         print('[TRAINER] Initialized BaCP models')
 
     else:
-        args.model = ClassificationNetwork(args.model_name, model_task=args.model_task, num_classes=args.num_classes)
+        args.model = ClassificationNetwork(
+            model_name=args.model_name, 
+            num_classes=args.num_classes, 
+            adapt=(True if args.image_size and args.image_size <= 64 else False), 
+            model_task=args.model_task
+            )
         if args.model_type == 'llm' and args.model_task == 'squad':
             args.squad_metric = evaluate.load(args.model_task)
         args.embedded_dim = args.model.embedding_dim
@@ -80,8 +89,12 @@ def _initialize_models(args):
             loaded = load_weights(args.model, args.finetuned_weights)
             print("[TRAINER] Weights loaded" if loaded else "[TRAINER] Failed to load weights")
 
-def create_models_for_bacp(model_name, model_task, finetuned_weights, device, output_dimensions=128):
-    pre_trained_model = EncoderProjectionNetwork(model_name, output_dimensions, model_task=model_task)
+def create_models_for_bacp(model_name, model_task, image_size, finetuned_weights, device, output_dimensions=128):
+    pre_trained_model = EncoderProjectionNetwork(
+        model_name=model_name, 
+        output_dims=output_dimensions, 
+        adapt=(True if image_size and image_size <= 64 else False), 
+        model_task=model_task)
     pre_trained_model.to(device)
 
     # Current projection model
@@ -222,12 +235,23 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
 
     if args.enable_mixed_precision:
         args.scaler.scale(loss).backward()
+
+        if hasattr(args, 'pruning_type') and args.pruning_type == 'movement_pruning':
+            args.scaler.unscale_(args.optimizer)
+            if 'vgg' in args.model_name.lower():
+                torch.nn.utils.clip_grad_norm_(args.model.parameters(), max_norm=1.0)
+
         _apply_pruning(args, epoch, step)
         args.scaler.step(args.optimizer)
         args.scaler.update()
     else:
         loss.backward()
         _apply_pruning(args, epoch, step)
+
+        if hasattr(args, 'pruning_type') and args.pruning_type == 'movement_pruning':
+            if 'vgg' in args.model_name.lower():
+                torch.nn.utils.clip_grad_norm_(args.model.parameters(), max_norm=1.0)
+
         args.optimizer.step()
 
     if args.scheduler:
