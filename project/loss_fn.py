@@ -14,6 +14,7 @@ class SupConLoss(nn.Module):
         self.base_temperature = base_temperature
         self.batch_size = batch_size
         self.device = get_device()
+        self.eps = 1e-8
         
     def forward(self, features, labels):
         # Total number of feature vectors (batch_size * n_views)
@@ -49,7 +50,8 @@ class SupConLoss(nn.Module):
         
         # Computing log probability
         exp_logits = torch.exp(logits) * all_but_self_mask
-        log_prob = logits - torch.log(exp_logits.sum(dim=1, keepdim=True))
+        exp_logits_sum = torch.clamp(exp_logits.sum(dim=1, keepdim=True), min=self.eps)
+        log_prob = logits - torch.log(exp_logits_sum)
         mean_log_prob_positive = (positive_pair_mask * log_prob).sum(1) / num_positive_per_sample
         
         # Scaling loss by temperature ratio and average across the batch
@@ -68,6 +70,7 @@ class NTXentLoss(nn.Module):
         self.n_views = n_views
         self.temperature = temperature
         self.device = get_device()
+        self.eps = 1e-8
     
     def forward(self, features1, features2):
         # Concatenating feature vectors from both views
@@ -105,7 +108,9 @@ class NTXentLoss(nn.Module):
         denominator = torch.where(denominator < 1e-6, 1, denominator)
         
         # Calculating negative log of (numerator / denominator)
-        log_probability = -torch.log(numerator / denominator)
+        ratio = numerator / denominator
+        ratio = torch.clamp(ratio, min=self.eps, max=1.0)
+        log_probability = -torch.log(ratio)
 
         # Averaging loss across all samples
         loss = torch.mean(log_probability)

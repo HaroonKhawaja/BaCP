@@ -4,11 +4,6 @@
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC # VGG-19 Testing Notebook
-
-# COMMAND ----------
-
 # MAGIC %load_ext autoreload
 # MAGIC %autoreload 2
 # MAGIC # Enables autoreload; learn more at https://docs.databricks.com/en/files/workspace-modules.html#autoreload-for-python-modules
@@ -215,7 +210,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()

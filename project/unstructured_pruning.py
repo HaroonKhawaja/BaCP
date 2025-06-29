@@ -55,13 +55,13 @@ class Pruner(ABC):
         t = epoch + 1
         sparsity = (final_sparsity / total_epochs) * t
         self.ratio = min(sparsity, self.target_ratio)
-        print(f"[Pruner] Linear sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
+        print(f"\n[Pruner] Linear sparsity ratio increased to {self.ratio:.3f}.\n")
 
     def cubic_scheduler(self, epoch, total_epochs, initial_sparsity, final_sparsity):
         t = epoch + 1
         sparsity = final_sparsity + (initial_sparsity - final_sparsity) * ((1 - t / total_epochs) ** 3)
         self.ratio = min(sparsity, self.target_ratio)
-        print(f"[Pruner] Cubic Sparsity ratio increased to {self.ratio:.3f} for the next pruning iteration.\n")
+        print(f"\n[Pruner] Cubic Sparsity ratio increased to {self.ratio:.3f}.\n")
 
     def reset(self):
         self.ratio = self.target_ratio / self.epochs

@@ -1,0 +1,29 @@
+Model : resnet50 - Learning Type: flowers102/baseline
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: flowers102
+num_classes: 102
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 16
+learning_rate: 0.01
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 3150
+warmup_steps: 315
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/flowers102/resnet50_flowers102_baseline.pt
+
+Epoch [1/50]: Avg Loss: 4.3783 | Avg Accuracy: 42.06 | Model Sparsity: 0.0046
+Epoch [2/50]: Avg Loss: 2.5366 | Avg Accuracy: 63.29 | Model Sparsity: 0.0046
+Epoch [3/50]: Avg Loss: 1.2527 | Avg Accuracy: 66.47 | Model Sparsity: 0.0046
+Epoch [4/50]: Avg Loss: 0.9455 | Avg Accuracy: 60.81 | Model Sparsity: 0.0046

@@ -1,0 +1,44 @@
+Model : resnet50 - Learning Type: flowers102/baseline
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: flowers102
+num_classes: 102
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 16
+learning_rate: 0.01
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 2700
+warmup_steps: 270
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/flowers102/resnet50_flowers102_baseline.pt
+
+Epoch [1/50]: Avg Loss: 4.6278 | Avg Accuracy: 2.08 | Model Sparsity: 0.0
+Epoch [2/50]: Avg Loss: 4.5876 | Avg Accuracy: 2.08 | Model Sparsity: 0.0
+Epoch [3/50]: Avg Loss: 4.4956 | Avg Accuracy: 1.39 | Model Sparsity: 0.0
+Epoch [4/50]: Avg Loss: 4.3482 | Avg Accuracy: 4.17 | Model Sparsity: 0.0
+Epoch [5/50]: Avg Loss: 4.1572 | Avg Accuracy: 5.56 | Model Sparsity: 0.0
+Epoch [6/50]: Avg Loss: 3.9408 | Avg Accuracy: 6.25 | Model Sparsity: 0.0
+Epoch [7/50]: Avg Loss: 3.7282 | Avg Accuracy: 10.42 | Model Sparsity: 0.0
+Epoch [8/50]: Avg Loss: 3.5378 | Avg Accuracy: 9.72 | Model Sparsity: 0.0
+Epoch [9/50]: Avg Loss: 3.3964 | Avg Accuracy: 11.81 | Model Sparsity: 0.0
+Epoch [10/50]: Avg Loss: 3.2984 | Avg Accuracy: 14.58 | Model Sparsity: 0.0
+Epoch [11/50]: Avg Loss: 3.1636 | Avg Accuracy: 14.58 | Model Sparsity: 0.0
+Epoch [12/50]: Avg Loss: 3.0754 | Avg Accuracy: 20.83 | Model Sparsity: 0.0
+Epoch [13/50]: Avg Loss: 3.0021 | Avg Accuracy: 15.97 | Model Sparsity: 0.0
+Epoch [14/50]: Avg Loss: 2.9028 | Avg Accuracy: 19.44 | Model Sparsity: 0.0
+Epoch [15/50]: Avg Loss: 2.8106 | Avg Accuracy: 14.58 | Model Sparsity: 0.0
+Epoch [16/50]: Avg Loss: 2.8033 | Avg Accuracy: 22.22 | Model Sparsity: 0.0
+Epoch [17/50]: Avg Loss: 2.7096 | Avg Accuracy: 24.31 | Model Sparsity: 0.0
+Epoch [18/50]: Avg Loss: 2.6276 | Avg Accuracy: 30.56 | Model Sparsity: 0.0
+Epoch [19/50]: Avg Loss: 2.5277 | Avg Accuracy: 22.22 | Model Sparsity: 0.0

@@ -1,0 +1,47 @@
+Model : resnet101 - Learning Type: emnist/bacp_finetune/movement_pruning/0.95
+Configuration:
+model_type: cv
+model_name: resnet101
+model_task: emnist
+num_classes: 47
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.0001
+learning_type: bacp_finetune
+optimizer_type: adamw
+prune: False
+pruning_type: movement_pruning
+target_sparsity: 0.95
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet101/emnist/resnet101_emnist_movement_pruning_0.95_bacp_finetune.pt
+finetuned_weights: /dbfs/research/resnet101/emnist/resnet101_emnist_movement_pruning_0.95_bacp_pruning.pt
+
+Epoch [1/50]: Avg Loss: 0.7750 | Avg Accuracy: 91.67 | Model Sparsity: 0.95
+Epoch [2/50]: Avg Loss: 0.2083 | Avg Accuracy: 91.92 | Model Sparsity: 0.95
+Epoch [3/50]: Avg Loss: 0.1849 | Avg Accuracy: 92.02 | Model Sparsity: 0.95
+Epoch [4/50]: Avg Loss: 0.1708 | Avg Accuracy: 91.98 | Model Sparsity: 0.95
+Epoch [5/50]: Avg Loss: 0.1605 | Avg Accuracy: 91.96 | Model Sparsity: 0.95
+Epoch [6/50]: Avg Loss: 0.1519 | Avg Accuracy: 91.94 | Model Sparsity: 0.95
+Epoch [7/50]: Avg Loss: 0.1439 | Avg Accuracy: 91.94 | Model Sparsity: 0.95
+Epoch [8/50]: Avg Loss: 0.1366 | Avg Accuracy: 91.80 | Model Sparsity: 0.95
+Epoch [9/50]: Avg Loss: 0.1289 | Avg Accuracy: 91.67 | Model Sparsity: 0.95
+Epoch [10/50]: Avg Loss: 0.1232 | Avg Accuracy: 91.60 | Model Sparsity: 0.95
+Epoch [11/50]: Avg Loss: 0.1172 | Avg Accuracy: 91.85 | Model Sparsity: 0.95
+Epoch [12/50]: Avg Loss: 0.1102 | Avg Accuracy: 91.68 | Model Sparsity: 0.95
+Epoch [13/50]: Avg Loss: 0.1052 | Avg Accuracy: 91.31 | Model Sparsity: 0.95
+Epoch [14/50]: Avg Loss: 0.1004 | Avg Accuracy: 91.24 | Model Sparsity: 0.95
+Epoch [15/50]: Avg Loss: 0.0955 | Avg Accuracy: 91.47 | Model Sparsity: 0.95
+Epoch [16/50]: Avg Loss: 0.0922 | Avg Accuracy: 91.13 | Model Sparsity: 0.95
+Epoch [17/50]: Avg Loss: 0.0877 | Avg Accuracy: 91.27 | Model Sparsity: 0.95
+Epoch [18/50]: Avg Loss: 0.0860 | Avg Accuracy: 91.25 | Model Sparsity: 0.95
+Epoch [19/50]: Avg Loss: 0.0816 | Avg Accuracy: 91.26 | Model Sparsity: 0.95
+Epoch [20/50]: Avg Loss: 0.0782 | Avg Accuracy: 91.30 | Model Sparsity: 0.95
+Epoch [21/50]: Avg Loss: 0.0766 | Avg Accuracy: 91.03 | Model Sparsity: 0.95
+Epoch [22/50]: Avg Loss: 0.0736 | Avg Accuracy: 91.17 | Model Sparsity: 0.95
+Epoch [23/50]: Avg Loss: 0.0697 | Avg Accuracy: 91.22 | Model Sparsity: 0.95

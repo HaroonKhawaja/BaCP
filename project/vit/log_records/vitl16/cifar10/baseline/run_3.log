@@ -1,0 +1,25 @@
+Model : vitl16 - Learning Type: cifar10/baseline
+Configuration:
+model_type: cv
+model_name: vitl16
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 1024
+epochs: 3
+pruning_epochs: 3
+recovery_epochs: 10
+batch_size: 128
+learning_rate: 1e-05
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: adamw
+total_steps: 996
+warmup_steps: 99
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vitl16/cifar10/vitl16_cifar10_baseline.pt
+
