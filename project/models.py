@@ -4,8 +4,6 @@ import torch.nn.functional as F
 from torchvision.models import resnet50, resnet101, vgg11, vgg19, vit_b_16, vit_l_16
 from torchvision.models import ResNet50_Weights, ResNet101_Weights, VGG11_Weights, VGG19_Weights, ViT_B_16_Weights, ViT_L_16_Weights
 from transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoModelForMaskedLM, AutoTokenizer
-
-from functools import lru_cache
 from utils import freeze_weights
 
 PRETRAINED = True
@@ -20,7 +18,6 @@ MODEL_SPECS = {
     "roberta-base": {"dim": 768, "type": "language", "family": "bert"}
 }
 
-@lru_cache(maxsize=None)
 def get_model_components(model_name, pretrained=True, num_llm_labels=2, model_task='cls'):
     if model_name not in MODEL_SPECS:
         raise ValueError(f"Unknown model: '{model_name}'. Available: {list(MODEL_SPECS.keys())}")

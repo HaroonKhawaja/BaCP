@@ -57,7 +57,7 @@ training_args = TrainingArguments(
     patience=50,
 )
 trainer = Trainer(training_args=training_args)
-if True:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -90,7 +90,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -113,7 +113,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -136,7 +136,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -164,7 +164,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -187,7 +187,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -210,7 +210,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -375,8 +375,8 @@ bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE,
-    optimizer_type='adamw',
-    learning_rate=0.001,
+    optimizer_type='sgd',
+    learning_rate=0.1,
     pruning_type='movement_pruning',
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
@@ -384,7 +384,7 @@ bacp_training_args = BaCPTrainingArguments(
     learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -420,10 +420,10 @@ bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE,
-    optimizer_type='adamw',
-    learning_rate=0.001,
+    optimizer_type='sgd',
+    learning_rate=0.1,
     pruning_type='movement_pruning',
-    target_sparsity=TARGET_SPARSITY_HIGH,
+    target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
     learning_type='bacp_pruning'

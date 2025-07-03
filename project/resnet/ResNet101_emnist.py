@@ -57,7 +57,7 @@ training_args = TrainingArguments(
     patience=50,
 )
 trainer = Trainer(training_args=training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -90,7 +90,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -113,7 +113,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -136,7 +136,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -164,7 +164,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -187,7 +187,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -210,24 +210,11 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if False:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
-# COMMAND ----------
-
-from dataset_utils import get_cv_data
-data = get_cv_data('emnist', 512)
-trainloader = data['trainloader']
-
-
-for batch in trainloader:
-    data, labels = batch
-    print(data.shape)
-    break
-
 
 # COMMAND ----------
 
@@ -302,7 +289,7 @@ bacp_training_args = BaCPTrainingArguments(
     learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -347,7 +334,7 @@ bacp_training_args = BaCPTrainingArguments(
     learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -397,7 +384,7 @@ bacp_training_args = BaCPTrainingArguments(
     learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if False:
+if True:
     bacp_trainer.train()
 
 # Finetuning Phase

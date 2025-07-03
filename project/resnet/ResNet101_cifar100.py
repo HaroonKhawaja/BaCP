@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # ResNet-50 Testing Notebook
+# MAGIC # ResNet-101 Testing Notebook
 
 # COMMAND ----------
 

@@ -1,4 +1,4 @@
-from torchvision.datasets import  CIFAR10, SVHN, MNIST, FashionMNIST, Food101, Flowers102, CIFAR100, EMNIST
+from torchvision.datasets import  CIFAR10, SVHN, MNIST, FashionMNIST, Food101, Flowers102, CIFAR100, EMNIST, Caltech101
 import torchvision.transforms as T
 from torchvision.transforms import AutoAugment, AutoAugmentPolicy
 from torch.utils.data import DataLoader, Dataset
@@ -20,6 +20,7 @@ VALID_DATASETS = {
         'food101': lambda root_folder, size, n_views: Food101(root_folder, split='train', transform=AugmentData(get_train_transform('contrastive', size, 'food101'), n_views), download=True),
         'flowers102': lambda root_folder, size, n_views: Flowers102(root_folder, split='train', transform=AugmentData(get_train_transform('contrastive', size, 'flowers102'), n_views), download=True),
         'emnist': lambda root_folder, size, n_views: EMNIST(root_folder, split='balanced', train=True, transform=AugmentData(get_train_transform('contrastive', size, 'emnist'), n_views), download=True),
+        'caltech101': lambda root_folder, size, n_views: Caltech101(root=root_folder, target_type='category', transform=AugmentData(get_train_transform('contrastive', size, 'caltech101'), n_views), download=True),
     },
     
     'supervised': {
@@ -31,6 +32,8 @@ VALID_DATASETS = {
         'food101': lambda root_folder, size, n_views: Food101(root_folder, split='train', transform=AugmentData(get_train_transform('supervised', size, 'food101'), n_views), download=True),
         'flowers102': lambda root_folder, size, n_views: Flowers102(root_folder, split='train', transform=AugmentData(get_train_transform('supervised', size, 'flowers102'), n_views), download=True),
         'emnist': lambda root_folder, size, n_views: EMNIST(root_folder, split='balanced', train=True, transform=AugmentData(get_train_transform('supervised', size, 'emnist'), n_views), download=True),
+        'caltech101': lambda root_folder, size, n_views: Caltech101(root=root_folder, target_type='category', transform=AugmentData(get_train_transform('supervised', size, 'caltech101'), n_views), download=True),
+
     },
     
     'testset': {
@@ -41,12 +44,24 @@ VALID_DATASETS = {
         'fmnist': lambda root_folder, size: FashionMNIST(root_folder, train=False, transform=get_eval_transform('fmnist', size), download=True),
         'food101': lambda root_folder, size: Food101(root_folder, split='test', transform=get_eval_transform('food101', size), download=True),
         'flowers102': lambda root_folder, size: Flowers102(root_folder, split='test', transform=get_eval_transform('flowers102', size), download=True),
-        'emnist': lambda root_folder, size: EMNIST(root_folder, split='balanced', train=True, transform=get_eval_transform('emnist', size), download=True),
+        'emnist': lambda root_folder, size: EMNIST(root_folder, split='balanced', train=False, transform=get_eval_transform('emnist', size), download=True),
+        'caltech101': lambda root_folder, size: Caltech101(root=root_folder, target_type='category', transform=get_eval_transform('caltech101', size), download=True),
+    },
 
-    }
+    'unaugmented': {
+        'cifar10': lambda root_folder, size: CIFAR10(root_folder, train=True, transform=get_eval_transform('cifar10', size), download=True),
+        'cifar100': lambda root_folder, size: CIFAR100(root_folder, train=True, transform=get_eval_transform('cifar100', size), download=True),
+        'svhn': lambda root_folder, size: SVHN(root_folder, split='train', transform=get_eval_transform('svhn', size), download=True),
+        'mnist': lambda root_folder, size: MNIST(root_folder, train=True, transform=get_eval_transform('mnist', size), download=True),
+        'fmnist': lambda root_folder, size: FashionMNIST(root_folder, train=True, transform=get_eval_transform('fmnist', size), download=True),
+        'food101': lambda root_folder, size: Food101(root_folder, split='train', transform=get_eval_transform('food101', size), download=True),
+        'flowers102': lambda root_folder, size: Flowers102(root_folder, split='train', transform=get_eval_transform('flowers102', size), download=True),
+        'emnist': lambda root_folder, size: EMNIST(root_folder, split='balanced', train=True, transform=get_eval_transform('emnist', size), download=True),
+        'caltech101': lambda root_folder, size: Caltech101(root=root_folder, target_type='category', transform=get_eval_transform('caltech101', size), download=True),
+    },
 }
 
-CV_DATASETS = ['cifar10', 'svhn', 'mnist', 'fmnist', 'emnist', 'food101', 'flowers102', 'cifar100']
+CV_DATASETS = ['cifar10', 'svhn', 'mnist', 'fmnist', 'emnist', 'food101', 'flowers102', 'cifar100', 'caltech101']
 DATASET_STATS = {
     "cifar10": ([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]),
     "cifar100": ([0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]),
@@ -56,7 +71,8 @@ DATASET_STATS = {
     "emnist": ([0.1307], [0.3081]),
     "food101": ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     "flowers102": ([0.4349, 0.3836, 0.2968], [0.2963, 0.2458, 0.2686]),
-} 
+    "caltech101": ([0.5459, 0.5222, 0.4782], [0.2484, 0.2431, 0.2466]),
+    } 
 GRAYSCALE_DATASETS = {"mnist", "fmnist", "emnist"}
 
 class AugmentData(object):
@@ -125,6 +141,13 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.RandomHorizontalFlip(),
                 T.RandomRotation(15),
             ]
+        elif dataset_name == 'caltech101':
+            transforms = [
+                T.Resize((size, size)),
+                T.RandomResizedCrop(size),
+                T.RandomHorizontalFlip(),
+                T.RandomRotation(15),
+            ]
         else:
             raise ValueError(f"Unsupported dataset: {dataset_name}")
         
@@ -176,6 +199,13 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.Resize((size, size)),
                 T.RandomResizedCrop(size, scale=(0.2, 1.0)),
                 T.RandomHorizontalFlip(),
+                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
+            ]
+        elif dataset_name == 'caltech101':
+            transforms = [
+                T.Resize((size, size)),
+                T.RandomResizedCrop(size, scale=(0.2, 1.0)),
+                T.RandomHorizontalFlip(),
                 T.ColorJitter(0.8, 0.8, 0.8, 0.2),
                 T.RandomGrayscale(p=0.2),
                 T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
@@ -207,6 +237,7 @@ class CreateDatasets:
         assert dataset_name in self.valid_keys['dataset_names'], 'dataset does not exist.'
         train_dataset_fn = VALID_DATASETS[learning_type][dataset_name]
         test_dataset_fn = VALID_DATASETS['testset'][dataset_name]
+        unaugmented_dataset_fn = VALID_DATASETS['unaugmented'][dataset_name]
 
         val_dataset_fn = None
         if dataset_name == 'flowers102':
@@ -217,7 +248,7 @@ class CreateDatasets:
                 download=True,
             )
 
-        return train_dataset_fn, test_dataset_fn, val_dataset_fn
+        return train_dataset_fn, test_dataset_fn, val_dataset_fn, unaugmented_dataset_fn
 
 @lru_cache()
 def load_cv_dataset(dataset_name, cache_dir, learning_type, size):
@@ -226,12 +257,13 @@ def load_cv_dataset(dataset_name, cache_dir, learning_type, size):
     
     # Creating datasets
     dataset = CreateDatasets()
-    train_dataset_fn, test_dataset_fn, val_dataset_fn = dataset.get_dataset_fn(learning_type, dataset_name)
+    train_dataset_fn, test_dataset_fn, val_dataset_fn, unaugmented_dataset_fn = dataset.get_dataset_fn(learning_type, dataset_name)
     n_views = 1 if learning_type == 'supervised' else 2
 
     # Loading train and test data
     trainset = train_dataset_fn(cache_dir, size, n_views)
     testset = test_dataset_fn(cache_dir, size)
+    unaugmentedset = unaugmented_dataset_fn(cache_dir, size)
 
     # Creating validation set if applicable
 
@@ -246,7 +278,8 @@ def load_cv_dataset(dataset_name, cache_dir, learning_type, size):
     return {
         'train': trainset,
         'validation': valset,
-        'test': testset
+        'test': testset,
+        'unaugmented': unaugmentedset
     }
 
 def get_cv_data(dataset_name, batch_size, size=32, num_workers=24, cache_dir="/dbfs", learning_type='supervised'):
@@ -267,11 +300,13 @@ def get_cv_data(dataset_name, batch_size, size=32, num_workers=24, cache_dir="/d
         trainloader = DataLoader(datasets["train"], shuffle=True, **loader_args)
         valloader = DataLoader(datasets["validation"], shuffle=False, **loader_args)
         testloader = DataLoader(datasets["test"], shuffle=False, **loader_args)
+        unaugmentedloader = DataLoader(datasets["unaugmented"], shuffle=False, **loader_args)
         
         data = {
             "trainloader": trainloader,
             "valloader": valloader,
             "testloader": testloader,
+            "unaugmentedloader": unaugmentedloader,
         }
         return data
 
