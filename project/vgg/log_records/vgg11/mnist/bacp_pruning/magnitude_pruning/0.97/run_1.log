@@ -1,0 +1,33 @@
+Model : vgg11 - Learning Type: mnist/bacp_pruning/magnitude_pruning/0.97
+Configuration:
+model_name: vgg11
+model_task: mnist
+model_type: cv
+num_classes: 10
+batch_size: 512
+learning_rate: 0.1
+optimizer_type: sgd
+epochs: 5
+recovery_epochs: 10
+patience: 20
+pruning_type: magnitude_pruning
+target_sparsity: 0.97
+sparsity_scheduler: cubic
+pruning_epochs: 5
+n_views: 2
+temperature: 0.07
+base_temperature: 0.07
+device: cuda
+enable_mixed_precision: True
+num_workers: 24
+train_batches: 99
+val_batches: 17
+current_model_path: /dbfs/research/vgg11/mnist/vgg11_mnist_magnitude_pruning_0.97_bacp_pruning.pt
+
+Epoch [1/5]: Avg Total Loss: 8.7169 | Avg PrC Loss: 3.8789 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 4.3746 | Avg CE Loss: 0.4635 | Model Sparsity: 0.4734
+Retraining Epoch [1/10]: Avg Total Loss: 11.6291 | Avg PrC Loss: 3.7351 | Avg SnC Loss: 3.3980 | Avg FiC Loss: 4.0690 | Avg CE Loss: 0.4271 | Model Sparsity: 0.4734
+Retraining Epoch [2/10]: Avg Total Loss: 9.7130 | Avg PrC Loss: 3.4580 | Avg SnC Loss: 3.2782 | Avg FiC Loss: 2.9260 | Avg CE Loss: 0.0509 | Model Sparsity: 0.4734
+Retraining Epoch [3/10]: Avg Total Loss: 9.5160 | Avg PrC Loss: 3.4299 | Avg SnC Loss: 3.2652 | Avg FiC Loss: 2.8006 | Avg CE Loss: 0.0202 | Model Sparsity: 0.4734
+Retraining Epoch [4/10]: Avg Total Loss: 9.4678 | Avg PrC Loss: 3.4157 | Avg SnC Loss: 3.2616 | Avg FiC Loss: 2.7783 | Avg CE Loss: 0.0122 | Model Sparsity: 0.4734
+Retraining Epoch [5/10]: Avg Total Loss: 9.4314 | Avg PrC Loss: 3.3918 | Avg SnC Loss: 3.2651 | Avg FiC Loss: 2.7648 | Avg CE Loss: 0.0097 | Model Sparsity: 0.4734
+Retraining Epoch [6/10]: Avg Total Loss: 9.3932 | Avg PrC Loss: 3.3594 | Avg SnC Loss: 3.2731 | Avg FiC Loss: 2.7519 | Avg CE Loss: 0.0089 | Model Sparsity: 0.4734

@@ -239,7 +239,7 @@ class Trainer:
                 print(f"[TRAINER] weights saved!")
         self.recover = False
 
-    def _run_train_epoch(self, epoch, desc):
+    def _run_train_epoch(self, epoch, desc="", max_steps=None):
         """Run one full training epoch."""
         if (self.prune and self.pruner) and (hasattr(self.pruner, 'is_wanda') and self.pruner.is_wanda) and (not self.recover):
             self.pruner.register_hooks(self.model)
@@ -276,10 +276,13 @@ class Trainer:
             if self.enable_tqdm:
                 batchloader.set_postfix(Loss=f"{running_loss:.4f}", Sparsity=f"{self._get_sparsity_key()}")
             
+            if max_steps and step >= max_steps:
+                return running_loss
+            
         avg_loss = total_loss / len(self.trainloader)    
         return avg_loss
             
-    def _run_validation_epoch(self, desc, mode="val"):
+    def _run_validation_epoch(self, desc="", mode="val"):
         """Run one full validation epoch."""
         self.model.eval()
         total_correct, total_f1, total_samples, avg_f1 = 0, 0, 0, 0

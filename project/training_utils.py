@@ -1,5 +1,8 @@
 import os
 from copy import deepcopy
+import matplotlib.pyplot as plt
+import math 
+from tqdm import tqdm
 
 import torch
 import torch.optim as optim
@@ -37,6 +40,7 @@ def _detect_num_classes(args):
         'emnist': 47,
         'food101': 101,
         'flowers102': 102,
+        'caltech101': 101,
         'sst2': 2,
         'qqp': 2,
         'wikitext2': args.tokenizer.vocab_size if hasattr(args, 'tokenizer') else None,
@@ -53,7 +57,7 @@ def _detect_criterion(args):
 
 def _detect_cv_image_size(args):
     if args.model_type == 'cv':
-        if args.model_name.startswith('vit') or args.model_task in ['food101']:
+        if args.model_name.startswith('vit') or args.model_task in ['food101', 'caltech101']:
             args.image_size = 224
         elif args.model_task == 'flowers102':
             args.image_size = 256
@@ -157,6 +161,7 @@ def _initialize_data_loaders(args):
         else:
             data = get_cv_data(args.model_task, args.batch_size, args.image_size, args.num_workers)
 
+    args.data = data
     args.trainloader = data["trainloader"]
     args.valloader = data["valloader"]
     args.testloader = data["testloader"] if args.model_task != 'sst2' else None
@@ -242,28 +247,78 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
                 torch.nn.utils.clip_grad_norm_(args.model.parameters(), max_norm=1.0)
 
         _apply_pruning(args, epoch, step)
-        args.scaler.step(args.optimizer)
-        args.scaler.update()
+
+        if not getattr(args, "skip_optimizer_step", False):
+            args.scaler.step(args.optimizer)
+            args.scaler.update()
     else:
         loss.backward()
-        _apply_pruning(args, epoch, step)
 
         if hasattr(args, 'pruning_type') and args.pruning_type == 'movement_pruning':
             if 'vgg' in args.model_name.lower():
                 torch.nn.utils.clip_grad_norm_(args.model.parameters(), max_norm=1.0)
+    
+        _apply_pruning(args, epoch, step)
 
-        args.optimizer.step()
+        if not getattr(args, "skip_optimizer_step", False):
+            args.optimizer.step()
 
-    if args.scheduler:
+    if args.scheduler and not getattr(args, "skip_optimizer_step", False):
         args.scheduler.step()
 
     if args.finetune or (args.prune and args.pruner is not None):
         args.pruner.apply_mask(args.model)
 
+class LRFinder:
+    def __init__(self, trainer, min_lr=1e-6, max_lr=0.5, lr_steps=101):
+        self.trainer = trainer
+        self.max_steps = int(len(trainer.trainloader) * 0.1)
+        self.lrs = torch.linspace(min_lr, max_lr, steps=lr_steps)
+        self.losses = torch.zeros(lr_steps)
+        
+    @classmethod
+    def find_lr(cls, trainer, min_lr=1e-6, max_lr=0.5):
+        self = cls(trainer, min_lr, max_lr)
+        self._run()
+    
+    def _run(self):
 
+        original_amp = self.trainer.enable_mixed_precision
+        self.trainer.enable_mixed_precision = False
+        self.trainer.enable_tqdm = False
+        self.trainer.skip_optimizer_step = True
+        self.trainer.trainloader = self.trainer.data['unaugmentedloader']
 
+        i = 0
+        lr_batch = tqdm(self.lrs)
+        for lr in lr_batch:
 
+            if self.trainer.optimizer_type == 'adamw':
+                self.trainer.optimizer = optim.AdamW(self.trainer.model.parameters(), lr=lr)
+            elif self.trainer.optimizer_type == 'sgd':
+                self.trainer.optimizer = optim.SGD(self.trainer.model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+            else:
+                raise ValueError(f"Invalid optimizer type: {self.trainer.optimizer_type}")
 
+            self.trainer.model.to(self.trainer.device)
+            running_loss = self.trainer._run_train_epoch(0, "", 1)
+            self.losses[i] = running_loss
+            i += 1
+
+            desc = f'loss for lr({lr:.2e}) = {running_loss:.5f}'
+            lr_batch.set_description(desc)
+
+        
+        self.trainer.enable_mixed_precision = original_amp
+
+        plt.plot(self.lrs.tolist(), self.losses.tolist())
+        plt.xlabel('Learning Rate')
+        plt.ylabel('Loss')
+        plt.title('Learning Rate Finder')
+        plt.grid(True)
+        plt.show()
+
+    
 
 
 
