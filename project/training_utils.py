@@ -57,7 +57,8 @@ def _detect_criterion(args):
 
 def _detect_cv_image_size(args):
     if args.model_type == 'cv':
-        if args.model_name.startswith('vit') or args.model_task in ['food101', 'caltech101']:
+        # if args.model_name.startswith('vit') or args.model_task in ['food101', 'caltech101']:        
+        if args.model_task in ['food101', 'caltech101']:
             args.image_size = 224
         elif args.model_task == 'flowers102':
             args.image_size = 256
@@ -205,10 +206,10 @@ def _initialize_pruner(args):
     else:
         print('[TRAINER] Pruning not initialized')
 
-def _initialize_contrastive_losses(args):
+def _initialize_contrastive_losses(args, tau=0.07):
     args.n_views = 2
-    args.temperature = 0.07
-    args.base_temperature = 0.07
+    args.temperature = tau
+    args.base_temperature = tau
     args.supervised_loss = SupConLoss(args.n_views, args.temperature, args.base_temperature, args.batch_size)
     args.unsupervised_loss = NTXentLoss(args.n_views, args.temperature)
 

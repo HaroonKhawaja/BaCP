@@ -1,0 +1,28 @@
+Model : vitb16 - Learning Type: emnist/baseline
+Configuration:
+model_type: cv
+model_name: vitb16
+model_task: emnist
+num_classes: 47
+criterion: CrossEntropyLoss()
+embedding_dim: 768
+epochs: 3
+pruning_epochs: 3
+recovery_epochs: 10
+batch_size: 128
+learning_rate: 0.0001
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: adamw
+total_steps: 2247
+warmup_steps: 224
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vitb16/emnist/vitb16_emnist_baseline.pt
+
+Epoch [1/3]: Avg Loss: 0.6754 | Avg Accuracy: 88.57 | Model Sparsity: 0.0
+Epoch [2/3]: Avg Loss: 0.2812 | Avg Accuracy: 89.63 | Model Sparsity: 0.0
+Epoch [3/3]: Avg Loss: 0.2291 | Avg Accuracy: 91.05 | Model Sparsity: 0.0

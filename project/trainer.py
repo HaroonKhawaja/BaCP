@@ -246,7 +246,7 @@ class Trainer:
 
         self.model.train()
         total_loss = 0
-        batchloader = tqdm(self.trainloader, desc=desc) if self.enable_tqdm else self.trainloader
+        batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
 
         for step, batch in enumerate(batchloader):
             # Handling different batch formats
@@ -262,10 +262,20 @@ class Trainer:
             if self.enable_mixed_precision:
                 with autocast(device_type=self.device):
                     outputs = self.model(batch)
-                    loss = outputs.loss if self.model_type == 'llm' else self.criterion(outputs, labels)
+                    if hasattr(outputs, 'loss'):
+                        loss = outputs.loss
+                    elif hasattr(outputs, 'logits'):
+                        loss = self.criterion(outputs.logits, labels)
+                    else:
+                        loss = self.criterion(outputs, labels)
             else:
                 outputs = self.model(batch)
-                loss = outputs.loss if self.model_type == 'llm' else self.criterion(outputs, labels)
+                if hasattr(outputs, 'loss'):
+                    loss = outputs.loss
+                elif hasattr(outputs, 'logits'):
+                    loss = self.criterion(outputs.logits, labels)
+                else:
+                    loss = self.criterion(outputs, labels)
 
             total_loss += loss.item()
 

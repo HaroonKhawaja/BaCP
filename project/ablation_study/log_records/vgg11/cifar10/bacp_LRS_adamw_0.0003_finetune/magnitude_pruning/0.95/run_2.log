@@ -1,0 +1,34 @@
+Model : vgg11 - Learning Type: cifar10/bacp_LRS_adamw_0.0003_finetune/magnitude_pruning/0.95
+Configuration:
+model_type: cv
+model_name: vgg11
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 4096
+epochs: 10
+pruning_epochs: 10
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.0001
+learning_type: bacp_LRS_adamw_0.0003_finetune
+optimizer_type: adamw
+prune: False
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vgg11/cifar10/vgg11_cifar10_magnitude_pruning_0.95_bacp_LRS_adamw_0.0003_finetune.pt
+finetuned_weights: /dbfs/research/vgg11/cifar10/vgg11_cifar10_magnitude_pruning_0.95_bacp_LRS_adamw_0.0003.pt
+
+Epoch [1/10]: Avg Loss: 0.8056 | Avg Accuracy: 79.91 | Model Sparsity: 0.95
+Epoch [2/10]: Avg Loss: 0.5996 | Avg Accuracy: 80.44 | Model Sparsity: 0.95
+Epoch [3/10]: Avg Loss: 0.5634 | Avg Accuracy: 81.14 | Model Sparsity: 0.95
+Epoch [4/10]: Avg Loss: 0.5429 | Avg Accuracy: 82.23 | Model Sparsity: 0.95
+Epoch [5/10]: Avg Loss: 0.5248 | Avg Accuracy: 82.10 | Model Sparsity: 0.95
+Epoch [6/10]: Avg Loss: 0.5090 | Avg Accuracy: 81.92 | Model Sparsity: 0.95
+Epoch [7/10]: Avg Loss: 0.5068 | Avg Accuracy: 82.76 | Model Sparsity: 0.95
+Epoch [8/10]: Avg Loss: 0.4860 | Avg Accuracy: 82.52 | Model Sparsity: 0.95
+Epoch [9/10]: Avg Loss: 0.4774 | Avg Accuracy: 83.45 | Model Sparsity: 0.95
+Epoch [10/10]: Avg Loss: 0.4650 | Avg Accuracy: 82.09 | Model Sparsity: 0.95

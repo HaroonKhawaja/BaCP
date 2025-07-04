@@ -1,0 +1,27 @@
+Model : resnet50 - Learning Type: cifar10/bacp_TS_0.03/magnitude_pruning/0.95
+Configuration:
+model_name: resnet50
+model_task: cifar10
+model_type: cv
+num_classes: 10
+batch_size: 512
+learning_rate: 0.01
+optimizer_type: sgd
+epochs: 1
+recovery_epochs: 0
+patience: 1
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+pruning_epochs: 1
+n_views: 2
+temperature: 0.03
+base_temperature: 0.03
+device: cuda
+enable_mixed_precision: True
+num_workers: 24
+train_batches: 83
+val_batches: 14
+current_model_path: /dbfs/research/resnet50/cifar10/resnet50_cifar10_magnitude_pruning_0.95_bacp_TS_0.03.pt
+
+Epoch [1/1]: Avg Total Loss: 14.6442 | Avg PrC Loss: 7.3097 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 6.7419 | Avg CE Loss: 0.5926 | Model Sparsity: 0.95
