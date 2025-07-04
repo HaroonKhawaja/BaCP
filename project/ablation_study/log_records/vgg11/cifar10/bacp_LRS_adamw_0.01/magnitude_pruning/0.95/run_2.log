@@ -1,0 +1,37 @@
+Model : vgg11 - Learning Type: cifar10/bacp_LRS_adamw_0.01/magnitude_pruning/0.95
+Configuration:
+model_name: vgg11
+model_task: cifar10
+model_type: cv
+num_classes: 10
+batch_size: 512
+learning_rate: 0.01
+optimizer_type: adamw
+epochs: 1
+recovery_epochs: 10
+patience: 1
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+pruning_epochs: 1
+n_views: 2
+temperature: 20
+base_temperature: 20
+device: cuda
+enable_mixed_precision: True
+num_workers: 24
+train_batches: 83
+val_batches: 14
+current_model_path: /dbfs/research/vgg11/cifar10/vgg11_cifar10_magnitude_pruning_0.95_bacp_LRS_adamw_0.01.pt
+
+Epoch [1/1]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: 0.0000 | Avg FiC Loss: nan | Avg CE Loss: 19.3585 | Model Sparsity: 0.95
+Retraining Epoch [1/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.1392 | Model Sparsity: 0.95
+Retraining Epoch [2/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.2357 | Model Sparsity: 0.95
+Retraining Epoch [3/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.1802 | Model Sparsity: 0.95
+Retraining Epoch [4/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.1770 | Model Sparsity: 0.95
+Retraining Epoch [5/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.0857 | Model Sparsity: 0.95
+Retraining Epoch [6/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.1503 | Model Sparsity: 0.95
+Retraining Epoch [7/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.1203 | Model Sparsity: 0.95
+Retraining Epoch [8/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.1249 | Model Sparsity: 0.95
+Retraining Epoch [9/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.1651 | Model Sparsity: 0.95
+Retraining Epoch [10/10]: Avg Total Loss: nan | Avg PrC Loss: nan | Avg SnC Loss: nan | Avg FiC Loss: nan | Avg CE Loss: 17.1995 | Model Sparsity: 0.95

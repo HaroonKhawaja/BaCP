@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 from utils import *
 
+import torch
+import torch.nn as nn
+from utils import *
+
 class SupConLoss(nn.Module):
     """
     Supervised Contrastive Loss implementation.
@@ -43,7 +47,7 @@ class SupConLoss(nn.Module):
         
         # Calculating similarity between all samples (dot product of normalized features)
         similarity_matrix = torch.matmul(features, features.T) / self.temperature
-        
+
         # Stabilizing the matrix by subtracting max logit from each row
         logits_max, _ = torch.max(similarity_matrix, dim=1, keepdim=True)
         logits = similarity_matrix - logits_max

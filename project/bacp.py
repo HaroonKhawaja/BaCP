@@ -259,7 +259,7 @@ class BaCPTrainer:
 
         losses, prc_losses, snc_losses, fic_losses, ce_losses, total = 0, 0, 0, 0, 0, 0
 
-        batchloader = tqdm(self.trainloader, desc=desc) if self.enable_tqdm else self.trainloader
+        batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
         for step, batch_data in enumerate(batchloader):
             if self.model_type == 'cv':
                 images, labels = batch_data
@@ -303,30 +303,77 @@ class BaCPTrainer:
 
                 CE_loss = nn.CrossEntropyLoss()(current_logits, labels)
 
-                # PrC Module
-                sup_features_prc = torch.cat((current_embeddings, pretrained_embeddings))
-                L_prc_sup = self._supervised_criterion(sup_features_prc, labels)
-                L_prc_unsup = self._unsupervised_criterion(current_embeddings, pretrained_embeddings)
-                L_prc_total = L_prc_sup + L_prc_unsup
+                if  hasattr(self, 'disable') and self.disable == 'disable_unsupervised_loss':
+                    # PrC Module
+                    sup_features_prc = torch.cat((current_embeddings, pretrained_embeddings))
+                    L_prc_sup = self._supervised_criterion(sup_features_prc, labels)
+                    L_prc_total = L_prc_sup
 
-                # FiC Module
-                sup_features_fic = torch.cat((current_embeddings, finetuned_embeddings))
-                L_fic_sup = self._supervised_criterion(sup_features_fic, labels)
-                L_fic_unsup = self._unsupervised_criterion(current_embeddings, finetuned_embeddings)
-                L_fic_total = L_fic_sup + L_fic_unsup
+                    # FiC Module
+                    sup_features_fic = torch.cat((current_embeddings, finetuned_embeddings))
+                    L_fic_sup = self._supervised_criterion(sup_features_fic, labels)
+                    L_fic_total = L_fic_sup
 
-                # SnC Module
-                L_snc_sup = torch.tensor(0.0, device=self.device)
-                L_snc_unsup = torch.tensor(0.0, device=self.device)
-                for snapshot_model in self.snapshots:
-                    with torch.no_grad():
-                        snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(batch['data1'])
-                        if mask is not None:
-                            snapshot_embeddings = snapshot_embeddings[mask]
-                    sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
-                    L_snc_sup += self._supervised_criterion(sup_features_snc, labels)
-                    L_snc_unsup += self._unsupervised_criterion(current_embeddings, snapshot_embeddings)
-                L_snc_total = L_snc_sup + L_snc_unsup
+                    # SnC Module
+                    L_snc_sup = torch.tensor(0.0, device=self.device)
+                    for snapshot_model in self.snapshots:
+                        with torch.no_grad():
+                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(batch['data1'])
+                            if mask is not None:
+                                snapshot_embeddings = snapshot_embeddings[mask]
+                        sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
+                        L_snc_sup += self._supervised_criterion(sup_features_snc, labels)
+                    L_snc_total = L_snc_sup
+
+                elif  hasattr(self, 'disable') and self.disable == 'disable_supervised_loss':
+                    # PrC Module
+                    L_prc_unsup = self._unsupervised_criterion(current_embeddings, pretrained_embeddings)
+                    L_prc_total = L_prc_unsup
+
+                    # FiC Module
+                    L_fic_unsup = self._unsupervised_criterion(current_embeddings, finetuned_embeddings)
+                    L_fic_total = L_fic_unsup
+
+                    # SnC Module
+                    L_snc_unsup = torch.tensor(0.0, device=self.device)
+                    for snapshot_model in self.snapshots:
+                        with torch.no_grad():
+                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(batch['data1'])
+                            if mask is not None:
+                                snapshot_embeddings = snapshot_embeddings[mask]
+                        L_snc_unsup += self._unsupervised_criterion(current_embeddings, snapshot_embeddings)
+                    L_snc_total = L_snc_unsup
+                
+                elif  hasattr(self, 'disable') and self.disable == 'disable_all_loss':
+                    L_prc_total = torch.tensor(0.0, device=self.device)
+                    L_snc_total = torch.tensor(0.0, device=self.device)
+                    L_fic_total = torch.tensor(0.0, device=self.device)
+
+                else:
+                    # PrC Module
+                    sup_features_prc = torch.cat((current_embeddings, pretrained_embeddings))
+                    L_prc_sup = self._supervised_criterion(sup_features_prc, labels)
+                    L_prc_unsup = self._unsupervised_criterion(current_embeddings, pretrained_embeddings)
+                    L_prc_total = L_prc_sup + L_prc_unsup
+
+                    # FiC Module
+                    sup_features_fic = torch.cat((current_embeddings, finetuned_embeddings))
+                    L_fic_sup = self._supervised_criterion(sup_features_fic, labels)
+                    L_fic_unsup = self._unsupervised_criterion(current_embeddings, finetuned_embeddings)
+                    L_fic_total = L_fic_sup + L_fic_unsup
+
+                    # SnC Module
+                    L_snc_sup = torch.tensor(0.0, device=self.device)
+                    L_snc_unsup = torch.tensor(0.0, device=self.device)
+                    for snapshot_model in self.snapshots:
+                        with torch.no_grad():
+                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(batch['data1'])
+                            if mask is not None:
+                                snapshot_embeddings = snapshot_embeddings[mask]
+                        sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
+                        L_snc_sup += self._supervised_criterion(sup_features_snc, labels)
+                        L_snc_unsup += self._unsupervised_criterion(current_embeddings, snapshot_embeddings)
+                    L_snc_total = L_snc_sup + L_snc_unsup
 
             # Total loss calculation
             total_loss = (
