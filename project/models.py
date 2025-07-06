@@ -55,26 +55,39 @@ def get_model_components(model_name, pretrained=True, num_llm_labels=2, model_ta
         "model_family": spec["family"]
     }
 
-def adapt_head_for_model(model, head, family):
-    if family == "vit":
-        model.heads = head
-    elif family == "vgg":
-        model.classifier[-1] = head
-    elif family == "resnet":
-        model.fc = head
+
+def make_projection_head(args, output_dims=128):
+    if args.model_type == 'language':
+        return
+    if args.model_family == 'resnet':
+        args.projection_head = nn.Sequential(
+            nn.Linear(args.embedding_dim, args.embedding_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(args.embedding_dim, output_dims)
+        )
+    elif args.model_family == 'vgg':
+        args.projection_head = nn.Sequential(
+            nn.Linear(args.embedding_dim, output_dims),
+        )
+    else:
+        raise ValueError(f"Model family '{args.model_family}' not supported.")
+
+def adapt_head_for_model(args, head):
+    if args.model_type == 'language':
+        return
+    if args.model_type == 'vision':
+        if args.model_family == "vit":
+            args.model.heads = head
+        elif args.model_family == "vgg":
+            args.model.classifier[-1] = head
+        elif args.model_family == "resnet":
+            args.model.fc = head
+    else:
+        raise ValueError(f"Model type '{args.model_type}' not supported.")
 
 def adapt_resnet_for_small_images(model):
     if hasattr(model, 'conv1'):
         model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-
-def adapt_vit_for_small_images(model):
-    if hasattr(model, 'conv_proj'):
-        model.conv_proj = nn.Conv2d(3, 768, kernel_size=8, stride=8)
-        model.image_size = 32
-        patch_size = model.image_size // 8
-        num_patches = patch_size * patch_size
-        model.encoder.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, 768))
-        model.encoder.num_patches = num_patches
 
 class EncoderProjectionNetwork(nn.Module):
     def __init__(self, model_name, output_dims=128, pretrained=True, adapt=True, model_task='cls'):
@@ -92,24 +105,30 @@ class EncoderProjectionNetwork(nn.Module):
         if adapt and self.model_family == "resnet":
             adapt_resnet_for_small_images(self.model)
 
-        # Attaching the classification head if its a vision model
-        if self.model_type == "vision":
-            projection_head = nn.Sequential(
-                nn.Linear(self.embedding_dim, self.embedding_dim),
-                nn.ReLU(inplace=True),
-                nn.Linear(self.embedding_dim, output_dims)
-            )
-            adapt_head_for_model(self.model, projection_head, self.model_family)
-        else:
-            if self.model_task == 'wikitext2':
-                if hasattr(self.model, 'vocab_projector'):
-                    self.model.vocab_projector = nn.Linear(self.embedding_dim, output_dims)
-                elif hasattr(self.model, 'lm_head') and hasattr(self.model.lm_head, 'decoder'):
-                    self.model.lm_head.decoder = nn.Linear(self.embedding_dim, output_dims)
+        make_projection_head(self)
+        adapt_head_for_model(self, nn.Identity())
+
+        # if self.model_type == "vision":
+        #     projection_head = nn.Sequential(
+        #         nn.Linear(self.embedding_dim, self.embedding_dim),
+        #         nn.ReLU(inplace=True),
+        #         nn.Linear(self.embedding_dim, output_dims)
+        #     )
+        #     adapt_head_for_model(self.model, projection_head, self.model_family)
+        # else:
+        #     if self.model_task == 'wikitext2':
+        #         if hasattr(self.model, 'vocab_projector'):
+        #             self.model.vocab_projector = nn.Linear(self.embedding_dim, output_dims)
+        #         elif hasattr(self.model, 'lm_head') and hasattr(self.model.lm_head, 'decoder'):
+        #             self.model.lm_head.decoder = nn.Linear(self.embedding_dim, output_dims)
         
-    def forward(self, x):
+    def forward(self, x, extract_raw=False):
         if self.model_type == "vision":
-            return F.normalize(self.model(x), dim=1)
+            raw_features = self.model(x)
+            if extract_raw:
+                return raw_features
+            embeddings = self.projection_head(raw_features)
+            return F.normalize(embeddings, dim=1)
         else:
             x = self.model(
                 **x,
@@ -136,16 +155,13 @@ class ClassificationNetwork(nn.Module):
             freeze_weights(self.model)
 
         # Adapting the model for cifar10
-        if adapt:
-            if self.model_family == 'resnet':
-                adapt_resnet_for_small_images(self.model)
-            elif self.model_family == 'vit':
-                adapt_vit_for_small_images(self.model)
+        if adapt and self.model_family == 'resnet':
+            adapt_resnet_for_small_images(self.model)
         
         # Attaching the classification head if its a vision model
         if self.model_type == "vision":
             classification_head = nn.Linear(self.embedding_dim, num_classes)
-            adapt_head_for_model(self.model, classification_head, self.model_family)
+            adapt_head_for_model(self, classification_head)
     
     def forward(self, x):
         if self.model_type == "vision":

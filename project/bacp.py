@@ -31,6 +31,7 @@ class BaCPTrainingArguments:
                  pruning_epochs=None,
 
                  # Training parameters
+                 tau=0.15,
                  epochs=5,
                  recovery_epochs=10,
                  scheduler_type=None,
@@ -61,6 +62,7 @@ class BaCPTrainingArguments:
         self.pruning_epochs = epochs or pruning_epochs
 
         # Training parameters
+        self.tau = tau
         self.epochs = epochs
         self.recovery_epochs = recovery_epochs
         self.scheduler_type = scheduler_type
@@ -86,7 +88,7 @@ class BaCPTrainingArguments:
         _initialize_scheduler(self)
         _initialize_data_loaders(self)
         _initialize_pruner(self)
-        _initialize_contrastive_losses(self)
+        _initialize_contrastive_losses(self, self.tau)
         _initialize_paths_and_logger(self)
 
 class BaCPTrainer:
@@ -279,6 +281,13 @@ class BaCPTrainer:
             else:
                 mask = None
 
+            if hasattr(self, 'disable') and self.disable == 'use_different_data_view':
+                input_data = batch['data2'].to(self.device)
+            elif hasattr(self, 'disable') and self.disable == 'use_same_data_view':
+                input_data = batch['data1'].to(self.device)
+            else:
+                input_data = batch['data2'].to(self.device)
+
             with autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext():
 
                 current_embeddings, current_logits = self._get_embeddings_and_logits(
@@ -289,8 +298,8 @@ class BaCPTrainer:
                         pretrained_embeddings = self.pre_trained_model(batch).logits
                         finetuned_embeddings = self.finetuned_model(batch).logits
                     elif self.model_type == 'cv':
-                        pretrained_embeddings = self.pre_trained_model(batch['data1'])
-                        finetuned_embeddings = self.finetuned_model(batch['data1'])
+                        pretrained_embeddings = self.pre_trained_model(input_data)
+                        finetuned_embeddings = self.finetuned_model(input_data)
                     else:
                         raise Exception("Model type not supported")
 
@@ -318,7 +327,7 @@ class BaCPTrainer:
                     L_snc_sup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(batch['data1'])
+                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(input_data)
                             if mask is not None:
                                 snapshot_embeddings = snapshot_embeddings[mask]
                         sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
@@ -338,7 +347,7 @@ class BaCPTrainer:
                     L_snc_unsup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(batch['data1'])
+                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(input_data)
                             if mask is not None:
                                 snapshot_embeddings = snapshot_embeddings[mask]
                         L_snc_unsup += self._unsupervised_criterion(current_embeddings, snapshot_embeddings)
@@ -367,7 +376,7 @@ class BaCPTrainer:
                     L_snc_unsup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(batch['data1'])
+                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(input_data)
                             if mask is not None:
                                 snapshot_embeddings = snapshot_embeddings[mask]
                         sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
@@ -439,34 +448,36 @@ class BaCPTrainer:
                 return outputs.hidden_states[-1][:, 0, :] # CLS token
         else:
             model_family = self.model.model_family
-            if model_family == 'vgg':
-                x = self.model.model.features(data_batch)
-                x = self.model.model.avgpool(x)
-                x = x.reshape(x.shape[0], -1)
-                for i in range(6):
-                    x = self.model.model.classifier[i](x)
-                return x
-            elif model_family == 'vit':
-                batch_size = data_batch.shape[0]
-                x = self.model.model.conv_proj(data_batch)
-                class_token = self.model.model.class_token.expand(batch_size, -1, -1)
-                x = torch.cat((class_token, x.flatten(2).transpose(1, 2)), axis=1)
-                x = self.model.model.encoder(x)
-                return x[:, 0, :]
-            elif model_family == 'resnet':
-                x = self.model.model.conv1(data_batch)
-                x = self.model.model.bn1(x)
-                x = self.model.model.relu(x)
-                x = self.model.model.maxpool(x)
-                x = self.model.model.layer1(x)
-                x = self.model.model.layer2(x)
-                x = self.model.model.layer3(x)
-                x = self.model.model.layer4(x)
-                x = self.model.model.avgpool(x)
-                x = x.reshape(x.shape[0], -1)
-                return x
-            else:
-                raise ValueError(f"Model family {model_family} not supported.")
+            raw_features = self.model(data_batch, extract_raw=True)
+            return raw_features
+        
+            # if model_family == 'vgg':
+            #     x = self.model.model.features(data_batch)
+            #     x = self.model.model.avgpool(x)
+            #     x = x.reshape(x.shape[0], -1)
+            #     x = self.model.model.classifier[:-1](x)
+            #     return x
+            # elif model_family == 'vit':
+            #     batch_size = data_batch.shape[0]
+            #     x = self.model.model.conv_proj(data_batch)
+            #     class_token = self.model.model.class_token.expand(batch_size, -1, -1)
+            #     x = torch.cat((class_token, x.flatten(2).transpose(1, 2)), axis=1)
+            #     x = self.model.model.encoder(x)
+            #     return x[:, 0, :]
+            # elif model_family == 'resnet':
+            #     x = self.model.model.conv1(data_batch)
+            #     x = self.model.model.bn1(x)
+            #     x = self.model.model.relu(x)
+            #     x = self.model.model.maxpool(x)
+            #     x = self.model.model.layer1(x)
+            #     x = self.model.model.layer2(x)
+            #     x = self.model.model.layer3(x)
+            #     x = self.model.model.layer4(x)
+            #     x = self.model.model.avgpool(x)
+            #     x = x.reshape(x.shape[0], -1)
+            #     return x
+            # else:
+            #     raise ValueError(f"Model family {model_family} not supported.")
 
     def _extract_contrastive_embeddings(self, raw_features):
         if self.model_type == 'llm':
@@ -479,14 +490,15 @@ class BaCPTrainer:
             return F.normalize(embeddings, dim=1)
         else:
             model_family = self.model.model_family
-            if model_family == 'vgg':
-                embeddings = self.model.model.classifier[-1](raw_features)
-            elif model_family == 'vit':
-                embeddings = self.model.model.heads(raw_features)  
-            elif model_family == 'resnet':
-                embeddings = self.model.model.fc(raw_features)
-            else:
-                raise ValueError(f"Model family {model_family} not supported.")
+            embeddings = self.model.projection_head(raw_features)
+            # if model_family == 'vgg':
+            #     embeddings = self.model.model.classifier[-1](raw_features)
+            # elif model_family == 'vit':
+            #     embeddings = self.model.model.heads(raw_features)  
+            # elif model_family == 'resnet':
+            #     embeddings = self.model.model.fc(raw_features)
+            # else:
+            #     raise ValueError(f"Model family {model_family} not supported.")
             return F.normalize(embeddings, dim=1)
 
     def _handle_save(self, epoch):

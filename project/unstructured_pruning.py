@@ -5,8 +5,14 @@ import os
 
 def layer_check(name, param):
     if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in [
-        'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
-        'class_token', 'pos_embedding', 'vocab_transform', 'lm_head'
+        'fc',   # ResNet
+        'classifier.6', # VGG
+        'class_token', 'conv_proj', 'pos_embedding', 'heads', # ViT
+        'projection_head', # Encoder heads
+
+        # 'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
+        # 'class_token', 'pos_embedding', 'vocab_transform', 'lm_head',
+        # 'projection_head'
         ]):
         return True
     return False
@@ -19,6 +25,59 @@ def check_model_sparsity(model):
             total_count += param.numel()
 
     return sum_zero / total_count
+
+def check_sparsity_distribution(model, verbose=True):
+    names = []
+    sparsities = []
+
+    total_weights = 0
+    total_zero_weights = 0
+    total_backbone_weights = 0
+    total_backbone_zero_weights = 0
+
+    print("\nSPARSITY DISTRIBUTION PER LAYER")
+    print("-" * 80)
+
+    for name, param in model.named_parameters():
+        if param.dim() > 1 and param.requires_grad:                
+            num_zero_weights = torch.sum(param.data == 0).item()
+            num_layer_weights = param.data.numel()
+            layer_sparsity = num_zero_weights / num_layer_weights
+
+            total_weights += num_layer_weights
+            total_zero_weights += num_zero_weights
+
+            if layer_check(name, param):
+                total_backbone_weights += num_layer_weights
+                total_backbone_zero_weights += num_zero_weights
+
+            names.append(name)
+            sparsities.append(layer_sparsity)
+
+            if verbose:
+                print(f"{name}:\t{layer_sparsity * 100:.2f}%\t|\tsparsity: ({num_zero_weights}/{num_layer_weights})")
+
+    overall_sparsity = total_zero_weights / total_weights if total_weights > 0 else 0
+    backbone_sparsity = total_backbone_zero_weights / total_backbone_weights if total_backbone_weights > 0 else 0
+
+    if verbose:
+        print("\nMODEL SUMMARY")
+        print("-" * 80)
+        print(f"Model sparsity:\t\t\t{overall_sparsity:.4f}")
+        print(f"Backbone sparsity:\t\t{backbone_sparsity:.4f}")
+        print(f"Total parameters analyzed:\t{total_weights}")
+        print(f"Number of non-zero parameters:\t{total_weights - total_zero_weights}")
+        print(f"Number of zero parameters:\t{total_zero_weights}\n")
+
+    plt.figure(figsize=(10, 0.4 * len(names)))
+    bars = plt.barh(range(len(names)), sparsities, color='skyblue')
+    plt.yticks(range(len(names)), names)
+    plt.xlabel("Sparsity (Fraction of Zero Weights)")
+    plt.title("Layer-wise Sparsity Distribution")
+    plt.grid(axis="x", linestyle="--", alpha=0.5)
+    plt.xlim(0, 1.0)
+    plt.tight_layout()
+    plt.show()
 
 class Pruner(ABC):
     def __init__(self, epochs, target_ratio, sparsity_scheduler="linear", target_layer='no_target_layer'):
