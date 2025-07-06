@@ -53,7 +53,12 @@ def _detect_num_classes(args):
         raise ValueError(f'Invalid model task: {args.model_task}. Choose from {list(task_num_classes.keys())}')
 
 def _detect_criterion(args):
-    args.criterion = None if args.model_type == 'llm' else CrossEntropyLoss()
+    if args.criterion_type == 'supervised':
+        args.criterion = CrossEntropyLoss()
+    elif args.criterion_type == 'contrastive':
+        args.criterion = SupConLoss(2, 0.15, 0.15, args.batch_size)
+    else:
+        args.criterion = None
 
 def _detect_cv_image_size(args):
     if args.model_type == 'cv':
@@ -78,12 +83,22 @@ def _initialize_models(args):
         print('[TRAINER] Initialized BaCP models')
 
     else:
-        args.model = ClassificationNetwork(
-            model_name=args.model_name, 
-            num_classes=args.num_classes, 
-            adapt=(True if args.image_size and args.image_size <= 64 else False), 
-            model_task=args.model_task
-            )
+        if args.criterion_type == 'supervised':
+            args.model = ClassificationNetwork(
+                model_name=args.model_name, 
+                num_classes=args.num_classes, 
+                adapt=(True if args.image_size and args.image_size <= 64 else False), 
+                model_task=args.model_task
+                )
+        elif args.criterion_type == 'contrastive':
+            args.model = EncoderProjectionNetwork(
+                model_name=args.model_name, 
+                adapt=(True if args.image_size and args.image_size <= 64 else False),
+                model_task=args.model_task,
+                )
+        else:
+            raise ValueError(f"Invalid criterion type: {args.criterion_type}")
+
         if args.model_type == 'llm' and args.model_task == 'squad':
             args.squad_metric = evaluate.load(args.model_task)
         args.embedded_dim = args.model.embedding_dim
@@ -160,7 +175,7 @@ def _initialize_data_loaders(args):
         if hasattr(args, 'is_bacp') and args.is_bacp:
             data = get_cv_data(args.model_task, args.batch_size, learning_type='contrastive', size=args.image_size, num_workers=args.num_workers)
         else:
-            data = get_cv_data(args.model_task, args.batch_size, args.image_size, args.num_workers)
+            data = get_cv_data(args.model_task, args.batch_size, learning_type=args.criterion_type, size=args.image_size, num_workers=args.num_workers)
 
     args.data = data
     args.trainloader = data["trainloader"]
@@ -219,7 +234,7 @@ def _initialize_paths_and_logger(args):
 
     if args.prune or args.finetune:
         weights_path = f'{args.model_name}_{args.model_task}_{args.pruning_type}_{args.target_sparsity}_{args.learning_type}.pt'
-        logger_path = os.path.join(args.model_task, args.learning_type, args.pruning_type, str(args.target_sparsity))
+        logger_path = os.path.join(args.model_task, args.learning_type, args.pruning_type or "", str(args.target_sparsity))
     else:
         weights_path = f"{args.model_name}_{args.model_task}_{args.learning_type}.pt"
         logger_path = os.path.join(args.model_task, args.learning_type)
@@ -268,58 +283,9 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
         args.scheduler.step()
 
     if args.finetune or (args.prune and args.pruner is not None):
-        args.pruner.apply_mask(args.model)
-
-class LRFinder:
-    def __init__(self, trainer, min_lr=1e-6, max_lr=0.5, lr_steps=101):
-        self.trainer = trainer
-        self.max_steps = int(len(trainer.trainloader) * 0.1)
-        self.lrs = torch.linspace(min_lr, max_lr, steps=lr_steps)
-        self.losses = torch.zeros(lr_steps)
-        
-    @classmethod
-    def find_lr(cls, trainer, min_lr=1e-6, max_lr=0.5):
-        self = cls(trainer, min_lr, max_lr)
-        self._run()
+        args.pruner.apply_mask(args.model) if args.pruner else None
     
-    def _run(self):
 
-        original_amp = self.trainer.enable_mixed_precision
-        self.trainer.enable_mixed_precision = False
-        self.trainer.enable_tqdm = False
-        self.trainer.skip_optimizer_step = True
-        self.trainer.trainloader = self.trainer.data['unaugmentedloader']
-
-        i = 0
-        lr_batch = tqdm(self.lrs)
-        for lr in lr_batch:
-
-            if self.trainer.optimizer_type == 'adamw':
-                self.trainer.optimizer = optim.AdamW(self.trainer.model.parameters(), lr=lr)
-            elif self.trainer.optimizer_type == 'sgd':
-                self.trainer.optimizer = optim.SGD(self.trainer.model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
-            else:
-                raise ValueError(f"Invalid optimizer type: {self.trainer.optimizer_type}")
-
-            self.trainer.model.to(self.trainer.device)
-            running_loss = self.trainer._run_train_epoch(0, "", 1)
-            self.losses[i] = running_loss
-            i += 1
-
-            desc = f'loss for lr({lr:.2e}) = {running_loss:.5f}'
-            lr_batch.set_description(desc)
-
-        
-        self.trainer.enable_mixed_precision = original_amp
-
-        plt.plot(self.lrs.tolist(), self.losses.tolist())
-        plt.xlabel('Learning Rate')
-        plt.ylabel('Loss')
-        plt.title('Learning Rate Finder')
-        plt.grid(True)
-        plt.show()
-
-    
 
 
 

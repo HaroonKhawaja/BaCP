@@ -1,0 +1,28 @@
+Model : vgg11 - Learning Type: cifar10/contrastive_baseline_finetune/0.0
+Configuration:
+model_type: cv
+model_name: vgg11
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 4096
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.1
+learning_type: contrastive_baseline_finetune
+optimizer_type: sgd
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vgg11/cifar10/vgg11_cifar10_None_0.0_contrastive_baseline_finetune.pt
+finetuned_weights: /dbfs/research/vgg11/cifar10/vgg11_cifar10_contrastive_baseline.pt
+
+Epoch [1/5]: Avg Loss: nan | Avg Accuracy: 9.81 | Model Sparsity: 0.0
+Epoch [2/5]: Avg Loss: nan | Avg Accuracy: 9.81 | Model Sparsity: 0.0
+Epoch [3/5]: Avg Loss: nan | Avg Accuracy: 9.81 | Model Sparsity: 0.0
+Epoch [4/5]: Avg Loss: nan | Avg Accuracy: 9.81 | Model Sparsity: 0.0
+Epoch [5/5]: Avg Loss: nan | Avg Accuracy: 9.81 | Model Sparsity: 0.0

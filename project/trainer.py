@@ -9,6 +9,7 @@ import evaluate
 from datasets.utils.logging import disable_progress_bar
 from unstructured_pruning import check_model_sparsity
 from logger import Logger
+import contextlib
 from constants import *
 from utils import *
 from training_utils import (
@@ -38,6 +39,7 @@ class TrainingArguments:
                 pruning_epochs=None,
     
                 # Training parameters
+                criterion_type='supervised',
                 epochs=5, 
                 recovery_epochs=10,
                 scheduler_type=None,
@@ -68,6 +70,7 @@ class TrainingArguments:
         self.pruning_epochs = epochs or pruning_epochs
 
         # Training parameters
+        self.criterion_type = criterion_type
         self.epochs = epochs
         self.recovery_epochs = recovery_epochs
         self.scheduler_type = scheduler_type
@@ -167,8 +170,11 @@ class Trainer:
             avg_loss = self._run_train_epoch(epoch, desc)
 
             # Validation
-            desc = f"Validation Epoch [{epoch+1}/{self.epochs}]"
-            avg_acc, avg_f1 = self._run_validation_epoch(desc)
+            if self.criterion_type == 'supervised':
+                desc = f"Validation Epoch [{epoch+1}/{self.epochs}]"
+                avg_acc, avg_f1 = self._run_validation_epoch(desc)
+            else:
+                avg_acc, avg_f1 = 0, 0
 
             self.train_losses.append(avg_loss)
             if self.prune and self.pruner:
@@ -212,14 +218,17 @@ class Trainer:
             desc = f"Recovery Epoch [{epoch+1}/{self.recovery_epochs}]"
             avg_loss = self._run_train_epoch(epoch, desc)
 
-            desc = f"Validation Epoch [{epoch+1}/{self.recovery_epochs}]"
-            avg_acc, avg_f1 = self._run_validation_epoch(desc)
+            if self.criterion_type == 'supervised':
+                desc = f"Validation Epoch [{epoch+1}/{self.recovery_epochs}]"
+                avg_acc, avg_f1 = self._run_validation_epoch(desc)
 
-            self.train_losses.append(avg_loss)
-            sparsity_key = self._get_sparsity_key()
-            if sparsity_key not in self.accuracy_per_sparsity:
-                self.accuracy_per_sparsity[sparsity_key] = []
-            self.accuracy_per_sparsity[sparsity_key].append(avg_acc)
+                self.train_losses.append(avg_loss)
+                sparsity_key = self._get_sparsity_key()
+                if sparsity_key not in self.accuracy_per_sparsity:
+                    self.accuracy_per_sparsity[sparsity_key] = []
+                self.accuracy_per_sparsity[sparsity_key].append(avg_acc)
+            else:
+                avg_acc = 0
 
             # Format info message based on model type and task
             if self.model_type == 'llm' and self.model_task == 'squad':
@@ -250,17 +259,25 @@ class Trainer:
 
         for step, batch in enumerate(batchloader):
             # Handling different batch formats
-            if isinstance(batch, dict):
-                batch = {k: v.to(self.device) for k, v in batch.items()}
+            if self.criterion_type == 'contrastive':
+                images, labels = batch
+                images1, images2 = images 
+                batch = {
+                    'data1': images1.to(self.device),
+                    'data2': images2.to(self.device),
+                }
+                labels = labels.to(self.device)
             elif isinstance(batch, list):
                 batch = [x.to(self.device) for x in batch]
                 batch, labels = batch
+            elif isinstance(batch, dict):
+                batch = {k: v.to(self.device) for k, v in batch.items()}
             else:
                 batch.to(self.device)
 
             # Forward pass with mixed precision
-            if self.enable_mixed_precision:
-                with autocast(device_type=self.device):
+            with autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext():
+                if self.criterion_type == 'supervised':
                     outputs = self.model(batch)
                     if hasattr(outputs, 'loss'):
                         loss = outputs.loss
@@ -268,14 +285,11 @@ class Trainer:
                         loss = self.criterion(outputs.logits, labels)
                     else:
                         loss = self.criterion(outputs, labels)
-            else:
-                outputs = self.model(batch)
-                if hasattr(outputs, 'loss'):
-                    loss = outputs.loss
-                elif hasattr(outputs, 'logits'):
-                    loss = self.criterion(outputs.logits, labels)
-                else:
-                    loss = self.criterion(outputs, labels)
+                elif self.criterion_type == 'contrastive':
+                    embeddings_1 = self.model(batch['data1'])
+                    embeddings_2 = self.model(batch['data2'])
+                    feature_embeddings = torch.cat((embeddings_1, embeddings_2))
+                    loss = self.criterion(feature_embeddings, labels)
 
             total_loss += loss.item()
 

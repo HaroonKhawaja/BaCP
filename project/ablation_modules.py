@@ -317,9 +317,9 @@ class BaCPLearningRateSweep():
                  sparsity_scheduler='cubic',
                  pruning_epochs=None,
 
-                 epochs=1,
-                 finetune_epochs=1,
-                 recovery_epochs=1,
+                 epochs=5,
+                 finetune_epochs=10,
+                 recovery_epochs=50,
                  patience=None,
                  learning_type='bacp_TS',
 
@@ -563,11 +563,168 @@ class LearningRateSweep():
         random_id = uuid.uuid4()
         plt.savefig(f"accuracy_vs_opt_n_lr_{random_id}.png")
 
+class BaCPDataViewSweep():
+    def __init__(self,
+                 model_name,
+                 model_task,
+                 batch_size,
+                 opt_type_and_lr,
+                 finetune_opt_type_and_lr,
+                 finetuned_weights,
+                 
+                 scheduler_type=None,
+                 pruner=None,
+                 pruning_type=None,
+                 target_sparsity=0.0,
+                 sparsity_scheduler='cubic',
+                 pruning_epochs=None,
 
+                 epochs = 5,
+                 finetune_epochs=50,
+                 recovery_epochs=10,
+                 patience=None,
+                 
+                 learning_type='bacp_TS',
 
+                 log_epochs=True,
+                 enable_tqdm=True,
+                 enable_mixed_precision=True,
+                 db=True,
+                 num_workers=24):
+        self.tau = 0.15
+        self.model_name = model_name
+        self.model_task = model_task
+        self.batch_size = batch_size
+        self.optimizer_type, self.learning_rate = opt_type_and_lr
+        self.optimizer_type_finetune, self.learning_rate_finetune = finetune_opt_type_and_lr
+        self.finetuned_weights = finetuned_weights
+        self.finetune_epochs = finetune_epochs
+        self.is_bacp = True
+        self.scheduler_type = None
 
+        # Pruning parameters 
+        self.pruner = None
+        self.pruning_type = pruning_type
+        self.target_sparsity = target_sparsity
+        self.sparsity_scheduler = sparsity_scheduler
+        self.pruning_epochs = epochs or pruning_epochs
+        self.finetune=False
+        
+        # Training parameters
+        self.epochs = epochs
+        self.recovery_epochs = recovery_epochs
+        self.learning_type = learning_type
+        self.patience = patience or self.epochs
 
+        # Extra parameters
+        self.log_epochs = log_epochs
+        self.enable_tqdm = enable_tqdm
+        self.enable_mixed_precision = enable_mixed_precision
+        self.db = db
+        self.num_workers = num_workers
+        self.scaler = GradScaler() if self.enable_mixed_precision else None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        _detect_model_type(self)
+        _detect_num_classes(self)
+        _detect_cv_image_size(self)
+        _initialize_data_loaders(self)
+
+        self.configs = ['use_different_data_view', 'use_same_data_view']        
+        self.history = {}
+
+    def sweep(self):
+        print("------------------------------")
+        print("STARTING LOSS FUNCTION SWEEP")
+        print("------------------------------")
+
+        for i, disable in enumerate(self.configs):
+            print(f"TEST {i+1}/{len(self.configs)}: {disable}")
+
+            self.learning_type = f"bacp_DV_{disable}"
+            self.disable = disable
+
+            _initialize_models(self)
+            _initialize_optimizer(self)
+            _initialize_scheduler(self)
+            _initialize_contrastive_losses(self, self.tau)
+            _initialize_pruner(self)
+            _initialize_paths_and_logger(self)
+
+            # Training BaCP
+            bacp_trainer = BaCPTrainer(self)
+            bacp_trainer.train()
+
+            # Fine-tuning on downstream task
+            bacp_trainer.generate_mask_from_model()
+            training_args = TrainingArguments(
+                model_name=bacp_trainer.model_name,
+                model_task=bacp_trainer.model_task,
+                batch_size=bacp_trainer.batch_size,
+                optimizer_type=self.optimizer_type_finetune,
+                learning_rate=self.learning_rate_finetune,
+                pruner=bacp_trainer.get_pruner(),
+                pruning_type=bacp_trainer.pruning_type,
+                target_sparsity=bacp_trainer.target_sparsity,
+                epochs=self.finetune_epochs,
+                finetuned_weights=bacp_trainer.save_path,
+                finetune=True,
+                learning_type=f'{bacp_trainer.learning_type}_finetune',
+            )
+            trainer = Trainer(training_args)
+            trainer.train()
+
+            # Evaluating accuracy
+            metrics = trainer.evaluate()
+            acc = metrics['average_accuracy']
+            self.history[disable] = acc
+            print(f"ACCURACY: {acc:.3f}\n")
+
+        print("------------------------------")
+        print("FINISHED LOSS FUNCTION SWEEP")
+        print("------------------------------")
+
+        names = [
+            'Different Batch View',
+            'Same Batch View (Current)'
+        ]        
+        values = list(self.history.values())
+
+        # Summary
+        print("RESULT SUMMARY:")
+        for name, value in zip(names, values):
+            print(f"{name}: {value:.3f}%")
+        print("------------------------------")
+
+        # Printing best outcome
+        max_acc = max(values)
+        max_idx = values.index(max_acc)
+        max_name = names[max_idx]
+
+        print(f"\nBEST RESULT: {max_acc:.3f}% ({max_name})")
+        print(f"ACCURACY DIFFERENCE FROM THE BEST RESULT:")
+        for name, value in zip(names, values):
+            change = max_acc - value
+            if change > 0:
+                print(f"{name}: -{change:.3f}%")
+        print("------------------------------")
+
+        # Plotting accuracy graphs
+        print("\nPLOTTING RESULTS")
+        plt.figure(figsize=(10, 6))
+        plt.plot(names, values, marker='o', linestyle='--', color='b', markerfacecolor='red')
+        plt.xlabel("Loss Functions")
+        plt.ylabel("Accuracy")
+        plt.title(f"Ablation: Effect of Using Varying Data Views (Sparsity {self.target_sparsity})")
+        plt.grid()
+        plt.tight_layout()
+        plt.show()
+
+        # Saving graph as picture
+        random_id = uuid.uuid4()
+        file_name = f"accuracy_vs_data_view_{random_id}.png"
+        plt.savefig(file_name)
+        print(f"Saved as: {file_name}")
 
 
 
