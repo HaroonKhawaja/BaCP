@@ -62,11 +62,8 @@ def _detect_criterion(args):
 
 def _detect_cv_image_size(args):
     if args.model_type == 'cv':
-        # if args.model_name.startswith('vit') or args.model_task in ['food101', 'caltech101']:        
-        if args.model_task in ['food101', 'caltech101']:
+        if args.model_name.startswith('vit'):        
             args.image_size = 224
-        elif args.model_task == 'flowers102':
-            args.image_size = 256
         else:
             args.image_size = 32
     else:
