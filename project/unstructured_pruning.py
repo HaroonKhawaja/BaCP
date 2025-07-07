@@ -4,10 +4,13 @@ from utils import *
 import os
 
 def layer_check(name, param):
+    if param.dim() <= 1 or not param.requires_grad:
+        return False
+    
     if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in [
         'fc',   # ResNet
         'classifier.6', # VGG
-        'class_token', 'conv_proj', 'pos_embedding', 'heads', # ViT
+        'embeddings', 'conv_proj', 'pos_embedding', 'heads', 'classifier.weight', # ViT        
         'projection_head', # Encoder heads
 
         # 'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 

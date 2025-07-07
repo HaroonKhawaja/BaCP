@@ -279,7 +279,7 @@ class Trainer:
             with autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext():
                 if self.criterion_type == 'supervised':
                     outputs = self.model(batch)
-                    if hasattr(outputs, 'loss'):
+                    if hasattr(outputs, 'loss') and outputs.loss:
                         loss = outputs.loss
                     elif hasattr(outputs, 'logits'):
                         loss = self.criterion(outputs.logits, labels)
@@ -336,33 +336,33 @@ class Trainer:
                 
                 # Prediction Handling
                 if self.model_type == 'llm':
-                    if self.model_task == 'squad':
-                        predictions, references = [], [] 
-                        for i in range(batch["input_ids"].size(0)):
-                            input_ids = batch["input_ids"][i]
-                            start_logit = outputs.start_logits[i]
-                            end_logit = outputs.end_logits[i]
+                    # if self.model_task == 'squad':
+                    #     predictions, references = [], [] 
+                    #     for i in range(batch["input_ids"].size(0)):
+                    #         input_ids = batch["input_ids"][i]
+                    #         start_logit = outputs.start_logits[i]
+                    #         end_logit = outputs.end_logits[i]
 
-                            start_idx = torch.argmax(start_logit).item()
-                            end_idx = torch.argmax(end_logit).item()
-                            if start_idx > end_idx:
-                                end_idx = start_idx 
+                    #         start_idx = torch.argmax(start_logit).item()
+                    #         end_idx = torch.argmax(end_logit).item()
+                    #         if start_idx > end_idx:
+                    #             end_idx = start_idx 
 
-                            pred_text = self._extract_normalized_answer(input_ids, start_idx, end_idx)
-                            true_text = self._extract_normalized_answer(input_ids, batch["start_positions"][i].item(), batch["end_positions"][i].item())
+                    #         pred_text = self._extract_normalized_answer(input_ids, start_idx, end_idx)
+                    #         true_text = self._extract_normalized_answer(input_ids, batch["start_positions"][i].item(), batch["end_positions"][i].item())
 
-                            predictions.append({"id": str(i), "prediction_text": pred_text})
-                            references.append({"id": str(i), "answers": {"text": [true_text], "answer_start": [0]}})
+                    #         predictions.append({"id": str(i), "prediction_text": pred_text})
+                    #         references.append({"id": str(i), "answers": {"text": [true_text], "answer_start": [0]}})
                         
-                        metrics = self.squad_metric.compute(predictions=predictions, references=references)
-                        total_correct += metrics['exact_match']
-                        total_f1 += metrics['f1'] 
-                        total_samples += 1
+                    #     metrics = self.squad_metric.compute(predictions=predictions, references=references)
+                    #     total_correct += metrics['exact_match']
+                    #     total_f1 += metrics['f1'] 
+                    #     total_samples += 1
 
-                        avg_acc = (total_correct / total_samples)
-                        avg_f1 = (total_f1 / total_samples)
+                    #     avg_acc = (total_correct / total_samples)
+                    #     avg_f1 = (total_f1 / total_samples)
                     
-                    elif self.model_task == 'wikitext2':
+                    if self.model_task == 'wikitext2':
                         labels = batch["labels"]
                         mask = (labels != -100)
                         logits = outputs.logits[mask]
@@ -381,6 +381,8 @@ class Trainer:
                         total_samples += batch['input_ids'].size(0)
                         avg_acc = (total_correct / total_samples) * 100
                 else:
+                    if hasattr(outputs, 'logits'):
+                        outputs = outputs.logits
                     preds = outputs.max(1)[1]
                     correct = (preds == labels).sum()
                     total_correct += correct.item()
