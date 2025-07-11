@@ -172,9 +172,9 @@ class Trainer:
             # Validation
             if self.criterion_type == 'supervised':
                 desc = f"Validation Epoch [{epoch+1}/{self.epochs}]"
-                avg_acc, avg_f1 = self._run_validation_epoch(desc)
+                avg_acc, avg_perplexity = self._run_validation_epoch(desc)
             else:
-                avg_acc, avg_f1 = 0, 0
+                avg_acc, avg_perplexity = 0, 0
 
             self.train_losses.append(avg_loss)
             if self.prune and self.pruner:
@@ -184,15 +184,10 @@ class Trainer:
                 self.accuracy_per_sparsity[sparsity_key].append(avg_acc)
             else:
                 self.accuracies.append(avg_acc)
-
-            if self.model_type == 'llm' and self.model_task == 'squad':
-                info = (f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc:.2f} | Avg F1: {avg_f1:.2f} | "
-                       f"Model Sparsity: {self._get_sparsity_key()}\n")
-            else:
-                info = (f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc:.2f} | "
-                       f"Model Sparsity: {self._get_sparsity_key()}\n")
+                
+            info = (f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
+                    f"Avg Accuracy: {avg_acc} | Avg Perplexity: {avg_perplexity} |"
+                    f"Model Sparsity: {self._get_sparsity_key()}\n")
             print(info)
             
             if self.logger is not None:
@@ -220,7 +215,7 @@ class Trainer:
 
             if self.criterion_type == 'supervised':
                 desc = f"Validation Epoch [{epoch+1}/{self.recovery_epochs}]"
-                avg_acc, avg_f1 = self._run_validation_epoch(desc)
+                avg_acc, avg_perplexity = self._run_validation_epoch(desc)
 
                 self.train_losses.append(avg_loss)
                 sparsity_key = self._get_sparsity_key()
@@ -231,13 +226,13 @@ class Trainer:
                 avg_acc = 0
 
             # Format info message based on model type and task
-            if self.model_type == 'llm' and self.model_task == 'squad':
+            if self.model_type == 'llm' and self.model_task == 'wikitext2':
                 info = (f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc:.2f} | Avg F1: {avg_f1:.2f} | "
+                       f"Avg Accuracy: {avg_acc} | Avg Perplexity: {avg_perplexity} | "
                        f"Model Sparsity: {self._get_sparsity_key()}\n")
             else:
                 info = (f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc:.2f} | "
+                       f"Avg Accuracy: {avg_acc} | "
                        f"Model Sparsity: {self._get_sparsity_key()}\n")
             print(info)
 
@@ -305,11 +300,12 @@ class Trainer:
             
         avg_loss = total_loss / len(self.trainloader)    
         return avg_loss
-            
+
     def _run_validation_epoch(self, desc="", mode="val"):
         """Run one full validation epoch."""
         self.model.eval()
-        total_correct, total_f1, total_samples, avg_f1 = 0, 0, 0, 0
+        total_correct, total_samples = 0, 0
+        total_loss, avg_perplexity = 0, 0
 
         if mode == 'eval' and self.testloader:
             batchloader = tqdm(self.testloader, desc=desc) if self.enable_tqdm else self.testloader
@@ -336,42 +332,24 @@ class Trainer:
                 
                 # Prediction Handling
                 if self.model_type == 'llm':
-                    # if self.model_task == 'squad':
-                    #     predictions, references = [], [] 
-                    #     for i in range(batch["input_ids"].size(0)):
-                    #         input_ids = batch["input_ids"][i]
-                    #         start_logit = outputs.start_logits[i]
-                    #         end_logit = outputs.end_logits[i]
-
-                    #         start_idx = torch.argmax(start_logit).item()
-                    #         end_idx = torch.argmax(end_logit).item()
-                    #         if start_idx > end_idx:
-                    #             end_idx = start_idx 
-
-                    #         pred_text = self._extract_normalized_answer(input_ids, start_idx, end_idx)
-                    #         true_text = self._extract_normalized_answer(input_ids, batch["start_positions"][i].item(), batch["end_positions"][i].item())
-
-                    #         predictions.append({"id": str(i), "prediction_text": pred_text})
-                    #         references.append({"id": str(i), "answers": {"text": [true_text], "answer_start": [0]}})
-                        
-                    #     metrics = self.squad_metric.compute(predictions=predictions, references=references)
-                    #     total_correct += metrics['exact_match']
-                    #     total_f1 += metrics['f1'] 
-                    #     total_samples += 1
-
-                    #     avg_acc = (total_correct / total_samples)
-                    #     avg_f1 = (total_f1 / total_samples)
-                    
                     if self.model_task == 'wikitext2':
                         labels = batch["labels"]
+                        
+                        # Generating mask and masking logits/labels
                         mask = (labels != -100)
-                        logits = outputs.logits[mask]
+                        logits = outputs.logits[mask]                        
                         labels = labels[mask]
+
+                        # Accuracy calculation
                         preds = torch.argmax(logits, dim=-1)
                         correct = (preds == labels).sum()
                         total_correct += correct.item()
                         total_samples += mask.sum().item()
                         avg_acc = (total_correct / total_samples) * 100
+
+                        # Perplexity calculation
+                        total_loss += outputs.loss
+                        avg_perplexity = torch.exp(total_loss / (step + 1)).item()
 
                     else:
                         labels = batch["labels"]
@@ -389,12 +367,15 @@ class Trainer:
                     total_samples += labels.size(0)
                     avg_acc = (total_correct / total_samples) * 100
 
+                metrics = {
+                    'accuracy': f"{avg_acc:.2f}",
+                    'perplexity': f"{avg_perplexity:.3f}",
+                    'sparsity': f'{self._get_sparsity_key()}'
+                }
                 if self.enable_tqdm:
-                    if self.model_type == 'llm' and self.model_task == 'squad':
-                        batchloader.set_postfix(Accuracy=f"{avg_acc:.2f}", F1=f"{avg_f1:.2f}", Sparsity=f"{self._get_sparsity_key()}")
-                    else:
-                        batchloader.set_postfix(Accuracy=f"{avg_acc:.2f}", Sparsity=f"{self._get_sparsity_key()}")
-        return avg_acc, avg_f1
+                    batchloader.set_postfix(**metrics)
+
+        return metrics['accuracy'], metrics['perplexity']
 
     def evaluate(self, load=True):
         """Load weights and evaluate the model on validation or test set. Returns accuracy in percentage."""
@@ -411,17 +392,12 @@ class Trainer:
         self.model.to(self.device)
 
         desc = "Evaluating"
-        avg_acc, avg_f1 = self._run_validation_epoch(desc, 'eval')
+        avg_acc, avg_perplexity = self._run_validation_epoch(desc, 'eval')
 
-        if self.model_task == 'squad':
-            return {
-                "average_accuracy": round(avg_acc, 2), 
-                "average_f1_score": round(avg_f1, 2)                
-            }
-        else:
-            return {
-                "average_accuracy": round(avg_acc, 2), 
-            }
+        return {
+            "average_accuracy": avg_acc, 
+            "average_perplexity": avg_perplexity if avg_perplexity else None,             
+        }
 
     def _extract_normalized_answer(self, input_ids, start_idx, end_idx):
         answer_ids = input_ids[start_idx: end_idx + 1]

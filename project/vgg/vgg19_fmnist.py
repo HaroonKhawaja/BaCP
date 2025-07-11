@@ -276,8 +276,6 @@ if True:
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
 
-check_sparsity_distribution(trainer.model)
-
 
 # COMMAND ----------
 
@@ -322,8 +320,6 @@ if True:
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
-check_sparsity_distribution(trainer.model)
 
 
 # COMMAND ----------
@@ -422,8 +418,6 @@ if True:
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
 
-check_sparsity_distribution(trainer.model)
-
 
 # COMMAND ----------
 
@@ -468,8 +462,6 @@ if True:
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
-check_sparsity_distribution(trainer.model)
 
 
 # COMMAND ----------

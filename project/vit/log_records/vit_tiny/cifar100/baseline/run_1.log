@@ -1,0 +1,30 @@
+Model : vit_tiny - Learning Type: cifar100/baseline
+Configuration:
+model_type: cv
+model_name: vit_tiny
+model_task: cifar100
+num_classes: 100
+criterion: CrossEntropyLoss()
+embedding_dim: 192
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 256
+learning_rate: 0.0001
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 830
+warmup_steps: 83
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vit_tiny/cifar100/vit_tiny_cifar100_baseline.pt
+
+Epoch [1/5]: Avg Loss: 5.1028 | Avg Accuracy: 1.94 | Model Sparsity: 0.0
+Epoch [2/5]: Avg Loss: 4.5095 | Avg Accuracy: 3.07 | Model Sparsity: 0.0
+Epoch [3/5]: Avg Loss: 4.3815 | Avg Accuracy: 5.36 | Model Sparsity: 0.0
+Epoch [4/5]: Avg Loss: 4.2447 | Avg Accuracy: 6.60 | Model Sparsity: 0.0
+Epoch [5/5]: Avg Loss: 4.1453 | Avg Accuracy: 7.79 | Model Sparsity: 0.0

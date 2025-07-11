@@ -6,7 +6,6 @@ from torchvision.models import ResNet50_Weights, ResNet101_Weights, VGG11_Weight
 from transformers import AutoModelForImageClassification, AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoModelForMaskedLM, AutoTokenizer
 from transformers import ViTConfig, ViTModel
 from utils import freeze_weights
-import timm
 
 PRETRAINED = True
 # MODEL_SPECS = {
@@ -83,25 +82,44 @@ MODELS = {
         'family': 'vit',
         'type': 'vision',
     },
+    'distilbert-base-uncased-mlm': {
+        'fn': AutoModelForMaskedLM,
+        'weight': 'distilbert-base-uncased',
+        'family': 'bert',
+        'type': 'language',
+    },
+    'roberta-base-mlm': {
+        'fn': AutoModelForMaskedLM,
+        'weight': 'roberta-base',
+        'family': 'bert',
+        'type': 'language',
+    }
+        
 }
 
 def initialize_model_components(model_name, pretrained=True, model_task=''):
+    if model_task == 'wikitext2':
+        model_name += '-mlm'
+    
     if model_name not in MODELS:
         raise ValueError(f"Unknown model: '{model_name}'. Available: {list(MODELS.keys())}")
+    
 
     spec = MODELS[model_name]
 
+    model_fn = spec['fn']
     model_family = spec['family']
     model_type = spec['type']
+    embedding_dim = None
 
     if model_type == 'vision':
-        model_fn = spec['fn']
+        # Initializing model
         if model_name.startswith('vit'):
             model = model_fn.from_pretrained(spec['weight'] if pretrained else None)
         else:
             model = model_fn(weights=spec["weight"] if pretrained else None)
-
-        embedding_dim = None
+        
+        # Initializing model embedded dimensions
         if hasattr(model, 'fc'):
             embedding_dim = model.fc.in_features
         elif hasattr(model, 'classifier'):
@@ -111,8 +129,12 @@ def initialize_model_components(model_name, pretrained=True, model_task=''):
                 embedding_dim = model.classifier.in_features
         elif hasattr(model, 'head'):
             embedding_dim = model.head.in_features
+
+    elif model_type == 'language':
+        model = model_fn.from_pretrained(spec['weight'] if pretrained else None)
+        embedding_dim = model.config.hidden_size
     else:
-        raise NotImplementedError("Only vision models are supported.")
+        raise ValueError(f"Model type '{model_type}' not supported.")
     
     return {
         'model': model,
@@ -139,19 +161,26 @@ def make_projection_head(args, output_dims=128):
         raise ValueError(f"Model family '{args.model_family}' not supported.")
 
 def adapt_head_for_model(args, head):
-    if args.model_type == 'language':
-        raise NotImplementedError("Language models not supported.")
-
     if args.model_type == 'vision':
+        # ResNet Support
         if hasattr(args.model, 'fc'):
             args.model.fc = head
         elif hasattr(args.model, 'classifier'):
+            # VGG Support
             if isinstance(args.model.classifier, nn.Sequential):
                 args.model.classifier[-1] = head
             else:
-                args.model.classifier = head
+                # ViT Support (HF)
+                args.model.classifier = head   
+        # ViT Support 
         elif hasattr(args.model, 'head'):
             args.model.head = head
+        else:
+            raise ValueError(f"Model '{args.model}' does not have a head.")
+    elif args.model_type == 'language':
+        # DistilBERT Support
+        if hasattr(args.model, 'vocab_projector'):
+            args.model.vocab_projector = head
         else:
             raise ValueError(f"Model '{args.model}' does not have a head.")
     else:
@@ -185,6 +214,9 @@ class EncoderProjectionNetwork(nn.Module):
     def forward(self, x, extract_raw=False):
         if self.model_type == "vision":
             raw_features = self.model(x)
+            if hasattr(raw_features, 'logits'):
+                raw_features = raw_features.logits
+
             if extract_raw:
                 return raw_features
             embeddings = self.projection_head(raw_features)
@@ -220,10 +252,9 @@ class ClassificationNetwork(nn.Module):
         if adapt and self.model_family == 'resnet':
             adapt_resnet_for_small_images(self.model)
         
-        # Attaching the classification head if its a vision model
-        if self.model_type == "vision":
-            classification_head = nn.Linear(self.embedding_dim, num_classes)
-            adapt_head_for_model(self, classification_head)
+        # Attaching the classification head
+        classification_head = nn.Linear(self.embedding_dim, num_classes)
+        adapt_head_for_model(self, classification_head)
     
     def forward(self, x):
         if self.model_type == "vision":
