@@ -1,0 +1,27 @@
+Model : vit_tiny - Learning Type: cifar10/LRS_adamw_0.0003
+Configuration:
+model_type: cv
+model_name: vit_tiny
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 192
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 256
+learning_rate: 0.0003
+learning_type: LRS_adamw_0.0003
+optimizer_type: adamw
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: cubic
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vit_tiny/cifar10/vit_tiny_cifar10_LRS_adamw_0.0003.pt
+
+Epoch [1/5]: Avg Loss: 0.6566 | Avg Accuracy: 93.04 | Model Sparsity: 0.0
+Epoch [2/5]: Avg Loss: 0.1403 | Avg Accuracy: 95.08 | Model Sparsity: 0.0
+Epoch [3/5]: Avg Loss: 0.1013 | Avg Accuracy: 94.92 | Model Sparsity: 0.0
+Epoch [4/5]: Avg Loss: 0.0804 | Avg Accuracy: 94.32 | Model Sparsity: 0.0
+Epoch [5/5]: Avg Loss: 0.0750 | Avg Accuracy: 94.56 | Model Sparsity: 0.0

@@ -37,6 +37,7 @@ class BaCPTrainingArguments:
                  scheduler_type=None,
                  patience=20,
                  finetuned_weights=None,
+                 current_finetuned_weights=None,
                  finetune=False,
                  learning_type="",
 
@@ -68,6 +69,7 @@ class BaCPTrainingArguments:
         self.scheduler_type = scheduler_type
         self.patience = patience
         self.finetuned_weights = finetuned_weights
+        self.current_finetuned_weights = current_finetuned_weights
         self.finetune = finetune
         self.learning_type = learning_type
 
@@ -273,6 +275,7 @@ class BaCPTrainer:
                 }
             else:  # LLM
                 batch = {k: v.to(self.device) for k, v in batch_data.items()}
+                input_data = batch
 
             labels = batch["labels"]
             if self.model_task == 'wikitext2':
@@ -294,14 +297,11 @@ class BaCPTrainer:
                     batch if self.model_type == 'llm' else batch['data1'], mask
                 )
                 with torch.no_grad():
-                    if self.model_type == 'llm':
-                        pretrained_embeddings = self.pre_trained_model(batch).logits
-                        finetuned_embeddings = self.finetuned_model(batch).logits
-                    elif self.model_type == 'cv':
-                        pretrained_embeddings = self.pre_trained_model(input_data)
-                        finetuned_embeddings = self.finetuned_model(input_data)
-                    else:
-                        raise Exception("Model type not supported")
+                    pretrained_embeddings = self.pre_trained_model(input_data)
+                    finetuned_embeddings = self.finetuned_model(input_data)
+                    if hasattr(pretrained_embeddings, 'logits') and hasattr(finetuned_embeddings, 'logits'):
+                        pretrained_embeddings = pretrained_embeddings.logits
+                        finetuned_embeddings = finetuned_embeddings.logits
 
                 if mask is not None:
                     labels = labels[mask]
@@ -376,7 +376,9 @@ class BaCPTrainer:
                     L_snc_unsup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(input_data)
+                            snapshot_embeddings = snapshot_model(input_data)
+                            if hasattr(snapshot_embeddings, 'logits'):
+                                snapshot_embeddings = snapshot_embeddings.logits
                             if mask is not None:
                                 snapshot_embeddings = snapshot_embeddings[mask]
                         sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
@@ -412,12 +414,6 @@ class BaCPTrainer:
         
         self._update_losses(losses, prc_losses, snc_losses, fic_losses, ce_losses, total)
 
-    def _avg_pool_embeddings(self, embeddings, mask):
-        mask = mask.unsqueeze(-1).float()
-        embeddings = embeddings * mask
-        embeddings = embeddings.sum(dim=1) / mask.sum(dim=1).clamp(min=1e-6)
-        return embeddings
-
     def _update_losses(self, losses, prc_losses, snc_losses, fic_losses, ce_losses, total):
         sparsity_key = self._get_sparsity_key()
         if sparsity_key not in self.avg_losses:
@@ -447,8 +443,9 @@ class BaCPTrainer:
             else:
                 return outputs.hidden_states[-1][:, 0, :] # CLS token
         else:
-            model_family = self.model.model_family
             raw_features = self.model(data_batch, extract_raw=True)
+            if hasattr(raw_features, 'logits'):
+                return raw_features.logits
             return raw_features
         
             # if model_family == 'vgg':
