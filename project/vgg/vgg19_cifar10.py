@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # VGG-11 Testing Notebook
+# MAGIC # VGG-19 Testing Notebook
 
 # COMMAND ----------
 
@@ -452,7 +452,6 @@ if TRAIN:
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
 
 # COMMAND ----------
 

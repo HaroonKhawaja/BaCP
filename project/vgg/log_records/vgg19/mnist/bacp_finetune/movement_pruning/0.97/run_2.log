@@ -1,0 +1,39 @@
+Model : vgg19 - Learning Type: mnist/bacp_finetune/movement_pruning/0.97
+Configuration:
+model_type: cv
+model_name: vgg19
+model_task: mnist
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 4096
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.0001
+learning_type: bacp_finetune
+optimizer_type: adamw
+prune: False
+pruning_type: movement_pruning
+target_sparsity: 0.97
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vgg19/mnist/vgg19_mnist_movement_pruning_0.97_bacp_finetune.pt
+finetuned_weights: /dbfs/research/vgg19/mnist/vgg19_mnist_movement_pruning_0.97_bacp_pruning.pt
+
+Epoch [1/50]: Avg Loss: 2.3024 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [2/50]: Avg Loss: 2.3021 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [3/50]: Avg Loss: 2.3024 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [4/50]: Avg Loss: 2.3021 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [5/50]: Avg Loss: 2.3021 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [6/50]: Avg Loss: 2.3025 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [7/50]: Avg Loss: 2.3019 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [8/50]: Avg Loss: 2.3021 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [9/50]: Avg Loss: 2.3021 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [10/50]: Avg Loss: 2.3020 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [11/50]: Avg Loss: 2.3022 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [12/50]: Avg Loss: 2.3021 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [13/50]: Avg Loss: 2.3021 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [14/50]: Avg Loss: 2.3019 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0
+Epoch [15/50]: Avg Loss: 2.3024 | Avg Accuracy: 11.19 | Avg Perplexity: 0.000 |Model Sparsity: 1.0

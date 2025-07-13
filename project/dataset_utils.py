@@ -156,6 +156,10 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
     
     def get_contrastive_transform(dataset_name, size, s):
         mean, std = DATASET_STATS[dataset_name]
+        kernel_size = int(0.1 * size)
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+
         if dataset_name == 'cifar10':
             transforms = [
                 T.Resize((size, size)),
@@ -168,23 +172,24 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.RandomHorizontalFlip(),
                 T.RandomApply([color_jitter], p=0.8),
                 T.RandomGrayscale(p=0.2),
-                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
             ]
         elif dataset_name == 'svhn':
             color_jitter = T.ColorJitter(0.4 * s, 0.4 * s, 0.4 * s, 0.1 * s)
+            
             transforms = [
                 T.Resize((size, size)),
                 T.RandomCrop(size, padding=4),
                 T.RandomRotation(10),
                 T.RandomApply([color_jitter], p=0.6),
                 T.RandomGrayscale(p=0.1),
-                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
             ]
         elif dataset_name in ['mnist', 'fmnist', 'emnist']:
             transforms = [
                 T.Resize((size, size)),
                 T.RandomRotation(10),
-                T.RandomApply([T.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))], p=0.3)
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 1.0))
             ]
         elif dataset_name == 'food101':
             transforms = [
@@ -192,14 +197,14 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.RandomHorizontalFlip(),
                 T.RandomApply([color_jitter], p=0.8),
                 T.RandomGrayscale(p=0.2),
-                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
             ]
         elif dataset_name == 'flowers102':
             transforms = [
                 T.Resize((size, size)),
                 T.RandomResizedCrop(size, scale=(0.2, 1.0)),
                 T.RandomHorizontalFlip(),
-                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
             ]
         elif dataset_name == 'caltech101':
             transforms = [
@@ -208,7 +213,7 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.RandomHorizontalFlip(),
                 T.ColorJitter(0.8, 0.8, 0.8, 0.2),
                 T.RandomGrayscale(p=0.2),
-                T.GaussianBlur(kernel_size=int(0.1 * size), sigma=(0.1, 2.0)),
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
             ]
         else:
             raise ValueError(f"Unsupported dataset: {dataset_name}")

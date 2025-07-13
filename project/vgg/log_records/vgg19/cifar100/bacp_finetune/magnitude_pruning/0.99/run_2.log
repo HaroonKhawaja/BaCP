@@ -1,0 +1,30 @@
+Model : vgg19 - Learning Type: cifar100/bacp_finetune/magnitude_pruning/0.99
+Configuration:
+model_type: cv
+model_name: vgg19
+model_task: cifar100
+num_classes: 100
+criterion: CrossEntropyLoss()
+embedding_dim: 4096
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.0001
+learning_type: bacp_finetune
+optimizer_type: adamw
+prune: False
+pruning_type: magnitude_pruning
+target_sparsity: 0.99
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vgg19/cifar100/vgg19_cifar100_magnitude_pruning_0.99_bacp_finetune.pt
+finetuned_weights: /dbfs/research/vgg19/cifar100/vgg19_cifar100_magnitude_pruning_0.99_bacp_pruning.pt
+
+Epoch [1/50]: Avg Loss: 3.0190 | Avg Accuracy: 48.84 | Avg Perplexity: 0.000 |Model Sparsity: 0.99
+Epoch [2/50]: Avg Loss: 1.9726 | Avg Accuracy: 52.68 | Avg Perplexity: 0.000 |Model Sparsity: 0.99
+Epoch [3/50]: Avg Loss: 1.8029 | Avg Accuracy: 53.52 | Avg Perplexity: 0.000 |Model Sparsity: 0.99
+Epoch [4/50]: Avg Loss: 1.7080 | Avg Accuracy: 54.35 | Avg Perplexity: 0.000 |Model Sparsity: 0.99
+Epoch [5/50]: Avg Loss: 1.6316 | Avg Accuracy: 55.01 | Avg Perplexity: 0.000 |Model Sparsity: 0.99
+Epoch [6/50]: Avg Loss: 1.5865 | Avg Accuracy: 55.83 | Avg Perplexity: 0.000 |Model Sparsity: 0.99

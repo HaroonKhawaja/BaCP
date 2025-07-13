@@ -1,0 +1,25 @@
+Model : vit_tiny - Learning Type: svhn/baseline
+Configuration:
+model_type: cv
+model_name: vit_tiny
+model_task: svhn
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 192
+epochs: 10
+pruning_epochs: 10
+recovery_epochs: 10
+batch_size: 256
+learning_rate: 0.01
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 2430
+warmup_steps: 243
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vit_tiny/svhn/vit_tiny_svhn_baseline.pt
+
