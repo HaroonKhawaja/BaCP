@@ -1,0 +1,35 @@
+Model : vit_tiny - Learning Type: svhn/baseline
+Configuration:
+model_type: cv
+model_name: vit_tiny
+model_task: svhn
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 192
+epochs: 10
+pruning_epochs: 10
+recovery_epochs: 10
+batch_size: 256
+learning_rate: 0.01
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 2430
+warmup_steps: 243
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vit_tiny/svhn/vit_tiny_svhn_baseline.pt
+
+Epoch [1/10]: Avg Loss: 1.0077 | Avg Accuracy: 91.42 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [2/10]: Avg Loss: 0.2368 | Avg Accuracy: 93.23 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [3/10]: Avg Loss: 0.1738 | Avg Accuracy: 94.64 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [4/10]: Avg Loss: 0.1374 | Avg Accuracy: 94.89 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [5/10]: Avg Loss: 0.1149 | Avg Accuracy: 94.72 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [6/10]: Avg Loss: 0.0920 | Avg Accuracy: 95.26 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [7/10]: Avg Loss: 0.0727 | Avg Accuracy: 95.45 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [8/10]: Avg Loss: 0.0558 | Avg Accuracy: 95.49 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [9/10]: Avg Loss: 0.0387 | Avg Accuracy: 95.58 | Avg Perplexity: 0.000 |Model Sparsity: 0.0
+Epoch [10/10]: Avg Loss: 0.0277 | Avg Accuracy: 95.65 | Avg Perplexity: 0.000 |Model Sparsity: 0.0

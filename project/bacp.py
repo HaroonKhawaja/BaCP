@@ -106,10 +106,7 @@ class BaCPTrainer:
         self.recover = False
 
     def _initialize_heads(self):
-        if self.model_task == 'squad':
-            self.qa_start_head = nn.Linear(self.embedded_dim, 1).to(self.device)
-            self.qa_end_head = nn.Linear(self.embedded_dim, 1).to(self.device)
-        elif self.num_classes is not None:
+        if self.num_classes is not None:
             self.classification_head = nn.Linear(self.embedded_dim, self.num_classes).to(self.device)
         else:
             self.classification_head = None

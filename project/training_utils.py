@@ -14,7 +14,7 @@ from datasets.utils.logging import disable_progress_bar
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
 from constants import *
-from dataset_utils import get_glue_data, get_squad_data, get_wikitext2_data, get_cv_data, CV_DATASETS
+from dataset_utils import get_glue_data, get_wikitext2_data, get_cv_data, CV_DATASETS
 from logger import Logger
 from loss_fn import *
 from models import ClassificationNetwork, EncoderProjectionNetwork
