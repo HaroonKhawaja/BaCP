@@ -159,23 +159,6 @@ class MagnitudePrune(Pruner):
                     new_mask = torch.gt(importance, threshold).float()
                     self.masks[name] = new_mask
 
-class LocalMagnitudePrune(Pruner):
-    def prune(self, model):
-        for name, param in model.named_parameters():
-            if param.dim() > 1 and param.requires_grad and self.target_layer not in name:
-                if name not in self.masks:
-                    self.masks[name] = torch.ones_like(param)
-                
-                # Calculating local importance and threshold
-                importance = torch.abs(self.masks[name] * param).view(-1)
-                total_weights = importance.numel()
-                num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-                threshold = torch.kthvalue(importance, num_to_zero).values.item()
-
-                # Updating masks
-                new_mask = torch.gt(importance.view(param.shape), threshold).float()
-                self.masks[name] = new_mask
-
 class MovementPrune(Pruner):
     def prune(self, model):
         all_importances = []
@@ -201,23 +184,6 @@ class MovementPrune(Pruner):
                     importance = torch.abs(self.masks[name] * param * param.grad)
                     new_mask = torch.gt(importance, threshold).float()
                     self.masks[name] = new_mask
-
-class LocalMovementPrune(Pruner):
-    def prune(self, model):
-        for name, param in model.named_parameters():
-            if param.dim() > 1 and param.requires_grad and self.target_layer not in name:
-                if name not in self.masks:
-                    self.masks[name] = torch.ones_like(param)
-
-                # Calculating local importance and threshold
-                importance = torch.abs(self.masks[name] * param * param.grad).view(-1)
-                total_weights = importance.numel()
-                num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-                threshold = torch.kthvalue(importance, num_to_zero).values.item()
-
-                # Updating masks
-                new_mask = torch.gt(importance.view(param.shape), threshold).float()
-                self.masks[name] = new_mask
     
 class WandaPrune(Pruner):
     def __init__(self, epochs, target_ratio, model, pruning_scheduler):
@@ -325,9 +291,7 @@ class WandaPrune(Pruner):
 
 PRUNER_DICT = {
     "magnitude_pruning": MagnitudePrune,
-    "local_magnitude_pruning": LocalMagnitudePrune,
     "movement_pruning": MovementPrune,
-    "local_movement_pruning": LocalMovementPrune,
     "wanda_pruning": WandaPrune
 }
 
