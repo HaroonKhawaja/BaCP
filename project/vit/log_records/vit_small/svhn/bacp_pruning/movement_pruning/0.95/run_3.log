@@ -1,0 +1,26 @@
+Model : vit_small - Learning Type: svhn/bacp_pruning/movement_pruning/0.95
+Configuration:
+model_name: vit_small
+model_task: svhn
+model_type: cv
+num_classes: 10
+batch_size: 256
+learning_rate: 0.01
+optimizer_type: sgd
+epochs: 5
+recovery_epochs: 10
+patience: 20
+pruning_type: movement_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+pruning_epochs: 5
+n_views: 2
+temperature: 0.15
+base_temperature: 0.15
+device: cuda
+enable_mixed_precision: True
+num_workers: 24
+train_batches: 243
+val_batches: 42
+current_model_path: /dbfs/research/vit_small/svhn/vit_small_svhn_movement_pruning_0.95_bacp_pruning.pt
+

@@ -61,7 +61,7 @@ VALID_DATASETS = {
     },
 }
 
-CV_DATASETS = ['cifar10', 'svhn', 'mnist', 'fmnist', 'emnist', 'food101', 'flowers102', 'cifar100', 'caltech101']
+CV_DATASETS = ['cifar10', 'svhn', 'mnist', 'fmnist', 'emnist', 'cifar100']
 DATASET_STATS = {
     "cifar10": ([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]),
     "cifar100": ([0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]),
@@ -69,9 +69,6 @@ DATASET_STATS = {
     "mnist": ([0.1307], [0.3081]),
     "fmnist": ([0.2860], [0.3530]),
     "emnist": ([0.1307], [0.3081]),
-    "food101": ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    "flowers102": ([0.4349, 0.3836, 0.2968], [0.2963, 0.2458, 0.2686]),
-    "caltech101": ([0.5459, 0.5222, 0.4782], [0.2484, 0.2431, 0.2466]),
     } 
 GRAYSCALE_DATASETS = {"mnist", "fmnist", "emnist"}
 

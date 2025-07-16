@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # VGG-19 Testing Notebook
+# MAGIC # ViT-Small Testing Notebook
 
 # COMMAND ----------
 
@@ -25,6 +25,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from trainer import Trainer, TrainingArguments
 from bacp import BaCPTrainer, BaCPTrainingArguments
+from ablation_modules import LearningRateSweep, BaCPLearningRateSweep
 from unstructured_pruning import check_sparsity_distribution
 from utils import *
 from constants import *
@@ -36,8 +37,9 @@ print(f"{device = }")
 # COMMAND ----------
 
 # Notebook specific variables
-MODEL_NAME = 'vgg19'
-MODEL_TASK = 'fmnist'
+MODEL_NAME = 'vit_small'
+MODEL_TASK = 'emnist'
+TRAIN = True
 
 # COMMAND ----------
 
@@ -49,16 +51,15 @@ MODEL_TASK = 'fmnist'
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
     learning_rate=0.01,
     scheduler_type='linear_with_warmup',
-    epochs=EPOCHS_VGG19,
+    epochs=10,
     learning_type="baseline",
-    patience=20,
 )
 trainer = Trainer(training_args=training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -81,7 +82,7 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
     learning_rate=0.01,
     pruning_type="magnitude_pruning",
@@ -91,13 +92,11 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
-check_sparsity_distribution(trainer.model)
 
 # COMMAND ----------
 
@@ -106,7 +105,7 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
     learning_rate=0.01,
     pruning_type="magnitude_pruning",
@@ -116,7 +115,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -129,7 +128,7 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
     learning_rate=0.01,
     pruning_type="magnitude_pruning",
@@ -139,12 +138,11 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-check_sparsity_distribution(trainer.model)
 
 # COMMAND ----------
 
@@ -158,7 +156,7 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
     learning_rate=0.01,
     pruning_type="movement_pruning",
@@ -168,12 +166,11 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-check_sparsity_distribution(trainer.model)
 
 # COMMAND ----------
 
@@ -182,7 +179,7 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
     learning_rate=0.01,
     pruning_type="movement_pruning",
@@ -192,7 +189,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -205,7 +202,7 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
     learning_rate=0.01,
     pruning_type="movement_pruning",
@@ -215,12 +212,11 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-check_sparsity_distribution(trainer.model)
 
 # COMMAND ----------
 
@@ -240,17 +236,17 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
-    learning_rate=0.1,
+    learning_rate=0.01,
     pruning_type='magnitude_pruning',
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
-    learning_type='bacp_pruning',
+    learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if True:
+if TRAIN:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -270,7 +266,7 @@ training_args = TrainingArguments(
     learning_type="bacp_finetune",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -285,17 +281,17 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
-    learning_rate=0.05,
+    learning_rate=0.01,
     pruning_type='magnitude_pruning',
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
-    learning_type='bacp_pruning',
+    learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if True:
+if TRAIN:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -315,7 +311,7 @@ training_args = TrainingArguments(
     learning_type="bacp_finetune",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -330,17 +326,17 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
-    learning_rate=0.1,
+    learning_rate=0.01,
     pruning_type='magnitude_pruning',
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
-    learning_type='bacp_pruning',
+    learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if True:
+if TRAIN:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -360,13 +356,11 @@ training_args = TrainingArguments(
     learning_type="bacp_finetune",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
-check_sparsity_distribution(trainer.model)
 
 
 # COMMAND ----------
@@ -382,17 +376,17 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
-    learning_rate=0.1,
+    learning_rate=0.01,
     pruning_type='movement_pruning',
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
-    learning_type='bacp_pruning',
+    learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if True:
+if TRAIN:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -412,12 +406,11 @@ training_args = TrainingArguments(
     learning_type="bacp_finetune",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
 
 # COMMAND ----------
 
@@ -427,17 +420,17 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
-    learning_rate=0.1,
+    learning_rate=0.01,
     pruning_type='movement_pruning',
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
-    learning_type='bacp_pruning',
+    learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if True:
+if TRAIN:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -457,7 +450,7 @@ training_args = TrainingArguments(
     learning_type="bacp_finetune",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -472,17 +465,17 @@ finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MOD
 bacp_training_args = BaCPTrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
-    batch_size=BATCH_SIZE,
+    batch_size=BATCH_SIZE_VIT,
     optimizer_type='sgd',
-    learning_rate=0.1,
+    learning_rate=0.01,
     pruning_type='movement_pruning',
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
-    learning_type='bacp_pruning',
+    learning_type='bacp_pruning'
 )
 bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
-if True:
+if TRAIN:
     bacp_trainer.train()
 
 # Finetuning Phase
@@ -502,11 +495,9 @@ training_args = TrainingArguments(
     learning_type="bacp_finetune",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
-check_sparsity_distribution(trainer.model)
 
