@@ -308,9 +308,9 @@ class Trainer:
         total_loss, avg_perplexity = 0, 0
 
         if mode == 'eval' and self.testloader:
-            batchloader = tqdm(self.testloader, desc=desc) if self.enable_tqdm else self.testloader
+            batchloader = tqdm(self.testloader, desc=desc, leave=False) if self.enable_tqdm else self.testloader
         else:
-            batchloader = tqdm(self.valloader, desc=desc) if self.enable_tqdm  else self.valloader
+            batchloader = tqdm(self.valloader, desc=desc, leave=False) if self.enable_tqdm  else self.valloader
             
         with torch.no_grad():
             for step, batch in enumerate(batchloader):

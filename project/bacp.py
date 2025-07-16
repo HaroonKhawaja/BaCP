@@ -194,11 +194,6 @@ class BaCPTrainer:
             # Training phase
             desc = f"Training Epoch [{epoch+1}/{self.epochs}]"
             self.train_epoch(epoch, desc)
-            
-            if len(self.snapshots) < self.pruning_epochs:
-                state = deepcopy(self.model.state_dict())
-                snapshot_model = self._create_model_from_snapshot(state)
-                self.snapshots.append(snapshot_model)
 
             # Printing statistics
             sparsity = self._get_sparsity_key()
@@ -222,8 +217,13 @@ class BaCPTrainer:
                 print(f"[BaCP] weights saved!")
 
             if self.pruner is not None:
-                self.retrain()                    
-            
+                self.retrain()          
+
+            if len(self.snapshots) < self.pruning_epochs:
+                state = deepcopy(self.model.state_dict())
+                snapshot_model = self._create_model_from_snapshot(state)
+                self.snapshots.append(snapshot_model)
+
     def retrain(self):
         self.recover = True
         for epoch in range(self.recovery_epochs):
@@ -524,8 +524,7 @@ class BaCPTrainer:
 
     def _unsupervised_criterion(self, features1, features2):
         loss = self.unsupervised_loss(features1, features2)
-        loss += self.unsupervised_loss(features2, features1)
-        return (loss)/2
+        return loss
     
     def generate_mask_from_model(self):
         load_weights(self.model, self.save_path)
