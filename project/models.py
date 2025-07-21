@@ -8,43 +8,6 @@ from transformers import ViTConfig, ViTModel
 from utils import freeze_weights
 
 PRETRAINED = True
-# MODEL_SPECS = {
-#     "resnet50":  {"fn": resnet50,  "dim": 2048, "weight": ResNet50_Weights.IMAGENET1K_V1, "type": "vision", "family": "resnet"},
-#     "resnet101": {"fn": resnet101, "dim": 2048, "weight": ResNet101_Weights.IMAGENET1K_V1, "type": "vision", "family": "resnet"},
-#     "vgg11":     {"fn": vgg11,     "dim": 4096, "weight": VGG11_Weights.IMAGENET1K_V1,     "type": "vision", "family": "vgg"},
-#     "vgg19":     {"fn": vgg19,     "dim": 4096, "weight": VGG19_Weights.IMAGENET1K_V1,     "type": "vision", "family": "vgg"},
-#     "vitb16":    {"fn": vit_b_16,  "dim": 768,  "weight": ViT_B_16_Weights.IMAGENET1K_V1,  "type": "vision", "family": "vit"},    
-#     "vitl16":    {"fn": vit_l_16,  "dim": 1024, "weight": ViT_L_16_Weights.IMAGENET1K_V1,  "type": "vision", "family": "vit"},
-#     "distilbert-base-uncased": {"dim": 768, "type": "language", "family": "bert"},
-#     "roberta-base": {"dim": 768, "type": "language", "family": "bert"},
-#     'vits16':   {'fn': timm.create_model, ''}
-# }
-
-def get_model_components(model_name, pretrained=True, num_llm_labels=2, model_task='cls'):
-    if model_name not in MODEL_SPECS:
-        raise ValueError(f"Unknown model: '{model_name}'. Available: {list(MODEL_SPECS.keys())}")
-
-    spec = MODEL_SPECS[model_name]
-    if spec["type"] == "vision":
-        if model_name.startswith('vit'):
-            model = spec["fn"](spec["weight"], pretrained=True)
-        else:
-            model = spec["fn"](weights=spec["weight"] if pretrained else None)
-    else:
-        if model_task == 'squad':
-            model = AutoModelForQuestionAnswering.from_pretrained(model_name)
-        elif model_task == 'wikitext2':
-            model = AutoModelForMaskedLM.from_pretrained(model_name)
-        else:
-            model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_llm_labels)
-    return {
-        "model": model,
-        "embedding_dim": spec["dim"],
-        "model_type": spec["type"],
-        "model_family": spec["family"]
-    }
-
-
 MODELS = {
     'resnet50': {
         'fn': resnet50,
@@ -88,6 +51,12 @@ MODELS = {
         'family': 'bert',
         'type': 'language',
     },
+    'distilbert-base-uncased': {
+        'fn': AutoModelForSequenceClassification,
+        'weight': 'distilbert-base-uncased',
+        'family': 'bert',
+        'type': 'language',
+    },
     'roberta-base-mlm': {
         'fn': AutoModelForMaskedLM,
         'weight': 'roberta-base',
@@ -104,7 +73,6 @@ def initialize_model_components(model_name, pretrained=True, model_task=''):
     if model_name not in MODELS:
         raise ValueError(f"Unknown model: '{model_name}'. Available: {list(MODELS.keys())}")
     
-
     spec = MODELS[model_name]
 
     model_fn = spec['fn']
@@ -145,7 +113,8 @@ def initialize_model_components(model_name, pretrained=True, model_task=''):
 
 def make_projection_head(args, output_dims=128):
     if args.model_type == 'language':
-        raise NotImplementedError("Language models not supported.")
+        args.projection_head = None
+        return
 
     if args.model_family == 'resnet':
         args.projection_head = nn.Sequential(
@@ -161,7 +130,11 @@ def make_projection_head(args, output_dims=128):
         raise ValueError(f"Model family '{args.model_family}' not supported.")
 
 def adapt_head_for_model(args, head):
-    if args.model_type == 'vision':
+    if args.model_type == 'language':
+        if hasattr(args.model, 'model') and hasattr(args.model.model, 'classifier'):
+            args.model.model.classifier = head
+    
+    elif args.model_type == 'vision':
         # ResNet Support
         if hasattr(args.model, 'fc'):
             args.model.fc = head
@@ -175,12 +148,6 @@ def adapt_head_for_model(args, head):
         # ViT Support 
         elif hasattr(args.model, 'head'):
             args.model.head = head
-        else:
-            raise ValueError(f"Model '{args.model}' does not have a head.")
-    elif args.model_type == 'language':
-        # DistilBERT Support
-        if hasattr(args.model, 'vocab_projector'):
-            args.model.vocab_projector = head
         else:
             raise ValueError(f"Model '{args.model}' does not have a head.")
     else:
@@ -210,7 +177,12 @@ class EncoderProjectionNetwork(nn.Module):
 
         make_projection_head(self, output_dims)
         adapt_head_for_model(self, nn.Identity())
-        
+
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model.to(self.device)
+        if self.projection_head:
+            self.projection_head.to(self.device)   
+
     def forward(self, x, extract_raw=False):
         if self.model_type == "vision":
             raw_features = self.model(x)
@@ -255,6 +227,9 @@ class ClassificationNetwork(nn.Module):
         # Attaching the classification head
         classification_head = nn.Linear(self.embedding_dim, num_classes)
         adapt_head_for_model(self, classification_head)
+
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model.to(device)
     
     def forward(self, x):
         if self.model_type == "vision":

@@ -1,0 +1,68 @@
+Model : vit_small - Learning Type: emnist/bacp_finetune/magnitude_pruning/0.95
+Configuration:
+model_type: cv
+model_name: vit_small
+model_task: emnist
+num_classes: 47
+criterion: CrossEntropyLoss()
+embedding_dim: 384
+epochs: 50
+pruning_epochs: 50
+recovery_epochs: 10
+batch_size: 256
+learning_rate: 0.0001
+learning_type: bacp_finetune
+optimizer_type: adamw
+prune: False
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/vit_small/emnist/vit_small_emnist_magnitude_pruning_0.95_bacp_finetune.pt
+finetuned_weights: /dbfs/research/vit_small/emnist/vit_small_emnist_magnitude_pruning_0.95_bacp_pruning.pt
+
+Epoch [1/50]: Avg Loss: 0.7900 | Avg Accuracy: 89.12 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [2/50]: Avg Loss: 0.2948 | Avg Accuracy: 89.10 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [3/50]: Avg Loss: 0.2676 | Avg Accuracy: 89.64 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [4/50]: Avg Loss: 0.2584 | Avg Accuracy: 89.91 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [5/50]: Avg Loss: 0.2529 | Avg Accuracy: 90.13 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [6/50]: Avg Loss: 0.2469 | Avg Accuracy: 89.39 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [7/50]: Avg Loss: 0.2448 | Avg Accuracy: 89.55 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [8/50]: Avg Loss: 0.2417 | Avg Accuracy: 89.92 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [9/50]: Avg Loss: 0.2375 | Avg Accuracy: 89.94 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [10/50]: Avg Loss: 0.2307 | Avg Accuracy: 89.74 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [11/50]: Avg Loss: 0.2321 | Avg Accuracy: 89.84 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [12/50]: Avg Loss: 0.2287 | Avg Accuracy: 90.09 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [13/50]: Avg Loss: 0.2267 | Avg Accuracy: 89.65 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [14/50]: Avg Loss: 0.2227 | Avg Accuracy: 89.65 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [15/50]: Avg Loss: 0.2214 | Avg Accuracy: 90.03 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [16/50]: Avg Loss: 0.2203 | Avg Accuracy: 89.94 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [17/50]: Avg Loss: 0.2171 | Avg Accuracy: 89.91 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [18/50]: Avg Loss: 0.2147 | Avg Accuracy: 89.97 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [19/50]: Avg Loss: 0.2119 | Avg Accuracy: 90.13 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [20/50]: Avg Loss: 0.2106 | Avg Accuracy: 89.35 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [21/50]: Avg Loss: 0.2087 | Avg Accuracy: 90.18 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [22/50]: Avg Loss: 0.2075 | Avg Accuracy: 89.92 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [23/50]: Avg Loss: 0.2047 | Avg Accuracy: 89.89 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [24/50]: Avg Loss: 0.2052 | Avg Accuracy: 90.22 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [25/50]: Avg Loss: 0.2026 | Avg Accuracy: 89.55 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [26/50]: Avg Loss: 0.1985 | Avg Accuracy: 89.85 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [27/50]: Avg Loss: 0.1986 | Avg Accuracy: 89.99 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [28/50]: Avg Loss: 0.1973 | Avg Accuracy: 89.56 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [29/50]: Avg Loss: 0.1958 | Avg Accuracy: 89.55 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [30/50]: Avg Loss: 0.1935 | Avg Accuracy: 89.74 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [31/50]: Avg Loss: 0.1920 | Avg Accuracy: 89.23 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [32/50]: Avg Loss: 0.1904 | Avg Accuracy: 89.89 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [33/50]: Avg Loss: 0.1895 | Avg Accuracy: 90.11 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [34/50]: Avg Loss: 0.1878 | Avg Accuracy: 89.87 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [35/50]: Avg Loss: 0.1833 | Avg Accuracy: 89.73 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [36/50]: Avg Loss: 0.1826 | Avg Accuracy: 89.85 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [37/50]: Avg Loss: 0.1821 | Avg Accuracy: 89.70 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [38/50]: Avg Loss: 0.1808 | Avg Accuracy: 89.84 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [39/50]: Avg Loss: 0.1798 | Avg Accuracy: 89.40 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [40/50]: Avg Loss: 0.1794 | Avg Accuracy: 89.46 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [41/50]: Avg Loss: 0.1757 | Avg Accuracy: 89.58 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [42/50]: Avg Loss: 0.1740 | Avg Accuracy: 89.81 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [43/50]: Avg Loss: 0.1726 | Avg Accuracy: 89.86 | Avg Perplexity: 0.000 |Model Sparsity: 0.95
+Epoch [44/50]: Avg Loss: 0.1723 | Avg Accuracy: 89.90 | Avg Perplexity: 0.000 |Model Sparsity: 0.95

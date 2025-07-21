@@ -185,11 +185,16 @@ class Trainer:
             else:
                 self.accuracies.append(avg_acc)
                 
-            info = (f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
-                    f"Avg Accuracy: {avg_acc} | Avg Perplexity: {avg_perplexity} |"
-                    f"Model Sparsity: {self._get_sparsity_key()}\n")
+            if self.model_type == 'llm' and self.model_task == 'wikitext2':
+                info = (f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
+                       f"Avg Accuracy: {avg_acc:.2f} | Avg Perplexity: {avg_perplexity:.3f} | "
+                       f"Model Sparsity: {self._get_sparsity_key()}\n")
+            else:
+                info = (f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
+                       f"Avg Accuracy: {avg_acc:.2f} | "
+                       f"Model Sparsity: {self._get_sparsity_key()}\n")
             print(info)
-            
+
             if self.logger is not None:
                 self.logger.log_epochs(info)
             
@@ -228,13 +233,13 @@ class Trainer:
             # Format info message based on model type and task
             if self.model_type == 'llm' and self.model_task == 'wikitext2':
                 info = (f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc} | Avg Perplexity: {avg_perplexity} | "
+                       f"Avg Accuracy: {avg_acc:.2f} | Avg Perplexity: {avg_perplexity:.3f} | "
                        f"Model Sparsity: {self._get_sparsity_key()}\n")
             else:
                 info = (f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc} | "
+                       f"Avg Accuracy: {avg_acc:.2f} | "
                        f"Model Sparsity: {self._get_sparsity_key()}\n")
-            print(info)
+            print(info) 
 
             if self.logger is not None:
                 self.logger.log_epochs(info)
@@ -375,7 +380,7 @@ class Trainer:
                 if self.enable_tqdm:
                     batchloader.set_postfix(**metrics)
 
-        return metrics['accuracy'], metrics['perplexity']
+        return avg_acc, avg_perplexity
 
     def evaluate(self, load=True):
         """Load weights and evaluate the model on validation or test set. Returns accuracy in percentage."""
@@ -395,8 +400,8 @@ class Trainer:
         avg_acc, avg_perplexity = self._run_validation_epoch(desc, 'eval')
 
         return {
-            "average_accuracy": avg_acc, 
-            "average_perplexity": avg_perplexity if avg_perplexity else None,             
+            "average_accuracy": round(avg_acc, 2), 
+            "average_perplexity": round(avg_perplexity, 3) if avg_perplexity else None,             
         }
 
     def _extract_normalized_answer(self, input_ids, start_idx, end_idx):

@@ -39,7 +39,7 @@ print(f"{device = }")
 # Notebook specific variables
 MODEL_NAME = 'vit_small'
 MODEL_TASK = 'emnist'
-TRAIN = True
+TRAIN = False
 
 # COMMAND ----------
 

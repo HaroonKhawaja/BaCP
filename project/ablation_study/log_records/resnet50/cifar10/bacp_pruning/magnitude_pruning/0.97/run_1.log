@@ -1,0 +1,47 @@
+Model : resnet50 - Learning Type: cifar10/bacp_pruning/magnitude_pruning/0.97
+Configuration:
+model_name: resnet50
+model_task: cifar10
+model_type: cv
+num_classes: 10
+batch_size: 512
+learning_rate: 0.1
+optimizer_type: sgd
+epochs: 5
+recovery_epochs: 10
+patience: 20
+pruning_type: magnitude_pruning
+target_sparsity: 0.97
+sparsity_scheduler: cubic
+pruning_epochs: 5
+n_views: 2
+temperature: 0.15
+base_temperature: 0.15
+device: cuda
+enable_mixed_precision: True
+num_workers: 24
+train_batches: 83
+val_batches: 14
+current_model_path: /dbfs/research/resnet50/cifar10/resnet50_cifar10_magnitude_pruning_0.97_bacp_pruning.pt
+
+Epoch [1/5]: Avg Total Loss: 7.5246 | Avg PrC Loss: 3.5619 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 3.5898 | Avg CE Loss: 0.3729 | Model Sparsity: 0.4734
+Retraining Epoch [1/10]: Avg Total Loss: 6.8382 | Avg PrC Loss: 3.4836 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 3.1634 | Avg CE Loss: 0.1913 | Model Sparsity: 0.4734
+Retraining Epoch [2/10]: Avg Total Loss: 6.5755 | Avg PrC Loss: 3.4602 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.9746 | Avg CE Loss: 0.1407 | Model Sparsity: 0.4734
+Retraining Epoch [3/10]: Avg Total Loss: 6.4887 | Avg PrC Loss: 3.4501 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.9275 | Avg CE Loss: 0.1111 | Model Sparsity: 0.4734
+Retraining Epoch [4/10]: Avg Total Loss: 6.4309 | Avg PrC Loss: 3.4392 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.8956 | Avg CE Loss: 0.0961 | Model Sparsity: 0.4734
+Retraining Epoch [5/10]: Avg Total Loss: 6.3998 | Avg PrC Loss: 3.4331 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.8788 | Avg CE Loss: 0.0879 | Model Sparsity: 0.4734
+Retraining Epoch [6/10]: Avg Total Loss: 6.3698 | Avg PrC Loss: 3.4286 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.8609 | Avg CE Loss: 0.0803 | Model Sparsity: 0.4734
+Retraining Epoch [7/10]: Avg Total Loss: 6.3601 | Avg PrC Loss: 3.4258 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.8568 | Avg CE Loss: 0.0775 | Model Sparsity: 0.4734
+Retraining Epoch [8/10]: Avg Total Loss: 6.3443 | Avg PrC Loss: 3.4232 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.8485 | Avg CE Loss: 0.0727 | Model Sparsity: 0.4734
+Retraining Epoch [9/10]: Avg Total Loss: 6.3365 | Avg PrC Loss: 3.4213 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.8439 | Avg CE Loss: 0.0712 | Model Sparsity: 0.4734
+Retraining Epoch [10/10]: Avg Total Loss: 6.3297 | Avg PrC Loss: 3.4193 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.8413 | Avg CE Loss: 0.0691 | Model Sparsity: 0.4734
+Epoch [2/5]: Avg Total Loss: 8.9424 | Avg PrC Loss: 3.4468 | Avg SnC Loss: 2.5819 | Avg FiC Loss: 2.8385 | Avg CE Loss: 0.0751 | Model Sparsity: 0.7605
+Retraining Epoch [1/10]: Avg Total Loss: 8.9325 | Avg PrC Loss: 3.4457 | Avg SnC Loss: 2.5799 | Avg FiC Loss: 2.8329 | Avg CE Loss: 0.0740 | Model Sparsity: 0.7605
+Retraining Epoch [2/10]: Avg Total Loss: 8.9237 | Avg PrC Loss: 3.4440 | Avg SnC Loss: 2.5760 | Avg FiC Loss: 2.8315 | Avg CE Loss: 0.0723 | Model Sparsity: 0.7605
+Retraining Epoch [3/10]: Avg Total Loss: 8.9203 | Avg PrC Loss: 3.4432 | Avg SnC Loss: 2.5761 | Avg FiC Loss: 2.8301 | Avg CE Loss: 0.0709 | Model Sparsity: 0.7605
+Retraining Epoch [4/10]: Avg Total Loss: 8.9058 | Avg PrC Loss: 3.4423 | Avg SnC Loss: 2.5700 | Avg FiC Loss: 2.8252 | Avg CE Loss: 0.0684 | Model Sparsity: 0.7605
+Retraining Epoch [5/10]: Avg Total Loss: 8.9080 | Avg PrC Loss: 3.4420 | Avg SnC Loss: 2.5722 | Avg FiC Loss: 2.8251 | Avg CE Loss: 0.0686 | Model Sparsity: 0.7605
+Retraining Epoch [6/10]: Avg Total Loss: 8.9022 | Avg PrC Loss: 3.4416 | Avg SnC Loss: 2.5697 | Avg FiC Loss: 2.8232 | Avg CE Loss: 0.0677 | Model Sparsity: 0.7605
+Retraining Epoch [7/10]: Avg Total Loss: 8.8968 | Avg PrC Loss: 3.4405 | Avg SnC Loss: 2.5679 | Avg FiC Loss: 2.8210 | Avg CE Loss: 0.0674 | Model Sparsity: 0.7605
+Retraining Epoch [8/10]: Avg Total Loss: 8.8985 | Avg PrC Loss: 3.4397 | Avg SnC Loss: 2.5680 | Avg FiC Loss: 2.8224 | Avg CE Loss: 0.0684 | Model Sparsity: 0.7605
+Retraining Epoch [9/10]: Avg Total Loss: 8.9032 | Avg PrC Loss: 3.4405 | Avg SnC Loss: 2.5703 | Avg FiC Loss: 2.8237 | Avg CE Loss: 0.0686 | Model Sparsity: 0.7605

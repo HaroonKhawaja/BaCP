@@ -47,6 +47,7 @@ class TemperatureSweep():
         self.optimizer_type, self.learning_rate = opt_type_and_lr
         self.optimizer_type_finetune, self.learning_rate_finetune = finetune_opt_type_and_lr
         self.finetuned_weights = finetuned_weights
+        self.current_finetuned_weights = None
         self.finetune_epochs = finetune_epochs
         self.is_bacp = True
         self.scheduler_type = None
@@ -145,7 +146,7 @@ class LossFunctionSweep():
                  opt_type_and_lr,
                  finetune_opt_type_and_lr,
                  finetuned_weights,
-                 tau,
+                 tau=0.07,
                  
                  scheduler_type=None,
                  pruner=None,
@@ -172,6 +173,7 @@ class LossFunctionSweep():
         self.batch_size = batch_size
         self.optimizer_type, self.learning_rate = opt_type_and_lr
         self.optimizer_type_finetune, self.learning_rate_finetune = finetune_opt_type_and_lr
+        self.current_finetuned_weights = None
         self.finetuned_weights = finetuned_weights
         self.finetune_epochs = finetune_epochs
         self.is_bacp = True
@@ -216,7 +218,7 @@ class LossFunctionSweep():
         for i, disable in enumerate(self.configs):
             print(f"TEST {i+1}/{len(self.configs)}: {disable}")
 
-            self.learning_type = f"bacp_TS_{disable}"
+            self.learning_type = f"bacp_LS_{disable}"
             self.disable = disable
 
             _initialize_models(self)
@@ -244,7 +246,7 @@ class LossFunctionSweep():
                 epochs=self.finetune_epochs,
                 finetuned_weights=bacp_trainer.save_path,
                 finetune=True,
-                learning_type=f'finetune_{disable}',
+                learning_type=f'finetune_LS_{disable}',
             )
             trainer = Trainer(training_args)
             trainer.train()
