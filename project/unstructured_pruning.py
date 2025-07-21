@@ -195,12 +195,16 @@ class WandaPrune(Pruner):
         self.is_wanda = True
         self.device = model.model.device if hasattr(model.model, 'device') else get_device()
 
+        print(self.device)
+        print(model)
         if hasattr(model.model, 'distilbert') and hasattr(model.model.distilbert, 'transformer') and hasattr(model.model.distilbert.transformer, 'layer'):
             self.prefix = "distilbert.transformer.layer"
         elif hasattr(model.model, 'roberta') and hasattr(model.model.roberta, 'encoder') and hasattr(model.model.roberta.encoder, 'layer'):
             self.prefix = "roberta.encoder.layer"
         elif hasattr(model.model, 'encoder') and hasattr(model.model.encoder, 'layers'):
             self.prefix = "encoder.layers"
+        elif hasattr(model.model, 'vit') and hasattr(model.model.vit, 'encoder') and hasattr(model.model.vit.encoder, 'layer'):
+            self.prefix = "vit.encoder.layer"
         else:
             raise ValueError("Model does not contain layers.")
 
@@ -266,6 +270,9 @@ class WandaPrune(Pruner):
                 self.rows, self.cols = self.layer.weight.shape
                 self.device = self.layer.weight.device
                 self.scaler_row = torch.zeros((self.cols), device=self.device)
+            else:
+                self.device = layer.device
+                
             self.layer_name = name
             self.nsamples = 0
 

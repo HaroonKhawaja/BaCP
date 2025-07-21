@@ -131,6 +131,13 @@ class BaCPTrainer:
         if isinstance(self.lambda1, nn.Parameter):
             self.optimizer.add_param_group({'params': [self.lambda1, self.lambda2, self.lambda3, self.lambda4]})
 
+        self.lambda_history = {
+            'lambda1': [],
+            'lambda2': [],
+            'lambda3': [],
+            'lambda4': [],
+        }
+
     def _initialize_metric_lists(self):
         self.avg_losses = {}
         self.avg_PrC = {}
@@ -281,25 +288,30 @@ class BaCPTrainer:
             else:
                 mask = None
 
-            if hasattr(self, 'disable') and self.disable == 'use_different_data_view':
-                input_data = batch['data2'].to(self.device)
-            elif hasattr(self, 'disable') and self.disable == 'use_same_data_view':
-                input_data = batch['data1'].to(self.device)
-            else:
-                input_data = batch['data2'].to(self.device)
+            if self.model_type == 'cv':
+                if hasattr(self, 'disable') and self.disable == 'use_different_data_view':
+                    input_data = batch['data2'].to(self.device)
+                elif hasattr(self, 'disable') and self.disable == 'use_same_data_view':
+                    input_data = batch['data1'].to(self.device)
+                else:
+                    input_data = batch['data2'].to(self.device)
 
             with autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext():
 
                 current_embeddings, current_logits = self._get_embeddings_and_logits(
-                    batch if self.model_type == 'llm' else batch['data1'], mask
+                    batch if self.model_type == 'llm' else batch['data1']
                 )
                 with torch.no_grad():
-                    pretrained_embeddings = self.pre_trained_model(input_data)
-                    finetuned_embeddings = self.finetuned_model(input_data)
-                    if hasattr(pretrained_embeddings, 'logits') and hasattr(finetuned_embeddings, 'logits'):
-                        pretrained_embeddings = pretrained_embeddings.logits
-                        finetuned_embeddings = finetuned_embeddings.logits
-
+                    if self.model_type == 'llm':
+                        pretrained_embeddings = F.normalize(self.pre_trained_model(input_data).hidden_states[-1][:, 0], dim=1)          
+                        finetuned_embeddings = F.normalize(self.finetuned_model(input_data).hidden_states[-1][:, 0], dim=1)
+                    else:
+                        pretrained_embeddings = self.pre_trained_model(input_data)
+                        finetuned_embeddings = self.finetuned_model(input_data)
+                        if hasattr(pretrained_embeddings, 'logits') and hasattr(finetuned_embeddings, 'logits'):
+                            pretrained_embeddings = pretrained_embeddings.logits
+                            finetuned_embeddings = finetuned_embeddings.logits
+                    
                 if mask is not None:
                     labels = labels[mask]
                     current_logits = current_logits[mask]
@@ -324,7 +336,9 @@ class BaCPTrainer:
                     L_snc_sup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(input_data)
+                            snapshot_embeddings = snapshot_model(input_data)
+                            if hasattr(snapshot_embeddings, 'logits'):
+                                snapshot_embeddings = snapshot_embeddings.logits
                             if mask is not None:
                                 snapshot_embeddings = snapshot_embeddings[mask]
                         sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
@@ -344,7 +358,9 @@ class BaCPTrainer:
                     L_snc_unsup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(batch).logits if self.model_type == 'llm' else snapshot_model(input_data)
+                            snapshot_embeddings = snapshot_model(input_data)
+                            if hasattr(snapshot_embeddings, 'logits'):
+                                snapshot_embeddings = snapshot_embeddings.logits
                             if mask is not None:
                                 snapshot_embeddings = snapshot_embeddings[mask]
                         L_snc_unsup += self._unsupervised_criterion(current_embeddings, snapshot_embeddings)
@@ -373,41 +389,53 @@ class BaCPTrainer:
                     L_snc_unsup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(input_data)
-                            if hasattr(snapshot_embeddings, 'logits'):
-                                snapshot_embeddings = snapshot_embeddings.logits
+                            if self.model_type == 'llm':
+                                snapshot_embeddings = F.normalize(snapshot_model(input_data).hidden_states[-1][:, 0], dim=1)
+                            else:
+                                snapshot_embeddings = snapshot_model(input_data)
+                                if hasattr(snapshot_embeddings, 'logits'):
+                                    snapshot_embeddings = snapshot_embeddings.logits
                             if mask is not None:
                                 snapshot_embeddings = snapshot_embeddings[mask]
+
                         sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
                         L_snc_sup += self._supervised_criterion(sup_features_snc, labels)
                         L_snc_unsup += self._unsupervised_criterion(current_embeddings, snapshot_embeddings)
                     L_snc_total = L_snc_sup + L_snc_unsup
 
             # Total loss calculation
+            ce_loss = CE_loss * self.lambda1
+            prc_loss = L_prc_total * self.lambda2
+            snc_loss = L_snc_total * self.lambda3
+            fic_loss = L_fic_total * self.lambda4
             total_loss = (
-                self.lambda1 * CE_loss +
-                self.lambda2 * L_prc_total +
-                self.lambda3 * L_snc_total +
-                self.lambda4 * L_fic_total
+                ce_loss +
+                prc_loss +
+                snc_loss +
+                fic_loss
                 )
 
             _handle_optimizer_and_pruning(self, total_loss, epoch, step)
 
+            ce_losses += ce_loss.item()
+            prc_losses += prc_loss.item()
+            snc_losses += snc_loss.item()
+            fic_losses += fic_loss.item()
             losses += total_loss.item()
-            ce_losses += (CE_loss.item() * self.lambda1)
-            prc_losses += (L_prc_total.item() * self.lambda2)
-            snc_losses += (L_snc_total.item() * self.lambda3)
-            fic_losses += (L_fic_total.item() * self.lambda4)
             total += 1
-
             if self.enable_tqdm:
                 batchloader.set_postfix({
-                    'Loss': total_loss.item(), 
-                    'PrC Loss': (L_prc_total.item() * self.lambda2), 
-                    'SnC Loss': (L_snc_total.item() * self.lambda3), 
-                    'FiC Loss': (L_fic_total.item() * self.lambda4), 
-                    'CE Loss': (CE_loss.item() * self.lambda1),
+                    'Loss': ce_loss.item(), 
+                    'PrC Loss': prc_loss.item(), 
+                    'SnC Loss': snc_loss.item(), 
+                    'FiC Loss': fic_loss.item(), 
+                    'CE Loss': ce_loss.item(),
                 })
+            
+            self.lambda_history['lambda1'].append(self.lambda1)
+            self.lambda_history['lambda2'].append(self.lambda2)
+            self.lambda_history['lambda3'].append(self.lambda3)
+            self.lambda_history['lambda4'].append(self.lambda4)
         
         self._update_losses(losses, prc_losses, snc_losses, fic_losses, ce_losses, total)
 
@@ -426,7 +454,7 @@ class BaCPTrainer:
         self.avg_FiC[sparsity_key].append(fic_losses / total)
         self.avg_CE[sparsity_key].append(ce_losses / total)
 
-    def _get_embeddings_and_logits(self, data_batch, mask=None):
+    def _get_embeddings_and_logits(self, data_batch):
         raw_features = self._extract_raw_features(data_batch)
         logits = self.classification_head(raw_features)       
         embeddings = self._extract_contrastive_embeddings(raw_features) 
@@ -435,64 +463,18 @@ class BaCPTrainer:
     def _extract_raw_features(self, data_batch):
         if self.model_type == 'llm':
             outputs = self.model(data_batch)
-            if self.model_task in ['squad', 'wikitext2']:
-                return outputs.hidden_states[-1]
-            else:
-                return outputs.hidden_states[-1][:, 0, :] # CLS token
+            return outputs.hidden_states[-1][:, 0, :] # CLS Token
         else:
             raw_features = self.model(data_batch, extract_raw=True)
             if hasattr(raw_features, 'logits'):
                 return raw_features.logits
             return raw_features
-        
-            # if model_family == 'vgg':
-            #     x = self.model.model.features(data_batch)
-            #     x = self.model.model.avgpool(x)
-            #     x = x.reshape(x.shape[0], -1)
-            #     x = self.model.model.classifier[:-1](x)
-            #     return x
-            # elif model_family == 'vit':
-            #     batch_size = data_batch.shape[0]
-            #     x = self.model.model.conv_proj(data_batch)
-            #     class_token = self.model.model.class_token.expand(batch_size, -1, -1)
-            #     x = torch.cat((class_token, x.flatten(2).transpose(1, 2)), axis=1)
-            #     x = self.model.model.encoder(x)
-            #     return x[:, 0, :]
-            # elif model_family == 'resnet':
-            #     x = self.model.model.conv1(data_batch)
-            #     x = self.model.model.bn1(x)
-            #     x = self.model.model.relu(x)
-            #     x = self.model.model.maxpool(x)
-            #     x = self.model.model.layer1(x)
-            #     x = self.model.model.layer2(x)
-            #     x = self.model.model.layer3(x)
-            #     x = self.model.model.layer4(x)
-            #     x = self.model.model.avgpool(x)
-            #     x = x.reshape(x.shape[0], -1)
-            #     return x
-            # else:
-            #     raise ValueError(f"Model family {model_family} not supported.")
-
+ 
     def _extract_contrastive_embeddings(self, raw_features):
         if self.model_type == 'llm':
-            if hasattr(self.model.model, 'vocab_projector'):
-                embeddings = self.model.model.vocab_projector(raw_features)
-            elif hasattr(self.model.model, 'lm_head'):
-                embeddings = self.model.model.lm_head(raw_features)
-            else:
-                raise ValueError(f"Model {self.model.model} does not have a projector layer")
-            return F.normalize(embeddings, dim=1)
+            return F.normalize(raw_features, dim=1)
         else:
-            model_family = self.model.model_family
             embeddings = self.model.projection_head(raw_features)
-            # if model_family == 'vgg':
-            #     embeddings = self.model.model.classifier[-1](raw_features)
-            # elif model_family == 'vit':
-            #     embeddings = self.model.model.heads(raw_features)  
-            # elif model_family == 'resnet':
-            #     embeddings = self.model.model.fc(raw_features)
-            # else:
-            #     raise ValueError(f"Model family {model_family} not supported.")
             return F.normalize(embeddings, dim=1)
 
     def _handle_save(self, epoch):

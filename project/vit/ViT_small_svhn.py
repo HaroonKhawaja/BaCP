@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # ViT-Tiny Testing Notebook
+# MAGIC # ViT-Small Testing Notebook
 
 # COMMAND ----------
 
@@ -456,7 +456,6 @@ if TRAIN:
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
 
-
 # COMMAND ----------
 
 # Initializing finetuned weights path
@@ -500,4 +499,3 @@ if TRAIN:
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-

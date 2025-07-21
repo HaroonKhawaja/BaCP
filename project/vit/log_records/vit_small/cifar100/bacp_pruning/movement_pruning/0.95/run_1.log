@@ -1,0 +1,31 @@
+Model : vit_small - Learning Type: cifar100/bacp_pruning/movement_pruning/0.95
+Configuration:
+model_name: vit_small
+model_task: cifar100
+model_type: cv
+num_classes: 100
+batch_size: 256
+learning_rate: 0.01
+optimizer_type: sgd
+epochs: 5
+recovery_epochs: 10
+patience: 20
+pruning_type: movement_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+pruning_epochs: 5
+n_views: 2
+temperature: 0.15
+base_temperature: 0.15
+device: cuda
+enable_mixed_precision: True
+num_workers: 24
+train_batches: 166
+val_batches: 29
+current_model_path: /dbfs/research/vit_small/cifar100/vit_small_cifar100_movement_pruning_0.95_bacp_pruning.pt
+
+Epoch [1/5]: Avg Total Loss: 6.5378 | Avg PrC Loss: 2.8412 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.6833 | Avg CE Loss: 1.0134 | Model Sparsity: 0.4636
+Retraining Epoch [1/10]: Avg Total Loss: 5.9059 | Avg PrC Loss: 2.7635 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.5196 | Avg CE Loss: 0.6228 | Model Sparsity: 0.4636
+Retraining Epoch [2/10]: Avg Total Loss: 5.7232 | Avg PrC Loss: 2.7395 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.4701 | Avg CE Loss: 0.5136 | Model Sparsity: 0.4636
+Retraining Epoch [3/10]: Avg Total Loss: 5.6297 | Avg PrC Loss: 2.7262 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.4409 | Avg CE Loss: 0.4626 | Model Sparsity: 0.4636
+Retraining Epoch [4/10]: Avg Total Loss: 5.5562 | Avg PrC Loss: 2.7134 | Avg SnC Loss: 0.0000 | Avg FiC Loss: 2.4123 | Avg CE Loss: 0.4305 | Model Sparsity: 0.4636

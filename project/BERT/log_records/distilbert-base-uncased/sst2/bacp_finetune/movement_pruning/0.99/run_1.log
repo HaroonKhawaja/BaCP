@@ -1,0 +1,23 @@
+Model : distilbert-base-uncased - Learning Type: sst2/bacp_finetune/movement_pruning/0.99
+Configuration:
+model_type: llm
+model_name: distilbert-base-uncased
+model_task: sst2
+num_classes: 2
+criterion: CrossEntropyLoss()
+embedding_dim: 768
+epochs: 0
+recovery_epochs: 10
+batch_size: 64
+learning_rate: 1e-06
+learning_type: bacp_finetune
+optimizer_type: adamw
+prune: False
+pruning_type: movement_pruning
+target_sparsity: 0.99
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_sst2_movement_pruning_0.99_bacp_finetune.pt
+finetuned_weights: /dbfs/research/distilbert-base-uncased/sst2/distilbert-base-uncased_sst2_movement_pruning_0.99_bacp_pruning.pt
+
