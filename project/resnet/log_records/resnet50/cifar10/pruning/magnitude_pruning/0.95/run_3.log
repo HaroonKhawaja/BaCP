@@ -1,0 +1,39 @@
+Model : resnet50 - Learning Type: cifar10/pruning/magnitude_pruning/0.95
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.01
+learning_type: pruning
+optimizer_type: sgd
+prune: True
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/cifar10/resnet50_cifar10_magnitude_pruning_0.95_pruning.pt
+finetuned_weights: /dbfs/research/resnet50/cifar10/resnet50_cifar10_baseline.pt
+
+Epoch [1/5]: Avg Loss: 0.0862 | Avg Accuracy: 96.82 | Model Sparsity: 0.4636
+Recovery epoch [1/10]: Avg Loss: 0.0562 | Avg Accuracy: 97.87 | Model Sparsity: 0.4636
+Recovery epoch [2/10]: Avg Loss: 0.0413 | Avg Accuracy: 97.56 | Model Sparsity: 0.4636
+Recovery epoch [3/10]: Avg Loss: 0.0318 | Avg Accuracy: 97.32 | Model Sparsity: 0.4636
+Recovery epoch [4/10]: Avg Loss: 0.0282 | Avg Accuracy: 97.54 | Model Sparsity: 0.4636
+Recovery epoch [5/10]: Avg Loss: 0.0229 | Avg Accuracy: 97.73 | Model Sparsity: 0.4636
+Recovery epoch [6/10]: Avg Loss: 0.0241 | Avg Accuracy: 97.59 | Model Sparsity: 0.4636
+Recovery epoch [7/10]: Avg Loss: 0.0218 | Avg Accuracy: 97.75 | Model Sparsity: 0.4636
+Recovery epoch [8/10]: Avg Loss: 0.0207 | Avg Accuracy: 96.82 | Model Sparsity: 0.4636
+Recovery epoch [9/10]: Avg Loss: 0.0188 | Avg Accuracy: 97.59 | Model Sparsity: 0.4636
+Recovery epoch [10/10]: Avg Loss: 0.0174 | Avg Accuracy: 97.87 | Model Sparsity: 0.4636
+Epoch [2/5]: Avg Loss: 0.0745 | Avg Accuracy: 95.41 | Model Sparsity: 0.4636
+Recovery epoch [1/10]: Avg Loss: 0.0443 | Avg Accuracy: 95.54 | Model Sparsity: 0.4636
+Recovery epoch [2/10]: Avg Loss: 0.0370 | Avg Accuracy: 95.65 | Model Sparsity: 0.4636
+Recovery epoch [3/10]: Avg Loss: 0.0330 | Avg Accuracy: 95.74 | Model Sparsity: 0.4636

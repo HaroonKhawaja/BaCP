@@ -18,7 +18,7 @@ from dataset_utils import get_glue_data, get_wikitext2_data, get_cv_data, CV_DAT
 from logger import Logger
 from loss_fn import *
 from models import ClassificationNetwork, EncoderProjectionNetwork
-from unstructured_pruning import check_model_sparsity, PRUNER_DICT
+from unstructured_pruning import MovementPrune, check_model_sparsity, PRUNER_DICT
 from utils import get_device, load_weights
 
 def _detect_model_type(args):
@@ -188,21 +188,15 @@ def _initialize_pruner(args):
     args.prune = args.pruning_type is not None and args.target_sparsity > 0.0 and not args.finetune
 
     if args.prune:
-        if "wanda" in args.pruning_type:
-            args.pruner = PRUNER_DICT[args.pruning_type](
-                args.pruning_epochs, 
-                args.target_sparsity,
-                args.model, 
-                args.sparsity_scheduler
-            )
-        else:
-            args.pruner = PRUNER_DICT[args.pruning_type](
-                args.pruning_epochs, 
-                args.target_sparsity, 
-                args.sparsity_scheduler
-            )
+        args.pruner = PRUNER_DICT[args.pruning_type](
+            args.pruning_epochs, 
+            args.target_sparsity, 
+            args.model,
+            args.sparsity_scheduler
+        )
     else:
         args.pruner = args.pruner
+
 
     if args.prune:
         print('[TRAINER] Pruning initialized')
@@ -241,11 +235,20 @@ def _initialize_paths_and_logger(args):
     print(f'[TRAINER] Saving model to: {args.save_path}')
 
 def _apply_pruning(args, epoch, step):
-    if (not args.prune and args.pruner is None) or args.recover or args.finetune:
+    if isinstance(args.pruner, MovementPrune):
+        args.pruner.update_movement_scores(args.model, lr=args.optimizer.param_groups[0]['lr'])
+
+    if not args.prune or args.pruner is None or args.recover or args.finetune:
         return
-    if step == 0:
+    
+    if isinstance(args.pruner, MovementPrune):
+        if step == 8:
+            args.pruner.ratio_step(epoch, args.epochs, args.initial_sparsity, args.target_sparsity)
+            args.pruner.prune(args.model)
+    elif step == 0:
         args.pruner.ratio_step(epoch, args.epochs, args.initial_sparsity, args.target_sparsity)
         args.pruner.prune(args.model)
+    
 
 def _handle_optimizer_and_pruning(args, loss, epoch, step):
     """Handle backpropagation, pruning, and weight update in a single step."""
@@ -253,7 +256,6 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
 
     if args.enable_mixed_precision:
         args.scaler.scale(loss).backward()
-
         _apply_pruning(args, epoch, step)
 
         if not getattr(args, "skip_optimizer_step", False):
@@ -261,7 +263,6 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
             args.scaler.update()
     else:
         loss.backward()
-    
         _apply_pruning(args, epoch, step)
 
         if not getattr(args, "skip_optimizer_step", False):
@@ -270,14 +271,8 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
     if args.scheduler and not getattr(args, "skip_optimizer_step", False):
         args.scheduler.step()
 
-    if args.finetune or (args.prune and args.pruner is not None):
-        args.pruner.apply_mask(args.model) if args.pruner else None
-    
-
-
-
-
-
+    if args.pruner is not None:
+        args.pruner.apply_mask(args.model)
 
 
 
