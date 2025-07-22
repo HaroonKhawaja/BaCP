@@ -1,0 +1,29 @@
+Model : resnet101 - Learning Type: cifar100/baseline
+Configuration:
+model_type: cv
+model_name: resnet101
+model_task: cifar100
+num_classes: 100
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 150
+pruning_epochs: 150
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.01
+learning_type: baseline
+scheduler_type: linear_with_warmup
+optimizer_type: sgd
+total_steps: 12450
+warmup_steps: 1245
+prune: False
+target_sparsity: 0.0
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet101/cifar100/resnet101_cifar100_baseline.pt
+
+Epoch [1/150]: Avg Loss: 4.6551 | Avg Accuracy: 2.11 | Model Sparsity: 0.0
+Epoch [2/150]: Avg Loss: 4.4259 | Avg Accuracy: 8.24 | Model Sparsity: 0.0
+Epoch [3/150]: Avg Loss: 3.9179 | Avg Accuracy: 17.70 | Model Sparsity: 0.0
+Epoch [4/150]: Avg Loss: 3.3299 | Avg Accuracy: 25.88 | Model Sparsity: 0.0

@@ -1,0 +1,40 @@
+Model : resnet50 - Learning Type: cifar10/pruning/movement_pruning/0.95
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 512
+learning_rate: 0.01
+learning_type: pruning
+optimizer_type: sgd
+prune: True
+pruning_type: movement_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/cifar10/resnet50_cifar10_movement_pruning_0.95_pruning.pt
+finetuned_weights: /dbfs/research/resnet50/cifar10/resnet50_cifar10_baseline.pt
+
+Epoch [1/5]: Avg Loss: 1.8503 | Avg Accuracy: 36.94 | Model Sparsity: 0.4636
+Recovery epoch [1/10]: Avg Loss: 1.5041 | Avg Accuracy: 47.49 | Model Sparsity: 0.4636
+Recovery epoch [2/10]: Avg Loss: 1.2523 | Avg Accuracy: 54.88 | Model Sparsity: 0.4636
+Recovery epoch [3/10]: Avg Loss: 1.0796 | Avg Accuracy: 62.82 | Model Sparsity: 0.4636
+Recovery epoch [4/10]: Avg Loss: 0.9540 | Avg Accuracy: 64.77 | Model Sparsity: 0.4636
+Recovery epoch [5/10]: Avg Loss: 0.8532 | Avg Accuracy: 70.38 | Model Sparsity: 0.4636
+Recovery epoch [6/10]: Avg Loss: 0.7713 | Avg Accuracy: 70.30 | Model Sparsity: 0.4636
+Recovery epoch [7/10]: Avg Loss: 0.7071 | Avg Accuracy: 71.34 | Model Sparsity: 0.4636
+Recovery epoch [8/10]: Avg Loss: 0.6454 | Avg Accuracy: 73.98 | Model Sparsity: 0.4636
+Recovery epoch [9/10]: Avg Loss: 0.5957 | Avg Accuracy: 74.61 | Model Sparsity: 0.4636
+Recovery epoch [10/10]: Avg Loss: 0.5574 | Avg Accuracy: 74.83 | Model Sparsity: 0.4636
+Epoch [2/5]: Avg Loss: 2.1874 | Avg Accuracy: 9.67 | Model Sparsity: 0.8889
+Recovery epoch [1/10]: Avg Loss: 2.3183 | Avg Accuracy: 9.67 | Model Sparsity: 0.8889
+Recovery epoch [2/10]: Avg Loss: 2.3121 | Avg Accuracy: 9.82 | Model Sparsity: 0.8889
+Recovery epoch [3/10]: Avg Loss: 2.3174 | Avg Accuracy: 9.82 | Model Sparsity: 0.8889
+Recovery epoch [4/10]: Avg Loss: 2.3129 | Avg Accuracy: 9.82 | Model Sparsity: 0.8889

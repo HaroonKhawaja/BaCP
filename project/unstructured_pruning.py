@@ -84,16 +84,19 @@ def check_sparsity_distribution(model, verbose=True):
     plt.show()
 
 class Pruner(ABC):
-    def __init__(self, epochs, target_ratio, sparsity_scheduler="linear", target_layer='no_target_layer'):
-        # assert target_layer in ['no_target_layer', 'self_attention'], 'Invalid layer name'
+    def __init__(self, epochs, target_ratio, model, sparsity_scheduler="cubic"):
         self.epochs = epochs
         self.target_ratio = target_ratio
         self.ratio = 0.0
         self.masks = {}
-        self.target_layer = target_layer
+        self.mask_hooks = {}
 
         assert sparsity_scheduler in ["linear", "cubic"], "Invalid sparsity scheduler"
         self.sparsity_scheduler = sparsity_scheduler
+
+        for name, param in model.named_parameters():
+            if layer_check(name, param):
+                self.masks[name] = torch.ones_like(param)
         
     @abstractmethod
     def prune(self, model):
@@ -102,11 +105,11 @@ class Pruner(ABC):
     @torch.no_grad()  
     def apply_mask(self, model):
         for name, param in model.named_parameters():
-            if layer_check(name, param):
-                if name in self.masks:
-                    param.data *= self.masks[name]
-                    if param.grad is not None:
-                        param.grad.data *= self.masks[name]
+            if name not in self.masks:
+                continue
+            
+            # Zero-ing out the weights
+            param.data.mul_(self.masks[name])
 
     def ratio_step(self, epoch, epochs, initial_sparsity, target_sparsity):
         if self.sparsity_scheduler == 'linear':
@@ -136,13 +139,12 @@ class Pruner(ABC):
 class MagnitudePrune(Pruner):
     def prune(self, model):
         all_importances = []
+        importance_cache = {}
         for name, param in model.named_parameters():
             if layer_check(name, param):
-                if name not in self.masks:
-                    self.masks[name] = torch.ones_like(param)
-                
                 # Calculating importance
                 importance = torch.abs(self.masks[name] * param)
+                importance_cache[name] = importance
                 all_importances.append(importance.view(-1))
 
         # Calculating global importance and threshold
@@ -152,23 +154,37 @@ class MagnitudePrune(Pruner):
         threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
         
         # Updating masks
-        for name, param in model.named_parameters():
-            if layer_check(name, param):
-                if name in self.masks:
-                    importance = torch.abs(self.masks[name] * param)
-                    new_mask = torch.gt(importance, threshold).float()
-                    self.masks[name] = new_mask
+        for name, importance in importance_cache.items():
+            self.masks[name] = torch.gt(importance, threshold).float()
 
 class MovementPrune(Pruner):
+    def __init__(self, epochs, target_ratio, model, pruning_scheduler):
+        super().__init__(epochs, target_ratio, model, pruning_scheduler)
+        self.movement_scores = {
+            name: torch.zeros_like(param)
+            for name, param in model.named_parameters()
+            if layer_check(name, param)
+        }
+        self.accumulate_n_steps = True
+
+    @torch.no_grad()  
+    def update_movement_scores(self, model, lr):
+        for name, param in model.named_parameters():
+            if name not in self.movement_scores:
+                continue
+
+            self.movement_scores[name] += -lr * param.grad
+
     def prune(self, model):
         all_importances = []
+        importance_cache = {}
+
         for name, param in model.named_parameters():
             if layer_check(name, param):
-                if name not in self.masks:
-                    self.masks[name] = torch.ones_like(param)
+                score = self.movement_scores[name]
+                importance = score * self.masks[name]
 
-                # Calculating importance
-                importance = torch.abs(self.masks[name] * param * param.grad)
+                importance_cache[name] = importance
                 all_importances.append(importance.view(-1))
         
         # Calculating global importance and threshold
@@ -178,16 +194,12 @@ class MovementPrune(Pruner):
         threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
 
         # Updating masks
-        for name, param in model.named_parameters():
-            if layer_check(name, param):
-                if name in self.masks:
-                    importance = torch.abs(self.masks[name] * param * param.grad)
-                    new_mask = torch.gt(importance, threshold).float()
-                    self.masks[name] = new_mask
+        for name, importance in importance_cache.items():
+            self.masks[name] = torch.gt(importance, threshold).float()
     
 class WandaPrune(Pruner):
     def __init__(self, epochs, target_ratio, model, pruning_scheduler):
-        super().__init__(epochs, target_ratio, pruning_scheduler)
+        super().__init__(epochs, target_ratio, model, pruning_scheduler)
         self.main_layers = {}
         self.wrapped_layers = {}
         self.current_epoch = 0
@@ -195,8 +207,6 @@ class WandaPrune(Pruner):
         self.is_wanda = True
         self.device = model.model.device if hasattr(model.model, 'device') else get_device()
 
-        print(self.device)
-        print(model)
         if hasattr(model.model, 'distilbert') and hasattr(model.model.distilbert, 'transformer') and hasattr(model.model.distilbert.transformer, 'layer'):
             self.prefix = "distilbert.transformer.layer"
         elif hasattr(model.model, 'roberta') and hasattr(model.model.roberta, 'encoder') and hasattr(model.model.roberta.encoder, 'layer'):

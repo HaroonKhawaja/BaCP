@@ -27,6 +27,7 @@ from trainer import Trainer, TrainingArguments
 from bacp import BaCPTrainer, BaCPTrainingArguments
 from utils import *
 from constants import *
+from unstructured_pruning import *
 
 device = get_device()
 print(f"{device = }")
@@ -37,7 +38,7 @@ print(f"{device = }")
 # Notebook specific variables
 MODEL_NAME = 'resnet50'
 MODEL_TASK = 'cifar10'
-TRAIN = False
+TRAIN = True
 
 # COMMAND ----------
 
@@ -58,7 +59,7 @@ training_args = TrainingArguments(
     patience=50,
 )
 trainer = Trainer(training_args=training_args)
-if TRAIN:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -216,10 +217,6 @@ if TRAIN:
 
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
-
-# COMMAND ----------
-
-
 
 # COMMAND ----------
 
