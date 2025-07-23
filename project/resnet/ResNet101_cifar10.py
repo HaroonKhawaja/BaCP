@@ -37,7 +37,7 @@ print(f"{device = }")
 # Notebook specific variables
 MODEL_NAME = 'resnet101'
 MODEL_TASK = 'cifar10'
-TRAIN = True
+TRAIN = False
 
 # COMMAND ----------
 

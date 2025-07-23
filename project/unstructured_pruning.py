@@ -12,7 +12,7 @@ def layer_check(name, param):
         'classifier.6', # VGG
         'embeddings', 'conv_proj', 'pos_embedding', 'heads', 'classifier.weight', # ViT        
         'projection_head', # Encoder heads
-        'vocab_projector', # DistilBERT
+        'vocab_projector', 'vocab_transform', # DistilBERT
 
         # 'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
         # 'class_token', 'pos_embedding', 'vocab_transform', 'lm_head',

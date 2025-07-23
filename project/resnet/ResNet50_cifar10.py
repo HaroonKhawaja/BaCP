@@ -38,7 +38,7 @@ print(f"{device = }")
 # Notebook specific variables
 MODEL_NAME = 'resnet50'
 MODEL_TASK = 'cifar10'
-TRAIN = True
+TRAIN = False
 
 # COMMAND ----------
 
@@ -59,7 +59,7 @@ training_args = TrainingArguments(
     patience=50,
 )
 trainer = Trainer(training_args=training_args)
-if False:
+if TRAIN:
     trainer.train()
 
 metrics = trainer.evaluate()
