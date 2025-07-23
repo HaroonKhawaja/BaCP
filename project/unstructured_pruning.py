@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from abc import abstractmethod, ABC
 from utils import *
 import os
@@ -7,7 +8,7 @@ def layer_check(name, param):
     if param.dim() <= 1 or not param.requires_grad:
         return False
     
-    if param.dim() > 1 and param.requires_grad and not any(keyword in name for keyword in [
+    exclusion_keywords = [
         'fc',   # ResNet
         'classifier.6', # VGG
         'embeddings', 'conv_proj', 'pos_embedding', 'heads', 'classifier.weight', # ViT        
@@ -17,9 +18,10 @@ def layer_check(name, param):
         # 'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
         # 'class_token', 'pos_embedding', 'vocab_transform', 'lm_head',
         # 'projection_head'
-        ]):
-        return True
-    return False
+        ]
+    if any(keyword in name for keyword in exclusion_keywords):
+        return False
+    return True
 
 def check_model_sparsity(model):
     sum_zero, total_count = 0, 0
@@ -59,7 +61,7 @@ def check_sparsity_distribution(model, verbose=True):
             sparsities.append(layer_sparsity)
 
             if verbose:
-                print(f"{name}:\t{layer_sparsity * 100:.2f}%\t|\tsparsity: ({num_zero_weights}/{num_layer_weights})")
+                print(f"{name}:\t{layer_sparsity * 100:.4f}%\t|\tsparsity: ({num_zero_weights}/{num_layer_weights})")
 
     overall_sparsity = total_zero_weights / total_weights if total_weights > 0 else 0
     backbone_sparsity = total_backbone_zero_weights / total_backbone_weights if total_backbone_weights > 0 else 0
@@ -89,7 +91,6 @@ class Pruner(ABC):
         self.target_ratio = target_ratio
         self.ratio = 0.0
         self.masks = {}
-        self.mask_hooks = {}
 
         assert sparsity_scheduler in ["linear", "cubic"], "Invalid sparsity scheduler"
         self.sparsity_scheduler = sparsity_scheduler
@@ -215,18 +216,23 @@ class WandaPrune(Pruner):
             self.prefix = "encoder.layers"
         elif hasattr(model.model, 'vit') and hasattr(model.model.vit, 'encoder') and hasattr(model.model.vit.encoder, 'layer'):
             self.prefix = "vit.encoder.layer"
-        else:
-            raise ValueError("Model does not contain layers.")
 
         self.init_layers(model)
     
     def init_layers(self, model):
-        for name, module in model.named_modules():
-            for child_name, child in module.named_children():
-                if isinstance(child, torch.nn.Linear) and self.prefix in name:
-                    full_name = f"{name}.{child_name}"
-                    self.main_layers[full_name] = child.to(self.device)
-                    self.wrapped_layers[full_name] = self.WrappedLayer(child.to(self.device), full_name)
+        for module_name, module in model.named_modules():
+            name = f'{module_name}.weight'
+            if hasattr(module, 'weight') and layer_check(name, module.weight):
+                self.main_layers[name] = module.to(self.device)
+                self.wrapped_layers[name] = self.WrappedLayer(module.to(self.device), name)
+
+        # for name, module in model.named_modules():
+        #     for child_name, child in module.named_children():
+        #       if isinstance(child, torch.nn.Linear) and self.prefix in name:                
+        #             full_name = f"{name}.{child_name}"
+        #             print(full_name)
+        #             self.main_layers[full_name] = child.to(self.device)
+        #             self.wrapped_layers[full_name] = self.WrappedLayer(child.to(self.device), full_name)
             
     def register_hooks(self, model):
         print("[Pruner] Adding hooks")
@@ -248,6 +254,9 @@ class WandaPrune(Pruner):
         return hook
 
     def prune(self, model):
+        all_importances = []
+        importance_cache = {}
+
         for name in self.wrapped_layers:
             if self.wrapped_layers[name].scaler_row is None:
                 continue
@@ -256,19 +265,25 @@ class WandaPrune(Pruner):
             scaler_row = self.wrapped_layers[name].scaler_row.to(self.device).float()
             scaler_row = torch.clamp(torch.nan_to_num(scaler_row, nan=0.0, posinf=1e6, neginf=0.0), min=0.0)
 
-            name = f'{name}.weight'
-            if name not in self.masks:
-                self.masks[name] = torch.ones_like(W)
+            if W.dim() == 4:
+                scaler_row = scaler_row.reshape(1, -1, 1, 1)
+            else: 
+                scaler_row = scaler_row.reshape(1, -1)
 
             # Calculating local importance and threshold
-            importance = (torch.abs(W) * torch.sqrt(scaler_row.reshape(1, -1) + 1e-10)).view(-1)
-            total_weights = importance.numel()
-            num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-            threshold = torch.kthvalue(importance, num_to_zero).values.item()
+            importance = (torch.abs(W) * torch.sqrt(scaler_row + 1e-10))
+            importance_cache[name] = importance
+            all_importances.append(importance.view(-1))
+            
+        # Calculating global importance and threshold
+        global_importances = torch.cat(all_importances)
+        total_weights = global_importances.numel()
+        num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
+        threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
 
-            # Updating masks
-            new_mask = torch.gt(importance.view(W.shape), threshold).float()
-            self.masks[name] = new_mask
+        # Updating masks
+        for name, importance in importance_cache.items():
+            self.masks[name] = torch.gt(importance, threshold).float()
 
         self.remove_hooks()
 
@@ -277,7 +292,7 @@ class WandaPrune(Pruner):
             self.layer = layer
             self.device, self.rows, self.cols, self.scaler_row = None, 0, 0, None
             if hasattr(self.layer, 'weight') and self.layer.weight is not None:
-                self.rows, self.cols = self.layer.weight.shape
+                self.rows, self.cols = self.layer.weight.shape[0], self.layer.weight.shape[1]
                 self.device = self.layer.weight.device
                 self.scaler_row = torch.zeros((self.cols), device=self.device)
             else:
@@ -289,19 +304,23 @@ class WandaPrune(Pruner):
         def add_batch(self, input_tensor):
             if self.scaler_row is None:
                 return
-            
+
+            # Handling batch size of 1
             if len(input_tensor.shape) == 2:
                 input_tensor = input_tensor.unsqueeze(0)
-            tmp = input_tensor.shape[0]
+            batch_size = input_tensor.shape[0]
 
             if len(input_tensor.shape) == 3:
                 input_tensor = input_tensor.reshape(-1, input_tensor.shape[-1])
+            elif len(input_tensor.shape) == 4:
+                input_tensor = input_tensor.permute(0, 2, 3, 1)
+                input_tensor = input_tensor.reshape(-1, self.cols)
 
             input_tensor = input_tensor.to(self.device).type(torch.float32)
 
             self.scaler_row = self.scaler_row.float()
-            self.scaler_row *= self.nsamples / (self.nsamples + tmp)
-            self.nsamples += tmp
+            self.scaler_row *= self.nsamples / (self.nsamples + batch_size)
+            self.nsamples += batch_size
 
             batch_norm = torch.norm(input_tensor, dim=0, p=2) ** 2
             self.scaler_row += batch_norm / self.nsamples
