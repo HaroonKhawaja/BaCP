@@ -235,8 +235,7 @@ def _initialize_paths_and_logger(args):
     print(f'[TRAINER] Saving model to: {args.save_path}')
 
 def _apply_pruning(args, epoch, step):
-    if isinstance(args.pruner, MovementPrune):
-        args.pruner.update_movement_scores(args.model, lr=args.optimizer.param_groups[0]['lr'])
+    
 
     if not args.prune or args.pruner is None or args.recover or args.finetune:
         return
@@ -245,6 +244,8 @@ def _apply_pruning(args, epoch, step):
         if step + 1 == len(args.trainloader):
             args.pruner.ratio_step(epoch, args.epochs, args.initial_sparsity, args.target_sparsity)
             args.pruner.prune(args.model)
+        else:
+            return
     elif step == 0:
         args.pruner.ratio_step(epoch, args.epochs, args.initial_sparsity, args.target_sparsity)
         args.pruner.prune(args.model)
@@ -273,6 +274,11 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
 
     if args.pruner is not None:
         args.pruner.apply_mask(args.model)
+        if isinstance(args.pruner, MovementPrune):
+            args.pruner.update_movement_scores(args.model, args.learning_rate)
+    
+    
+
 
 
 

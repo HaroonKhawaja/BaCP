@@ -158,6 +158,27 @@ class MagnitudePrune(Pruner):
         for name, importance in importance_cache.items():
             self.masks[name] = torch.gt(importance, threshold).float()
 
+class SNIPIterativePrune(Pruner):
+    def prune(self, model):
+        all_importances = []
+        importance_cache = {}
+        for name, param in model.named_parameters():
+            if layer_check(name, param):
+                # Calculating importance
+                importance = torch.abs(self.masks[name] * param * param.grad.detach())
+                importance_cache[name] = importance
+                all_importances.append(importance.view(-1))
+
+        # Calculating global importance and threshold
+        global_importances = torch.cat(all_importances)
+        total_weights = global_importances.numel()
+        num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
+        threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
+        
+        # Updating masks
+        for name, importance in importance_cache.items():
+            self.masks[name] = torch.gt(importance, threshold).float()
+
 class MovementPrune(Pruner):
     def __init__(self, epochs, target_ratio, model, pruning_scheduler):
         super().__init__(epochs, target_ratio, model, pruning_scheduler)
@@ -172,8 +193,7 @@ class MovementPrune(Pruner):
         for name, param in model.named_parameters():
             if name not in self.movement_scores:
                 continue
-
-            self.movement_scores[name] += -lr * param.grad.detach()
+            self.movement_scores[name] += -lr * param.grad
 
     def prune(self, model):
         all_importances = []
@@ -181,11 +201,10 @@ class MovementPrune(Pruner):
 
         for name, param in model.named_parameters():
             if layer_check(name, param):
-                score = self.movement_scores[name]
-                importance = score * param.data * self.masks[name]
+                importance = self.movement_scores[name] * param.data
                 importance_cache[name] = importance
                 all_importances.append(importance.view(-1))
-        
+
         # Calculating global importance and threshold
         global_importances = torch.cat(all_importances)
         total_weights = global_importances.numel()
@@ -325,7 +344,7 @@ class WandaPrune(Pruner):
 
 PRUNER_DICT = {
     "magnitude_pruning": MagnitudePrune,
-    "movement_pruning": MovementPrune,
+    "snip_pruning": SNIPIterativePrune,
     "wanda_pruning": WandaPrune
 }
 
