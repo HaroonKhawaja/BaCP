@@ -242,7 +242,7 @@ def _apply_pruning(args, epoch, step):
         return
     
     if isinstance(args.pruner, MovementPrune):
-        if step == 8:
+        if step + 1 == len(args.trainloader):
             args.pruner.ratio_step(epoch, args.epochs, args.initial_sparsity, args.target_sparsity)
             args.pruner.prune(args.model)
     elif step == 0:

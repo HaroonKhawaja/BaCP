@@ -1,8 +1,8 @@
+import os
 import torch
 import torch.nn as nn
 from abc import abstractmethod, ABC
 from utils import *
-import os
 
 def layer_check(name, param):
     if param.dim() <= 1 or not param.requires_grad:
@@ -166,15 +166,14 @@ class MovementPrune(Pruner):
             for name, param in model.named_parameters()
             if layer_check(name, param)
         }
-        self.accumulate_n_steps = True
 
-    @torch.no_grad()  
+    @torch.no_grad()
     def update_movement_scores(self, model, lr):
         for name, param in model.named_parameters():
             if name not in self.movement_scores:
                 continue
 
-            self.movement_scores[name] += -lr * param.grad
+            self.movement_scores[name] += -lr * param.grad.detach()
 
     def prune(self, model):
         all_importances = []
@@ -183,8 +182,7 @@ class MovementPrune(Pruner):
         for name, param in model.named_parameters():
             if layer_check(name, param):
                 score = self.movement_scores[name]
-                importance = score * self.masks[name]
-
+                importance = score * param.data * self.masks[name]
                 importance_cache[name] = importance
                 all_importances.append(importance.view(-1))
         
