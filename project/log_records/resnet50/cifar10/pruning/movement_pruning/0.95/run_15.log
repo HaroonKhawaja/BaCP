@@ -1,0 +1,30 @@
+Model : resnet50 - Learning Type: cifar10/pruning/movement_pruning/0.95
+Configuration:
+model_type: cv
+model_name: resnet50
+model_task: cifar10
+num_classes: 10
+criterion: CrossEntropyLoss()
+embedding_dim: 2048
+epochs: 2
+pruning_epochs: 2
+recovery_epochs: 2
+batch_size: 512
+learning_rate: 0.01
+learning_type: pruning
+optimizer_type: sgd
+prune: True
+pruning_type: movement_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+enable_mixed_precision: True
+device: cuda
+save_path: /dbfs/research/resnet50/cifar10/resnet50_cifar10_movement_pruning_0.95_pruning.pt
+finetuned_weights: /dbfs/research/resnet50/cifar10/resnet50_cifar10_baseline.pt
+
+Epoch [1/2]: Avg Loss: 0.1042 | Avg Accuracy: 9.88 | Model Sparsity: 0.8313
+Recovery epoch [1/2]: Avg Loss: 1.6550 | Avg Accuracy: 51.10 | Model Sparsity: 0.8313
+Recovery epoch [2/2]: Avg Loss: 1.2008 | Avg Accuracy: 55.72 | Model Sparsity: 0.8313
+Epoch [2/2]: Avg Loss: 1.0164 | Avg Accuracy: 9.91 | Model Sparsity: 0.95
+Recovery epoch [1/2]: Avg Loss: 1.7999 | Avg Accuracy: 39.30 | Model Sparsity: 0.95
+Recovery epoch [2/2]: Avg Loss: 1.3681 | Avg Accuracy: 51.38 | Model Sparsity: 0.95

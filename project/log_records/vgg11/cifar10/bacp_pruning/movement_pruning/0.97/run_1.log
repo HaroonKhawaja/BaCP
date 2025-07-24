@@ -70,3 +70,12 @@ Retraining Epoch [9/10]: Avg Total Loss: 15.3665 | Avg PrC Loss: 3.4704 | Avg Sn
 Retraining Epoch [10/10]: Avg Total Loss: 15.3796 | Avg PrC Loss: 3.4721 | Avg SnC Loss: 8.7535 | Avg FiC Loss: 2.9386 | Avg CE Loss: 0.2154 | Model Sparsity: 0.9622
 Epoch [5/5]: Avg Total Loss: 18.1501 | Avg PrC Loss: 3.4770 | Avg SnC Loss: 11.5068 | Avg FiC Loss: 2.9461 | Avg CE Loss: 0.2203 | Model Sparsity: 0.97
 Retraining Epoch [1/10]: Avg Total Loss: 18.1490 | Avg PrC Loss: 3.4741 | Avg SnC Loss: 11.5101 | Avg FiC Loss: 2.9460 | Avg CE Loss: 0.2189 | Model Sparsity: 0.97
+Retraining Epoch [2/10]: Avg Total Loss: 18.1101 | Avg PrC Loss: 3.4751 | Avg SnC Loss: 11.4854 | Avg FiC Loss: 2.9368 | Avg CE Loss: 0.2128 | Model Sparsity: 0.97
+Retraining Epoch [3/10]: Avg Total Loss: 18.1092 | Avg PrC Loss: 3.4720 | Avg SnC Loss: 11.4894 | Avg FiC Loss: 2.9361 | Avg CE Loss: 0.2117 | Model Sparsity: 0.97
+Retraining Epoch [4/10]: Avg Total Loss: 18.1297 | Avg PrC Loss: 3.4766 | Avg SnC Loss: 11.4989 | Avg FiC Loss: 2.9394 | Avg CE Loss: 0.2149 | Model Sparsity: 0.97
+Retraining Epoch [5/10]: Avg Total Loss: 18.0626 | Avg PrC Loss: 3.4680 | Avg SnC Loss: 11.4603 | Avg FiC Loss: 2.9266 | Avg CE Loss: 0.2076 | Model Sparsity: 0.97
+Retraining Epoch [6/10]: Avg Total Loss: 18.0444 | Avg PrC Loss: 3.4667 | Avg SnC Loss: 11.4489 | Avg FiC Loss: 2.9243 | Avg CE Loss: 0.2045 | Model Sparsity: 0.97
+Retraining Epoch [7/10]: Avg Total Loss: 18.0673 | Avg PrC Loss: 3.4695 | Avg SnC Loss: 11.4629 | Avg FiC Loss: 2.9283 | Avg CE Loss: 0.2066 | Model Sparsity: 0.97
+Retraining Epoch [8/10]: Avg Total Loss: 18.0281 | Avg PrC Loss: 3.4624 | Avg SnC Loss: 11.4411 | Avg FiC Loss: 2.9215 | Avg CE Loss: 0.2030 | Model Sparsity: 0.97
+Retraining Epoch [9/10]: Avg Total Loss: 18.0743 | Avg PrC Loss: 3.4700 | Avg SnC Loss: 11.4712 | Avg FiC Loss: 2.9279 | Avg CE Loss: 0.2053 | Model Sparsity: 0.97
+Retraining Epoch [10/10]: Avg Total Loss: 18.0110 | Avg PrC Loss: 3.4618 | Avg SnC Loss: 11.4346 | Avg FiC Loss: 2.9170 | Avg CE Loss: 0.1976 | Model Sparsity: 0.97
