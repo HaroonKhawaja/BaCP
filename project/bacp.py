@@ -20,8 +20,7 @@ class BaCPTrainingArguments:
                  model_name,
                  model_task,
                  batch_size,
-                 optimizer_type,
-                 learning_rate,
+                 optimizer_type_and_lr,
 
                  # Pruning parameters
                  pruner=None,
@@ -51,8 +50,10 @@ class BaCPTrainingArguments:
         self.model_name = model_name
         self.model_task = model_task
         self.batch_size = batch_size
-        self.optimizer_type = optimizer_type
-        self.learning_rate = learning_rate
+
+        if not isinstance(optimizer_type_and_lr, tuple) or len(optimizer_type_and_lr) != 2:
+            raise ValueError("optimizer_type_and_lr must be a tuple of length 2.")
+        self.optimizer_type, self.learning_rate = optimizer_type_and_lr[0], optimizer_type_and_lr[1]
         self.is_bacp = True
 
         # Pruning parameters
