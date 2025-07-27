@@ -298,7 +298,6 @@ class BaCPTrainer:
                     input_data = batch['data2'].to(self.device)
 
             with autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext():
-
                 current_embeddings, current_logits = self._get_embeddings_and_logits(
                     batch if self.model_type == 'llm' else batch['data1']
                 )
@@ -314,12 +313,13 @@ class BaCPTrainer:
                             finetuned_embeddings = finetuned_embeddings.logits
                     
                 if mask is not None:
-                    labels = labels[mask]
-                    current_logits = current_logits[mask]
-                    current_embeddings = current_embeddings[mask]
-                    pretrained_embeddings = pretrained_embeddings[mask]
-                    finetuned_embeddings = finetuned_embeddings[mask]
-
+                    pass
+                    # labels = labels[mask]
+                    # current_logits = current_logits[mask]
+                    # current_embeddings = current_embeddings[mask]
+                    # pretrained_embeddings = pretrained_embeddings[mask]
+                    # finetuned_embeddings = finetuned_embeddings[mask]
+                
                 CE_loss = nn.CrossEntropyLoss()(current_logits, labels)
 
                 if  hasattr(self, 'disable') and self.disable == 'disable_unsupervised_loss':
@@ -397,7 +397,8 @@ class BaCPTrainer:
                                 if hasattr(snapshot_embeddings, 'logits'):
                                     snapshot_embeddings = snapshot_embeddings.logits
                             if mask is not None:
-                                snapshot_embeddings = snapshot_embeddings[mask]
+                                pass
+                                # snapshot_embeddings = snapshot_embeddings[mask]
 
                         sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
                         L_snc_sup += self._supervised_criterion(sup_features_snc, labels)

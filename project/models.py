@@ -62,6 +62,12 @@ MODELS = {
         'weight': 'roberta-base',
         'family': 'bert',
         'type': 'language',
+    },
+    'roberta-base': {
+        'fn': AutoModelForSequenceClassification,
+        'weight': 'roberta-base',
+        'family': 'bert',
+        'type': 'language',
     }
         
 }

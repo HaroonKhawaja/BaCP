@@ -39,7 +39,7 @@ print(f"{device = }")
 # Notebook specific variables
 MODEL_NAME = 'vit_small'
 MODEL_TASK = 'cifar10'
-TRAIN = False
+TRAIN = True
 
 # COMMAND ----------
 
@@ -52,8 +52,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     scheduler_type='linear_with_warmup',
     epochs=10,
     learning_type="baseline",
@@ -83,8 +82,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="magnitude_pruning",
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
@@ -106,8 +104,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="magnitude_pruning",
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
@@ -129,8 +126,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="magnitude_pruning",
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
@@ -157,9 +153,8 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
-    pruning_type="movement_pruning",
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="snip_pruning",
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
@@ -180,9 +175,8 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
-    pruning_type="movement_pruning",
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="snip_pruning",
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
@@ -203,9 +197,8 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
-    pruning_type="movement_pruning",
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="snip_pruning",
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
@@ -231,8 +224,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="wanda_pruning",
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
@@ -240,10 +232,9 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
-check_sparsity_distribution(trainer.model)
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
 
@@ -255,8 +246,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="wanda_pruning",
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
@@ -264,10 +254,9 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
-check_sparsity_distribution(trainer.model)
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
 
@@ -279,19 +268,17 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="wanda_pruning",
-    target_sparsity=TARGET_SPARSITY_HIGH,
+    target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if True:
+if TRAIN:
     trainer.train()
 
-check_sparsity_distribution(trainer.model)
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
 

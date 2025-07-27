@@ -1,0 +1,26 @@
+Model : roberta-base - Learning Type: sst2/bacp_pruning/magnitude_pruning/0.95
+Configuration:
+model_name: roberta-base
+model_task: sst2
+model_type: llm
+num_classes: 2
+batch_size: 64
+learning_rate: 1e-05
+optimizer_type: adamw
+epochs: 5
+recovery_epochs: 10
+patience: 20
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+pruning_epochs: 5
+n_views: 2
+temperature: 0.15
+base_temperature: 0.15
+device: cuda
+enable_mixed_precision: True
+num_workers: 24
+train_batches: 1052
+val_batches: 13
+current_model_path: /dbfs/research/roberta-base/sst2/roberta-base_sst2_magnitude_pruning_0.95_bacp_pruning.pt
+
