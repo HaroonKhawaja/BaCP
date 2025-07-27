@@ -76,3 +76,4 @@ Recovery epoch [6/10]: Avg Loss: 0.0684 | Avg Accuracy: 89.48 | Model Sparsity: 
 Recovery epoch [7/10]: Avg Loss: 0.0663 | Avg Accuracy: 90.46 | Model Sparsity: 0.97
 Recovery epoch [8/10]: Avg Loss: 0.0655 | Avg Accuracy: 89.66 | Model Sparsity: 0.97
 Recovery epoch [9/10]: Avg Loss: 0.0606 | Avg Accuracy: 90.35 | Model Sparsity: 0.97
+Recovery epoch [10/10]: Avg Loss: 0.0624 | Avg Accuracy: 90.29 | Model Sparsity: 0.97
