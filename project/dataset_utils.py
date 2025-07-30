@@ -8,6 +8,7 @@ from transformers import DataCollatorForLanguageModeling
 from utils import *
 from constants import *
 from functools import lru_cache
+from datasets import get_dataset_config_names
 
 
 VALID_DATASETS = {
@@ -45,18 +46,6 @@ VALID_DATASETS = {
         'food101': lambda root_folder, size: Food101(root_folder, split='test', transform=get_eval_transform('food101', size), download=True),
         'flowers102': lambda root_folder, size: Flowers102(root_folder, split='test', transform=get_eval_transform('flowers102', size), download=True),
         'emnist': lambda root_folder, size: EMNIST(root_folder, split='balanced', train=False, transform=get_eval_transform('emnist', size), download=True),
-        'caltech101': lambda root_folder, size: Caltech101(root=root_folder, target_type='category', transform=get_eval_transform('caltech101', size), download=True),
-    },
-
-    'unaugmented': {
-        'cifar10': lambda root_folder, size: CIFAR10(root_folder, train=True, transform=get_eval_transform('cifar10', size), download=True),
-        'cifar100': lambda root_folder, size: CIFAR100(root_folder, train=True, transform=get_eval_transform('cifar100', size), download=True),
-        'svhn': lambda root_folder, size: SVHN(root_folder, split='train', transform=get_eval_transform('svhn', size), download=True),
-        'mnist': lambda root_folder, size: MNIST(root_folder, train=True, transform=get_eval_transform('mnist', size), download=True),
-        'fmnist': lambda root_folder, size: FashionMNIST(root_folder, train=True, transform=get_eval_transform('fmnist', size), download=True),
-        'food101': lambda root_folder, size: Food101(root_folder, split='train', transform=get_eval_transform('food101', size), download=True),
-        'flowers102': lambda root_folder, size: Flowers102(root_folder, split='train', transform=get_eval_transform('flowers102', size), download=True),
-        'emnist': lambda root_folder, size: EMNIST(root_folder, split='balanced', train=True, transform=get_eval_transform('emnist', size), download=True),
         'caltech101': lambda root_folder, size: Caltech101(root=root_folder, target_type='category', transform=get_eval_transform('caltech101', size), download=True),
     },
 }
@@ -218,18 +207,8 @@ class CreateDatasets:
         assert dataset_name in self.valid_keys['dataset_names'], 'dataset does not exist.'
         train_dataset_fn = VALID_DATASETS[learning_type][dataset_name]
         test_dataset_fn = VALID_DATASETS['testset'][dataset_name]
-        unaugmented_dataset_fn = VALID_DATASETS['unaugmented'][dataset_name]
 
-        val_dataset_fn = None
-        if dataset_name == 'flowers102':
-            val_dataset_fn = lambda root_folder, size, n_views: Flowers102(
-                root_folder, 
-                split='val', 
-                transform=AugmentData(get_train_transform(learning_type, size, dataset_name), n_views),
-                download=True,
-            )
-
-        return train_dataset_fn, test_dataset_fn, val_dataset_fn, unaugmented_dataset_fn
+        return train_dataset_fn, test_dataset_fn
 
 @lru_cache()
 def load_cv_dataset(dataset_name, cache_dir, learning_type, size):
@@ -238,32 +217,25 @@ def load_cv_dataset(dataset_name, cache_dir, learning_type, size):
     
     # Creating datasets
     dataset = CreateDatasets()
-    train_dataset_fn, test_dataset_fn, val_dataset_fn, unaugmented_dataset_fn = dataset.get_dataset_fn(learning_type, dataset_name)
+    train_dataset_fn, test_dataset_fn = dataset.get_dataset_fn(learning_type, dataset_name)
     n_views = 1 if learning_type == 'supervised' else 2
 
     # Loading train and test data
     trainset = train_dataset_fn(cache_dir, size, n_views)
     testset = test_dataset_fn(cache_dir, size)
-    unaugmentedset = unaugmented_dataset_fn(cache_dir, size)
 
-    # Creating validation set if applicable
-
-    if val_dataset_fn is not None:
-        valset = val_dataset_fn(cache_dir, size, n_views)
-    else:
-        train_size = len(trainset)
-        val_size = int(0.15 * train_size)
-        train_size = train_size - val_size
-        trainset, valset = random_split(trainset, [train_size, val_size])
+    train_size = len(trainset)
+    val_size = int(0.15 * train_size)
+    train_size = train_size - val_size
+    trainset, valset = random_split(trainset, [train_size, val_size])
 
     return {
         'train': trainset,
         'validation': valset,
         'test': testset,
-        'unaugmented': unaugmentedset
     }
 
-def get_cv_data(dataset_name, batch_size, size=32, num_workers=24, cache_dir="/dbfs", learning_type='supervised'):
+def get_cv_data(dataset_name, batch_size, cache_dir, size=32, num_workers=24, learning_type='supervised'):
     try:
         # Loading datasets
         datasets = load_cv_dataset(dataset_name, cache_dir=cache_dir, learning_type=learning_type, size=size)
@@ -281,13 +253,11 @@ def get_cv_data(dataset_name, batch_size, size=32, num_workers=24, cache_dir="/d
         trainloader = DataLoader(datasets["train"], shuffle=True, **loader_args)
         valloader = DataLoader(datasets["validation"], shuffle=False, **loader_args)
         testloader = DataLoader(datasets["test"], shuffle=False, **loader_args)
-        unaugmentedloader = DataLoader(datasets["unaugmented"], shuffle=False, **loader_args)
         
         data = {
             "trainloader": trainloader,
             "valloader": valloader,
             "testloader": testloader,
-            "unaugmentedloader": unaugmentedloader,
         }
         return data
 
@@ -308,16 +278,16 @@ class GlueDataset(Dataset):
         return {
             "input_ids": example["input_ids"],
             "attention_mask": example["attention_mask"],
-            "labels": example["label"]
+            "labels": example["labels"]
         }
 
 @lru_cache()
-def _load_glue_dataset(task_name, cache_dir="/dbfs/hf_datasets"):
+def _load_glue_dataset(task_name, cache_dir):
     return load_dataset("glue", task_name, cache_dir=cache_dir)
 
-def get_glue_data(tokenizer, task_name, batch_size, num_workers=24):
+def get_glue_data(tokenizer, task_name, batch_size, cache_dir, num_workers=24):
     assert task_name in ["mnli", "qqp", "sst2"], f"Unsupported task: {task_name}"
-    dataset = _load_glue_dataset(task_name)
+    dataset = _load_glue_dataset(task_name, cache_dir)
     print(f"[DATALOADERS] {[key for key in dataset]}")
 
     def tokenize_fn(example):
@@ -344,21 +314,23 @@ def get_glue_data(tokenizer, task_name, batch_size, num_workers=24):
         "drop_last" : True,
     }
 
-    trainloader = DataLoader(dataset["train"], shuffle=True, **loader_args)
-    valloader = DataLoader(dataset["validation"], **loader_args)
-    testloader = DataLoader(dataset["test"], **loader_args)
-  
+    trainloader = DataLoader(trainset, shuffle=True, **loader_args)
+    valloader = DataLoader(valset, **loader_args)
+    testloader = DataLoader(testset, **loader_args)
+    
     data = {
         "trainloader": trainloader,
         "valloader": valloader,
     }
+    if task_name != 'sst2':
+        data["testloader"] = testloader
     return data
 
 @lru_cache()
-def _load_wikitext2_dataset(cache_dir="/dbfs/hf_datasets"):
-    return load_dataset('wikitext', 'wikitext-2-raw-v1')
+def _load_wikitext2_dataset(cache_dir):
+    return load_dataset('wikitext', 'wikitext-2-raw-v1', cache_dir=cache_dir)
 
-def get_wikitext2_data(tokenizer, batch_size, num_workers=24):
+def get_wikitext2_data(tokenizer, batch_size, cache_dir, num_workers=24):
     def tokenize_fn(examples):
         return tokenizer(examples["text"], truncation=True, return_special_tokens_mask=True)
 
@@ -372,7 +344,7 @@ def get_wikitext2_data(tokenizer, batch_size, num_workers=24):
             for k, t in concatenated_examples.items()
         }
 
-    dataset = _load_wikitext2_dataset()
+    dataset = _load_wikitext2_dataset(cache_dir)
     dataset = dataset.map(tokenize_fn, batched=True, batch_size=512, remove_columns=["text"])
     dataset = dataset.map(group_texts, batched=True, batch_size=512)
 
@@ -402,3 +374,30 @@ def get_wikitext2_data(tokenizer, batch_size, num_workers=24):
     return data
 
 
+def get_data(args):
+    if args.model_type == 'llm':
+        if args.model_task in get_dataset_config_names("glue"):
+            return get_glue_data(
+                args.tokenizer, 
+                args.model_task, 
+                args.batch_size,
+                args.cache_dir, 
+                args.num_workers
+                )
+        elif args.model_task == 'wikitext2':
+            return get_wikitext2_data(
+                args.tokenizer, 
+                args.batch_size,
+                args.cache_dir, 
+                args.num_workers
+                )
+
+    elif args.model_type == 'cv':
+        return get_cv_data(
+            args.model_task, 
+            args.batch_size, 
+            args.cache_dir,
+            learning_type=args.criterion_type, 
+            size=args.image_size,
+            num_workers=args.num_workers
+            )

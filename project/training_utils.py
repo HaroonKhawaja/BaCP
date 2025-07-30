@@ -1,20 +1,14 @@
 import os
 from copy import deepcopy
-import matplotlib.pyplot as plt
-import math 
-from tqdm import tqdm
 
-import torch
 import torch.optim as optim
 from torch.nn import CrossEntropyLoss
 
-import evaluate
 from datasets import get_dataset_config_names
-from datasets.utils.logging import disable_progress_bar
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
 from constants import *
-from dataset_utils import get_glue_data, get_wikitext2_data, get_cv_data, CV_DATASETS
+from dataset_utils import get_data, CV_DATASETS
 from logger import Logger
 from loss_fn import *
 from models import ClassificationNetwork, EncoderProjectionNetwork
@@ -78,22 +72,12 @@ def _initialize_models(args):
         print('[TRAINER] Initialized BaCP models')
 
     else:
-        if args.criterion_type == 'supervised':
-            args.model = ClassificationNetwork(
-                model_name=args.model_name, 
-                num_classes=args.num_classes, 
-                adapt=(True if args.image_size and args.image_size <= 64 else False), 
-                model_task=args.model_task
-                )
-        elif args.criterion_type == 'contrastive':
-            args.model = EncoderProjectionNetwork(
-                model_name=args.model_name, 
-                adapt=(True if args.image_size and args.image_size <= 64 else False),
-                model_task=args.model_task,
-                )
-        else:
-            raise ValueError(f"Invalid criterion type: {args.criterion_type}")
-
+        args.model = ClassificationNetwork(
+            model_name=args.model_name, 
+            num_classes=args.num_classes, 
+            adapt=(True if args.image_size and args.image_size <= 64 else False), 
+            model_task=args.model_task
+        )
         args.embedded_dim = args.model.embedding_dim
         print('[TRAINER] Initialized models')
 
@@ -162,17 +146,7 @@ def _initialize_scheduler(args):
         print("[TRAINER] No scheduler initialized")
 
 def _initialize_data_loaders(args):
-    if args.model_type == 'llm':
-        if args.model_task in get_dataset_config_names("glue"):
-            data = get_glue_data(args.tokenizer, args.model_task, args.batch_size)
-        elif args.model_task == 'wikitext2':
-            data = get_wikitext2_data(args.tokenizer, args.batch_size, args.num_workers)
-
-    elif args.model_type == 'cv':
-        if hasattr(args, 'is_bacp') and args.is_bacp:
-            data = get_cv_data(args.model_task, args.batch_size, learning_type='contrastive', size=args.image_size, num_workers=args.num_workers)
-        else:
-            data = get_cv_data(args.model_task, args.batch_size, learning_type=args.criterion_type, size=args.image_size, num_workers=args.num_workers)
+    data = get_data(args)
 
     args.data = data
     args.trainloader = data["trainloader"]
@@ -235,8 +209,6 @@ def _initialize_paths_and_logger(args):
     print(f'[TRAINER] Saving model to: {args.save_path}')
 
 def _apply_pruning(args, epoch, step):
-    
-
     if not args.prune or args.pruner is None or args.recover or args.finetune:
         return
     
