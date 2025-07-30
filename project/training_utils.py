@@ -47,8 +47,6 @@ def _detect_num_classes(args):
 def _detect_criterion(args):
     if args.criterion_type == 'supervised':
         args.criterion = CrossEntropyLoss()
-    elif args.criterion_type == 'contrastive':
-        args.criterion = SupConLoss(2, 0.15, 0.15, args.batch_size)
     else:
         args.criterion = None
 
@@ -146,8 +144,9 @@ def _initialize_scheduler(args):
         print("[TRAINER] No scheduler initialized")
 
 def _initialize_data_loaders(args):
-    data = get_data(args)
+    args.cache_dir = '/dbfs/datasets' if args.db else './cache'
 
+    data = get_data(args)
     args.data = data
     args.trainloader = data["trainloader"]
     args.valloader = data["valloader"]
@@ -170,7 +169,6 @@ def _initialize_pruner(args):
         )
     else:
         args.pruner = args.pruner
-
 
     if args.prune:
         print('[TRAINER] Pruning initialized')
