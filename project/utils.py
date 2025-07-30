@@ -92,7 +92,7 @@ def print_statistics(metrics, trainer_instance):
     
     # Model Information
     if trainer_instance is not None:
-        print("\n🧠 Model Information:")
+        print("\nModel Information:")
         print("-" * 30)
         
         # Parameter count
