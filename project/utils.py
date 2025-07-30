@@ -2,6 +2,7 @@ import os
 import torch
 import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
+from unstructured_pruning import check_model_sparsity
 
 def get_device():
     return 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -74,3 +75,70 @@ def graph_losses_n_accs(losses, train_accs, test_accs):
 
     plt.tight_layout()
     plt.show()
+
+def print_statistics(metrics, trainer_instance):
+    print("\n" + "="*60)
+    print("TRAINING STATISTICS SUMMARY")
+    print("="*60)
+    
+    print("\nPerformance Metrics:")
+    print("-" * 30)
+    if 'accuracy' in metrics:
+        print(f"  Accuracy:     {metrics['accuracy']:.2f}%")
+    if 'perplexity' in metrics:
+        print(f"  Perplexity:   {metrics['perplexity']:.3f}")
+    if 'loss' in metrics:
+        print(f"  Loss:         {metrics['loss']:.4f}")
+    
+    # Model Information
+    if trainer_instance is not None:
+        print("\n🧠 Model Information:")
+        print("-" * 30)
+        
+        # Parameter count
+        total_params = sum(p.numel() for p in trainer_instance.model.parameters())
+        trainable_params = sum(p.numel() for p in trainer_instance.model.parameters() if p.requires_grad)
+        frozen_params = total_params - trainable_params
+        
+        print(f"  Total Parameters:     {total_params:,}")
+        print(f"  Trainable Parameters: {trainable_params:,}")
+        if frozen_params > 0:
+            print(f"  Frozen Parameters:    {frozen_params:,}")
+        
+        try:
+            sparsity = check_model_sparsity(trainer_instance.model)
+            print(f"  Model Sparsity:       {sparsity:.4f} ({sparsity*100:.2f}%)")
+        except:
+            pass
+        
+        # Training Configuration
+        print("\nTraining Configuration:")
+        print("-" * 30)
+        print(f"  Model:                {trainer_instance.model_name}")
+        print(f"  Task:                 {trainer_instance.model_task}")
+        print(f"  Learning Type:        {trainer_instance.learning_type}")
+        print(f"  Batch Size:           {trainer_instance.batch_size}")
+        print(f"  Learning Rate:        {trainer_instance.learning_rate}")
+        print(f"  Optimizer:            {trainer_instance.optimizer_type}")
+        
+        if hasattr(trainer_instance, 'epochs'):
+            print(f"  Epochs:               {trainer_instance.epochs}")
+        
+        if hasattr(trainer_instance, 'prune') and trainer_instance.prune:
+            print("\nPruning Configuration:")
+            print("-" * 30)
+            print(f"  Pruning Type:         {trainer_instance.pruning_type}")
+            print(f"  Target Sparsity:      {trainer_instance.target_sparsity}")
+            print(f"  Sparsity Scheduler:   {trainer_instance.sparsity_scheduler}")
+            if hasattr(trainer_instance, 'recovery_epochs'):
+                print(f"  Recovery Epochs:      {trainer_instance.recovery_epochs}")
+
+        
+        # System Info
+        print("\nSystem Information:")
+        print("-" * 30)
+        print(f"  Device:               {trainer_instance.device}")
+        print(f"  Mixed Precision:      {trainer_instance.enable_mixed_precision}")
+        print(f"  Workers:              {trainer_instance.num_workers}")
+        
+        print("\n" + "="*60)
