@@ -390,18 +390,18 @@ class Trainer:
             else:
                 print("[TRAINER] Failed to load weights")
 
-        print(f"[TRAINER] Model Sparsity: {self._get_sparsity_key()}")
+        sparsity = self._get_sparsity_key()
+        print(f"[TRAINER] Model Sparsity: {sparsity}")
 
         self.model.eval()
         self.model.to(self.device)
 
         desc = "Evaluating"
-        avg_acc, avg_perplexity = self._run_validation_epoch(desc, 'eval')
+        avg_metrics = self._run_validation_epoch(desc, 'eval')
+        if sparsity > 0:
+            avg_metrics['sparsity'] = sparsity
 
-        return {
-            "average_accuracy": round(avg_acc, 2), 
-            "average_perplexity": round(avg_perplexity, 3) if avg_perplexity else None,             
-        }
+        return avg_metrics
 
     def _extract_normalized_answer(self, input_ids, start_idx, end_idx):
         answer_ids = input_ids[start_idx: end_idx + 1]

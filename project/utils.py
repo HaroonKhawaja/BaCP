@@ -106,7 +106,10 @@ def print_statistics(metrics, trainer_instance):
             print(f"  Frozen Parameters:    {frozen_params:,}")
         
         try:
-            sparsity = check_model_sparsity(trainer_instance.model)
+            if 'sparsity' in metrics:
+                sparsity = metrics['sparsity']
+            else:
+                sparsity = check_model_sparsity(trainer_instance.model)
             print(f"  Model Sparsity:       {sparsity:.4f} ({sparsity*100:.2f}%)")
         except:
             pass
