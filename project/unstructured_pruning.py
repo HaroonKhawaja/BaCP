@@ -273,7 +273,6 @@ class WandaPrune(Pruner):
         return hook
 
     def prune(self, model):
-        all_importances = []
         importance_cache = {}
 
         for name in self.wrapped_layers:
@@ -289,22 +288,16 @@ class WandaPrune(Pruner):
             else: 
                 scaler_row = scaler_row.reshape(1, -1)
 
-            # Calculating local importance and threshold
+            # Calculating local importance and local threshold
             importance = (torch.abs(W) * torch.sqrt(scaler_row + 1e-10))
             importance_cache[name] = importance
-            all_importances.append(importance.view(-1))
             
-        # Calculating global importance and threshold
-        global_importances = torch.cat(all_importances)
-        total_weights = global_importances.numel()
-        num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-        threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
+            layer_importances  = importance.view(-1)
+            total_weights = layer_importances.numel()
+            num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
+            local_threshold = torch.kthvalue(layer_importances, num_to_zero).values.item()
 
-        # Updating masks
-        for name, importance in importance_cache.items():
-            self.masks[name] = torch.gt(importance, threshold).float()
-
-        self.remove_hooks()
+            self.masks[name] = torch.gt(importance, local_threshold).float()
 
     class WrappedLayer:
         def __init__(self, layer, name):
