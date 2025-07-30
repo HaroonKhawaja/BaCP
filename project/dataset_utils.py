@@ -397,7 +397,6 @@ def get_data(args):
             args.model_task, 
             args.batch_size, 
             args.cache_dir,
-            learning_type=args.criterion_type, 
             size=args.image_size,
             num_workers=args.num_workers
             )
