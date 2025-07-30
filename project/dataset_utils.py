@@ -393,10 +393,16 @@ def get_data(args):
                 )
 
     elif args.model_type == 'cv':
+        learning_type = 'contrastive' if hasattr(args, 'is_bacp') and args.is_bacp else 'supervised'
         return get_cv_data(
             args.model_task, 
             args.batch_size, 
             args.cache_dir,
             size=args.image_size,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            learning_type=learning_type,
             )
+        
+
+
+        
