@@ -273,6 +273,7 @@ class WandaPrune(Pruner):
         return hook
 
     def prune(self, model):
+        all_importances = []
         importance_cache = {}
 
         for name in self.wrapped_layers:
@@ -298,6 +299,8 @@ class WandaPrune(Pruner):
             local_threshold = torch.kthvalue(layer_importances, num_to_zero).values.item()
 
             self.masks[name] = torch.gt(importance, local_threshold).float()
+
+        self.remove_hooks()
 
     class WrappedLayer:
         def __init__(self, layer, name):

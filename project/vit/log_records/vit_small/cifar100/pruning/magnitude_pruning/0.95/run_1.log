@@ -1,0 +1,24 @@
+Model : vit_small - Learning Type: cifar100/pruning/magnitude_pruning/0.95
+Configuration:
+model_type: cv
+model_name: vit_small
+model_task: cifar100
+num_classes: 100
+criterion: CrossEntropyLoss()
+embedding_dim: 384
+epochs: 5
+pruning_epochs: 5
+recovery_epochs: 10
+batch_size: 256
+learning_rate: 0.01
+learning_type: pruning
+optimizer_type: sgd
+prune: True
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: cubic
+enable_mixed_precision: True
+device: cuda
+save_path: ./research/vit_small/cifar100/vit_small_cifar100_magnitude_pruning_0.95_pruning.pt
+finetuned_weights: ./research/vit_small/cifar100/vit_small_cifar100_baseline.pt
+

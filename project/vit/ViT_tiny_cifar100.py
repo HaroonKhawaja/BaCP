@@ -11,27 +11,24 @@
 
 # COMMAND ----------
 
-import sys
 import os
+import sys
 sys.path.append(os.path.abspath('..'))
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
+from constants import (
+    TARGET_SPARSITY_LOW, TARGET_SPARSITY_MID, TARGET_SPARSITY_HIGH,
+    BATCH_SIZE_CNN, BATCH_SIZE_VIT, BATCH_SIZE_LLM,
+    EPOCHS_SMALL_MODEL, EPOCHS_LARGE_MODEL, EPOCHS_VIT
+)
+from utils import get_device, get_num_workers, load_weights
+from unstructured_pruning import check_model_sparsity, check_sparsity_distribution
+from trainer import TrainingArguments, Trainer
+from bacp import BaCPTrainingArguments, BaCPTrainer
+
 from datasets.utils.logging import disable_progress_bar
 disable_progress_bar()
 os.environ["HF_DATASETS_CACHE"] = "/dbfs/hf_datasets"
 os.environ["TOKENIZERS_PARALLELISM"] = "false" 
-
-from trainer import Trainer, TrainingArguments
-from bacp import BaCPTrainer, BaCPTrainingArguments
-from ablation_modules import LearningRateSweep, BaCPLearningRateSweep
-from unstructured_pruning import check_sparsity_distribution
-from utils import *
-from constants import *
-
-device = get_device()
-print(f"{device = }")
 
 
 # COMMAND ----------
@@ -39,7 +36,7 @@ print(f"{device = }")
 # Notebook specific variables
 MODEL_NAME = 'vit_tiny'
 MODEL_TASK = 'cifar100'
-TRAIN = False
+TRAIN = True
 
 # COMMAND ----------
 
@@ -52,8 +49,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 1e-4),
     scheduler_type='linear_with_warmup',
     epochs=10,
     learning_type="baseline",
@@ -83,8 +79,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="magnitude_pruning",
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
@@ -106,8 +101,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="magnitude_pruning",
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
@@ -129,8 +123,7 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
+    optimizer_type_and_lr=('sgd', 0.01),
     pruning_type="magnitude_pruning",
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
@@ -138,7 +131,7 @@ training_args = TrainingArguments(
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if TRAIN:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -147,7 +140,7 @@ print(f"\n{metrics}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Movement Pruning
+# MAGIC ### SNIP-it Pruning
 
 # COMMAND ----------
 
@@ -157,16 +150,15 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
-    pruning_type="movement_pruning",
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="snipit_pruning",
     target_sparsity=TARGET_SPARSITY_LOW,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if TRAIN:
+if True:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -180,16 +172,15 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
-    pruning_type="movement_pruning",
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="snipit_pruning",
     target_sparsity=TARGET_SPARSITY_MID,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if TRAIN:
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -203,16 +194,86 @@ training_args = TrainingArguments(
     model_name=MODEL_NAME,
     model_task=MODEL_TASK,
     batch_size=BATCH_SIZE_VIT,
-    optimizer_type='sgd',
-    learning_rate=0.01,
-    pruning_type="movement_pruning",
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="snipit_pruning",
     target_sparsity=TARGET_SPARSITY_HIGH,
     sparsity_scheduler='cubic',
     finetuned_weights=finetuned_weights,
     learning_type="pruning",
 )
 trainer = Trainer(training_args)
-if TRAIN:
+if False:
+    trainer.train()
+
+metrics = trainer.evaluate()
+print(f"\n{metrics}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Wanda Pruning
+
+# COMMAND ----------
+
+# Initializing finetuned weights path
+finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
+training_args = TrainingArguments(
+    model_name=MODEL_NAME,
+    model_task=MODEL_TASK,
+    batch_size=BATCH_SIZE_VIT,
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="wanda_pruning",
+    target_sparsity=TARGET_SPARSITY_LOW,
+    sparsity_scheduler='cubic',
+    finetuned_weights=finetuned_weights,
+    learning_type="pruning",
+)
+trainer = Trainer(training_args)
+if False:
+    trainer.train()
+
+metrics = trainer.evaluate()
+print(f"\n{metrics}")
+
+# COMMAND ----------
+
+# Initializing finetuned weights path
+finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
+training_args = TrainingArguments(
+    model_name=MODEL_NAME,
+    model_task=MODEL_TASK,
+    batch_size=BATCH_SIZE_VIT,
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="wanda_pruning",
+    target_sparsity=TARGET_SPARSITY_MID,
+    sparsity_scheduler='cubic',
+    finetuned_weights=finetuned_weights,
+    learning_type="pruning",
+)
+trainer = Trainer(training_args)
+if False:
+    trainer.train()
+
+metrics = trainer.evaluate()
+print(f"\n{metrics}")
+
+# COMMAND ----------
+
+# Initializing finetuned weights path
+finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
+training_args = TrainingArguments(
+    model_name=MODEL_NAME,
+    model_task=MODEL_TASK,
+    batch_size=BATCH_SIZE_VIT,
+    optimizer_type_and_lr=('sgd', 0.01),
+    pruning_type="wanda_pruning",
+    target_sparsity=TARGET_SPARSITY_HIGH,
+    sparsity_scheduler='cubic',
+    finetuned_weights=finetuned_weights,
+    learning_type="pruning",
+)
+trainer = Trainer(training_args)
+if False:
     trainer.train()
 
 metrics = trainer.evaluate()
@@ -501,3 +562,145 @@ if TRAIN:
 metrics = trainer.evaluate()
 print(f"\n{metrics}")
 
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Wanda Pruning
+
+# COMMAND ----------
+
+# Initializing finetuned weights path
+finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
+
+bacp_training_args = BaCPTrainingArguments(
+    model_name=MODEL_NAME,
+    model_task=MODEL_TASK,
+    batch_size=BATCH_SIZE_VIT,
+    optimizer_type='sgd',
+    learning_rate=0.01,
+    pruning_type='wanda_pruning',
+    target_sparsity=TARGET_SPARSITY_LOW,
+    sparsity_scheduler='cubic',
+    finetuned_weights=finetuned_weights,
+    learning_type='bacp_pruning'
+)
+bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
+if TRAIN:
+    bacp_trainer.train()
+
+# Finetuning Phase
+bacp_trainer.generate_mask_from_model()
+training_args = TrainingArguments(
+    model_name=bacp_trainer.model_name,
+    model_task=bacp_trainer.model_task,
+    batch_size=bacp_trainer.batch_size,
+    optimizer_type='adamw',
+    learning_rate=0.0001,
+    pruner=bacp_trainer.get_pruner(),
+    pruning_type=bacp_trainer.pruning_type,
+    target_sparsity=bacp_trainer.target_sparsity,
+    epochs=50,
+    finetuned_weights=bacp_trainer.save_path,
+    finetune=True,
+    learning_type="bacp_finetune",
+)
+trainer = Trainer(training_args)
+if TRAIN:
+    trainer.train()
+
+metrics = trainer.evaluate()
+print(f"\n{metrics}")
+
+# COMMAND ----------
+
+# Initializing finetuned weights path
+finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
+
+bacp_training_args = BaCPTrainingArguments(
+    model_name=MODEL_NAME,
+    model_task=MODEL_TASK,
+    batch_size=BATCH_SIZE_VIT,
+    optimizer_type='sgd',
+    learning_rate=0.01,
+    pruning_type='wanda_pruning',
+    target_sparsity=TARGET_SPARSITY_MID,
+    sparsity_scheduler='cubic',
+    finetuned_weights=finetuned_weights,
+    learning_type='bacp_pruning'
+)
+bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
+if TRAIN:
+    bacp_trainer.train()
+
+# Finetuning Phase
+bacp_trainer.generate_mask_from_model()
+training_args = TrainingArguments(
+    model_name=bacp_trainer.model_name,
+    model_task=bacp_trainer.model_task,
+    batch_size=bacp_trainer.batch_size,
+    optimizer_type='adamw',
+    learning_rate=0.0001,
+    pruner=bacp_trainer.get_pruner(),
+    pruning_type=bacp_trainer.pruning_type,
+    target_sparsity=bacp_trainer.target_sparsity,
+    epochs=50,
+    finetuned_weights=bacp_trainer.save_path,
+    finetune=True,
+    learning_type="bacp_finetune",
+)
+trainer = Trainer(training_args)
+if TRAIN:
+    trainer.train()
+
+metrics = trainer.evaluate()
+print(f"\n{metrics}")
+
+# COMMAND ----------
+
+# Initializing finetuned weights path
+finetuned_weights = f"/dbfs/research/{MODEL_NAME}/{MODEL_TASK}/{MODEL_NAME}_{MODEL_TASK}_baseline.pt"
+
+bacp_training_args = BaCPTrainingArguments(
+    model_name=MODEL_NAME,
+    model_task=MODEL_TASK,
+    batch_size=BATCH_SIZE_VIT,
+    optimizer_type='sgd',
+    learning_rate=0.01,
+    pruning_type='wanda_pruning',
+    target_sparsity=TARGET_SPARSITY_HIGH,
+    sparsity_scheduler='cubic',
+    finetuned_weights=finetuned_weights,
+    learning_type='bacp_pruning'
+)
+bacp_trainer = BaCPTrainer(bacp_training_args=bacp_training_args)
+if TRAIN:
+    bacp_trainer.train()
+
+# Finetuning Phase
+bacp_trainer.generate_mask_from_model()
+training_args = TrainingArguments(
+    model_name=bacp_trainer.model_name,
+    model_task=bacp_trainer.model_task,
+    batch_size=bacp_trainer.batch_size,
+    optimizer_type='adamw',
+    learning_rate=0.0001,
+    pruner=bacp_trainer.get_pruner(),
+    pruning_type=bacp_trainer.pruning_type,
+    target_sparsity=bacp_trainer.target_sparsity,
+    epochs=50,
+    finetuned_weights=bacp_trainer.save_path,
+    finetune=True,
+    learning_type="bacp_finetune",
+)
+trainer = Trainer(training_args)
+if TRAIN:
+    trainer.train()
+
+metrics = trainer.evaluate()
+print(f"\n{metrics}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC # CIFAR-100

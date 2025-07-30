@@ -1,0 +1,34 @@
+Model : vit_small - Learning Type: cifar100/bacp_finetune/magnitude_pruning/0.95
+Configuration:
+model_type: cv
+model_name: vit_small
+model_task: cifar100
+num_classes: 100
+criterion: CrossEntropyLoss()
+embedding_dim: 384
+epochs: 10
+pruning_epochs: 10
+recovery_epochs: 10
+batch_size: 256
+learning_rate: 0.0001
+learning_type: bacp_finetune
+optimizer_type: adamw
+prune: False
+pruning_type: magnitude_pruning
+target_sparsity: 0.95
+sparsity_scheduler: linear
+enable_mixed_precision: True
+device: cuda
+save_path: ./research/vit_small/cifar100/vit_small_cifar100_magnitude_pruning_0.95_bacp_finetune.pt
+finetuned_weights: ./research/vit_small/cifar100/vit_small_cifar100_magnitude_pruning_0.95_bacp_pruning.pt
+
+Epoch [1/10]: Avg Loss: 2.8714 | Avg Accuracy: 60.13 | Model Sparsity: 0.95
+Epoch [2/10]: Avg Loss: 1.3692 | Avg Accuracy: 66.51 | Model Sparsity: 0.95
+Epoch [3/10]: Avg Loss: 1.1241 | Avg Accuracy: 68.53 | Model Sparsity: 0.95
+Epoch [4/10]: Avg Loss: 1.0241 | Avg Accuracy: 69.23 | Model Sparsity: 0.95
+Epoch [5/10]: Avg Loss: 0.9648 | Avg Accuracy: 70.18 | Model Sparsity: 0.95
+Epoch [6/10]: Avg Loss: 0.9130 | Avg Accuracy: 70.64 | Model Sparsity: 0.95
+Epoch [7/10]: Avg Loss: 0.8720 | Avg Accuracy: 70.66 | Model Sparsity: 0.95
+Epoch [8/10]: Avg Loss: 0.8315 | Avg Accuracy: 71.40 | Model Sparsity: 0.95
+Epoch [9/10]: Avg Loss: 0.8004 | Avg Accuracy: 71.74 | Model Sparsity: 0.95
+Epoch [10/10]: Avg Loss: 0.7721 | Avg Accuracy: 72.06 | Model Sparsity: 0.95
