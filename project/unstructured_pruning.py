@@ -225,7 +225,7 @@ class WandaPrune(Pruner):
         self.current_epoch = 0
         self.hooks = []
         self.is_wanda = True
-        self.device = model.model.device if hasattr(model.model, 'device') else get_device()
+        self.device = next(model.parameters()).device
 
         if hasattr(model.model, 'distilbert') and hasattr(model.model.distilbert, 'transformer') and hasattr(model.model.distilbert.transformer, 'layer'):
             self.prefix = "distilbert.transformer.layer"
