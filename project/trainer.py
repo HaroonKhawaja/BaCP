@@ -5,7 +5,6 @@ import torch
 import torch.optim as optim
 from torch.amp import GradScaler, autocast
 from tqdm import tqdm
-import evaluate
 from datasets.utils.logging import disable_progress_bar
 from unstructured_pruning import check_model_sparsity
 from logger import Logger
@@ -171,11 +170,10 @@ class Trainer:
             avg_loss = self._run_train_epoch(epoch, desc)
 
             # Validation
-            if self.criterion_type == 'supervised':
-                desc = f"Validation Epoch [{epoch+1}/{self.epochs}]"
-                avg_acc, avg_perplexity = self._run_validation_epoch(desc)
-            else:
-                avg_acc, avg_perplexity = 0, 0
+            desc = f"Validation Epoch [{epoch+1}/{self.epochs}]"
+            avg_metrics = self._run_validation_epoch(desc)
+            avg_acc = avg_metrics['accuracy']
+            avg_perplexity = avg_metrics.get('perplexity', None)
 
             self.train_losses.append(avg_loss)
             if self.prune and self.pruner:
@@ -186,14 +184,13 @@ class Trainer:
             else:
                 self.accuracies.append(avg_acc)
                 
-            if self.model_type == 'llm' and self.model_task == 'wikitext2':
-                info = (f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc:.2f} | Avg Perplexity: {avg_perplexity:.3f} | "
-                       f"Model Sparsity: {self._get_sparsity_key()}\n")
-            else:
-                info = (f"Epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc:.2f} | "
-                       f"Model Sparsity: {self._get_sparsity_key()}\n")
+            info = (
+                f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
+                f"Avg Accuracy: {avg_acc:.2f} | "
+                f"Model Sparsity: {self._get_sparsity_key()}\n"
+                )
+            if avg_perplexity:
+                info += f"Avg Perplexity: {avg_perplexity:.3f}\n"
             print(info)
 
             if self.logger is not None:
@@ -219,27 +216,24 @@ class Trainer:
             desc = f"Recovery Epoch [{epoch+1}/{self.recovery_epochs}]"
             avg_loss = self._run_train_epoch(epoch, desc)
 
-            if self.criterion_type == 'supervised':
-                desc = f"Validation Epoch [{epoch+1}/{self.recovery_epochs}]"
-                avg_acc, avg_perplexity = self._run_validation_epoch(desc)
+            desc = f"Validation Epoch [{epoch+1}/{self.recovery_epochs}]"
+            avg_metrics = self._run_validation_epoch(desc)
+            avg_acc = avg_metrics['accuracy']
+            avg_perplexity = avg_metrics.get('perplexity', None)
 
-                self.train_losses.append(avg_loss)
-                sparsity_key = self._get_sparsity_key()
-                if sparsity_key not in self.accuracy_per_sparsity:
-                    self.accuracy_per_sparsity[sparsity_key] = []
-                self.accuracy_per_sparsity[sparsity_key].append(avg_acc)
-            else:
-                avg_acc = 0
-
-            # Format info message based on model type and task
-            if self.model_type == 'llm' and self.model_task == 'wikitext2':
-                info = (f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc:.2f} | Avg Perplexity: {avg_perplexity:.3f} | "
-                       f"Model Sparsity: {self._get_sparsity_key()}\n")
-            else:
-                info = (f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
-                       f"Avg Accuracy: {avg_acc:.2f} | "
-                       f"Model Sparsity: {self._get_sparsity_key()}\n")
+            self.train_losses.append(avg_loss)
+            sparsity_key = self._get_sparsity_key()
+            if sparsity_key not in self.accuracy_per_sparsity:
+                self.accuracy_per_sparsity[sparsity_key] = []
+            self.accuracy_per_sparsity[sparsity_key].append(avg_acc)
+        
+            info = (
+                f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
+                f"Avg Accuracy: {avg_acc:.2f} | "
+                f"Model Sparsity: {self._get_sparsity_key()}\n"
+                )
+            if avg_perplexity:
+                info += f"Avg Perplexity: {avg_perplexity:.3f}\n"
             print(info) 
 
             if self.logger is not None:
@@ -310,78 +304,82 @@ class Trainer:
     def _run_validation_epoch(self, desc="", mode="val"):
         """Run one full validation epoch."""
         self.model.eval()
-        total_correct, total_samples = 0, 0
-        total_loss, avg_perplexity = 0, 0
+        total_correct, total_samples, total_loss = 0, 0, 0
 
-        if mode == 'eval' and self.testloader:
-            batchloader = tqdm(self.testloader, desc=desc, leave=False) if self.enable_tqdm else self.testloader
-        else:
-            batchloader = tqdm(self.valloader, desc=desc, leave=False) if self.enable_tqdm  else self.valloader
-            
+        dataloader = self.testloader if (mode=='eval' and self.testloader) else self.valloader
+        batchloader = tqdm(dataloader, desc=desc, leave=False) if self.enable_tqdm else dataloader
+
         with torch.no_grad():
             for step, batch in enumerate(batchloader):
                 # Batch handling
                 if isinstance(batch, dict):
                     batch = {k: v.to(self.device) for k, v in batch.items()}
+                    labels = batch['labels']
                 elif isinstance(batch, list):
                     batch = [x.to(self.device) for x in batch]
                     batch, labels = batch
                 else:
                     batch.to(self.device)
-                
+
                 # Loss Handling
                 if self.enable_mixed_precision:
                     with autocast(device_type=self.device):
                         outputs = self.model(batch)
                 else:
                     outputs = self.model(batch)
+
+                metrics = self.calculate_metrics(outputs, labels)
+                total_correct += metrics['current_correct']
+                total_samples += metrics['current_samples']
+                total_loss += metrics['current_loss']
+
+        avg_metrics = {
+            'accuracy': 100 * (total_correct / total_samples),
+        }
+        if total_loss > 0:
+            perplexity = torch.exp(total_loss / len(dataloader)).item()
+            avg_metrics['perplexity'] = perplexity
+
+        if self.enable_tqdm:
+            display_metrics = {}
+            for key, value in avg_metrics.items():
+                display_metrics[key] = f"{value:.2f}"
+            batchloader.set_postfix(**display_metrics)
+
+        return avg_metrics
+
+    def calculate_metrics(self, outputs, labels):
+        current_correct = 0
+        current_samples = 0
+        current_loss = 0
+
+        if self.model_type == 'llm':
+            if self.model_task == 'wikitext2':
+                mask = (labels != -100)
+
+                logits = outputs.logits[mask]                        
+                masked_labels = labels[mask]
+                preds = torch.argmax(logits, dim=-1)
+
+                current_correct = (preds == masked_labels).sum().item()
+                current_samples = mask.sum().item()
+                current_loss = outputs.loss.item()
+            else:
+                preds = torch.argmax(outputs.logits, dim=1)
+                current_correct = (preds == labels).sum().item()
+                current_samples = labels.size(0)
                 
-                # Prediction Handling
-                if self.model_type == 'llm':
-                    if self.model_task == 'wikitext2':
-                        labels = batch["labels"]
-                        
-                        # Generating mask and masking logits/labels
-                        mask = (labels != -100)
-                        logits = outputs.logits[mask]                        
-                        labels = labels[mask]
+        else:
+            logits = outputs.logits if hasattr(outputs, 'logits') else outputs
+            preds = logits.max(1)[1]
+            current_correct = (preds == labels).sum().item()
+            current_samples = labels.size(0)
 
-                        # Accuracy calculation
-                        preds = torch.argmax(logits, dim=-1)
-                        correct = (preds == labels).sum()
-                        total_correct += correct.item()
-                        total_samples += mask.sum().item()
-                        avg_acc = (total_correct / total_samples) * 100
-
-                        # Perplexity calculation
-                        total_loss += outputs.loss
-                        avg_perplexity = torch.exp(total_loss / (step + 1)).item()
-
-                    else:
-                        labels = batch["labels"]
-                        preds = torch.argmax(outputs.logits, dim=1)
-                        correct = (preds == labels).sum()
-                        total_correct += correct.item()
-                        total_samples += batch['input_ids'].size(0)
-                        avg_acc = (total_correct / total_samples) * 100
-                else:
-                    if hasattr(outputs, 'logits'):
-                        outputs = outputs.logits
-                    preds = outputs.max(1)[1]
-                    correct = (preds == labels).sum()
-                    total_correct += correct.item()
-                    total_samples += labels.size(0)
-                    avg_acc = (total_correct / total_samples) * 100
-
-                metrics = {
-                    'accuracy': f"{avg_acc:.2f}",
-                    'perplexity': f"{avg_perplexity:.3f}",
-                    'sparsity': f'{self._get_sparsity_key()}'
-                }
-                if self.enable_tqdm:
-                    batchloader.set_postfix(**metrics)
-
-        return avg_acc, avg_perplexity
+        return {
+            'current_correct': current_correct,
+            'current_samples': current_samples,
+            'current_loss': current_loss
+        }
 
     def evaluate(self, load=True):
         """Load weights and evaluate the model on validation or test set. Returns accuracy in percentage."""
