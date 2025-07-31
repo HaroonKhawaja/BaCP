@@ -301,10 +301,15 @@ class BaCPTrainer:
                 current_embeddings, current_logits = self._get_embeddings_and_logits(
                     batch if self.model_type == 'llm' else batch['data1']
                 )
+
                 with torch.no_grad():
                     if self.model_type == 'llm':
-                        pretrained_embeddings = F.normalize(self.pre_trained_model(input_data).hidden_states[-1][:, 0], dim=1)          
-                        finetuned_embeddings = F.normalize(self.finetuned_model(input_data).hidden_states[-1][:, 0], dim=1)
+                        if self.model_task == 'wikitext2':
+                            pretrained_embeddings = F.normalize(self.pre_trained_model(input_data).hidden_states[-1], dim=1)
+                            finetuned_embeddings = F.normalize(self.finetuned_model(input_data).hidden_states[-1], dim=1)
+                        else:      
+                            pretrained_embeddings = F.normalize(self.pre_trained_model(input_data).hidden_states[-1][:, 0], dim=1)          
+                            finetuned_embeddings = F.normalize(self.finetuned_model(input_data).hidden_states[-1][:, 0], dim=1)
                     else:
                         pretrained_embeddings = self.pre_trained_model(input_data)
                         finetuned_embeddings = self.finetuned_model(input_data)
@@ -313,12 +318,11 @@ class BaCPTrainer:
                             finetuned_embeddings = finetuned_embeddings.logits
                     
                 if mask is not None:
-                    pass
-                    # labels = labels[mask]
-                    # current_logits = current_logits[mask]
-                    # current_embeddings = current_embeddings[mask]
-                    # pretrained_embeddings = pretrained_embeddings[mask]
-                    # finetuned_embeddings = finetuned_embeddings[mask]
+                    labels = labels[mask]
+                    current_logits = current_logits[mask]
+                    current_embeddings = current_embeddings[mask]
+                    pretrained_embeddings = pretrained_embeddings[mask]
+                    finetuned_embeddings = finetuned_embeddings[mask]
                 
                 CE_loss = nn.CrossEntropyLoss()(current_logits, labels)
 
@@ -465,6 +469,8 @@ class BaCPTrainer:
     def _extract_raw_features(self, data_batch):
         if self.model_type == 'llm':
             outputs = self.model(data_batch)
+            if self.model_task in ['wikitext2']:
+                return outputs.hidden_states[-1]
             return outputs.hidden_states[-1][:, 0, :] # CLS Token
         else:
             raw_features = self.model(data_batch, extract_raw=True)
