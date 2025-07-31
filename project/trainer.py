@@ -185,7 +185,7 @@ class Trainer:
                 self.accuracies.append(avg_acc)
                 
             info = (
-                f"Recovery epoch [{epoch+1}/{self.recovery_epochs}]: Avg Loss: {avg_loss:.4f} | "
+                f"Training epoch [{epoch+1}/{self.epochs}]: Avg Loss: {avg_loss:.4f} | "
                 f"Avg Accuracy: {avg_acc:.2f} | "
                 f"Model Sparsity: {self._get_sparsity_key()}\n"
                 )
