@@ -320,6 +320,7 @@ class Trainer:
                     batch, labels = batch
                 else:
                     batch.to(self.device)
+                    labels = batch['labels']
 
                 # Loss Handling
                 if self.enable_mixed_precision:
@@ -337,7 +338,7 @@ class Trainer:
             'accuracy': 100 * (total_correct / total_samples),
         }
         if total_loss > 0:
-            perplexity = torch.exp(total_loss / len(dataloader)).item()
+            perplexity = torch.exp(torch.tensor(total_loss) / len(dataloader)).item()
             avg_metrics['perplexity'] = perplexity
 
         if self.enable_tqdm:
