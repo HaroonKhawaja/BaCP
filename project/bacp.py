@@ -395,14 +395,16 @@ class BaCPTrainer:
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
                             if self.model_type == 'llm':
-                                snapshot_embeddings = F.normalize(snapshot_model(input_data).hidden_states[-1][:, 0], dim=1)
+                                if self.model_task == 'wikitext2':
+                                    snapshot_embeddings = F.normalize(snapshot_model(input_data).hidden_states[-1], dim=1)
+                                    if mask is not None:
+                                        snapshot_embeddings = snapshot_embeddings[mask]
+                                else:
+                                    snapshot_embeddings = F.normalize(snapshot_model(input_data).hidden_states[-1][:, 0], dim=1)
                             else:
                                 snapshot_embeddings = snapshot_model(input_data)
                                 if hasattr(snapshot_embeddings, 'logits'):
                                     snapshot_embeddings = snapshot_embeddings.logits
-                            if mask is not None:
-                                pass
-                                # snapshot_embeddings = snapshot_embeddings[mask]
 
                         sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
                         L_snc_sup += self._supervised_criterion(sup_features_snc, labels)
