@@ -5,6 +5,9 @@ from abc import abstractmethod, ABC
 from utils import *
 
 def layer_check(name, param):
+    if param is None:
+        return False
+    
     if param.dim() <= 1 or not param.requires_grad:
         return False
     
