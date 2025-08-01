@@ -15,7 +15,7 @@ def layer_check(name, param):
         'projection_head', # Encoder heads
         'vocab_projector', 'vocab_transform', # DistilBERT
 
-        'classifier.dense', 'classifier.out_proj', # RoBERTA
+        'classifier.dense', 'classifier.out_proj', 'lm_head', # RoBERTA
 
         # 'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
         # 'class_token', 'pos_embedding', 'vocab_transform', 'lm_head',
