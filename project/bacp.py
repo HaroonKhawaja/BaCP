@@ -116,21 +116,18 @@ class BaCPTrainer:
         if isinstance(lambdas, list) and len(lambdas) == 4:
             # static parameters
             self.lambda1, self.lambda2, self.lambda3, self.lambda4 = lambdas
-        elif isinstance(lambdas, float):
-            # learnable parameters
-            self.lambda1 = nn.Parameter(torch.tensor(lambdas, requires_grad=True)).to(self.device)
-            self.lambda2 = nn.Parameter(torch.tensor(lambdas, requires_grad=True)).to(self.device)
-            self.lambda3 = nn.Parameter(torch.tensor(lambdas, requires_grad=True)).to(self.device)
-            self.lambda4 = nn.Parameter(torch.tensor(lambdas, requires_grad=True)).to(self.device)
         else:
-            # Learnable parameters - Uniform distribution
-            self.lambda1 = nn.Parameter(torch.rand(1, requires_grad=True)).to(self.device)
-            self.lambda2 = nn.Parameter(torch.rand(1, requires_grad=True)).to(self.device)
-            self.lambda3 = nn.Parameter(torch.rand(1, requires_grad=True)).to(self.device)
-            self.lambda4 = nn.Parameter(torch.rand(1, requires_grad=True)).to(self.device)
+            # learnable parameters
+            self.lambda1 = nn.Parameter(torch.tensor(0., requires_grad=True, device=self.device))
+            self.lambda2 = nn.Parameter(torch.tensor(0., requires_grad=True, device=self.device))
+            self.lambda3 = nn.Parameter(torch.tensor(0., requires_grad=True, device=self.device))
+            self.lambda4 = nn.Parameter(torch.tensor(0., requires_grad=True, device=self.device))
 
         if isinstance(self.lambda1, nn.Parameter):
-            self.optimizer.add_param_group({'params': [self.lambda1, self.lambda2, self.lambda3, self.lambda4]})
+            self.optimizer.add_param_group({
+                'params': [self.lambda1, self.lambda2, self.lambda3, self.lambda4],
+                'lr': 5e-5,
+                })
 
         self.lambda_history = {
             'lambda1': [],
@@ -259,8 +256,17 @@ class BaCPTrainer:
             # Saving model
             if self._handle_save(epoch):
                 print(f"[BaCP] weights saved!")
-
         self.recover = False
+
+    def _normalize_lambdas(self):
+        if isinstance(self.lambda1, nn.Parameter):
+            stacked_lambdas = torch.stack([self.lambda1, self.lambda2, self.lambda3, self.lambda4])
+            normalized_lambdas = F.softmax(stacked_lambdas, dim=0)
+        else:
+            total = self.lambda1 + self.lambda2 + self.lambda3 + self.lambda4
+            stacked_lambdas = torch.tensor([self.lambda1, self.lambda2, self.lambda3, self.lambda4], device=self.device)
+            normalized_lambdas = stacked_lambdas / total
+        return normalized_lambdas
 
     def train_epoch(self, epoch, desc):
         if (self.prune and self.pruner) and (hasattr(self.pruner, 'is_wanda') and self.pruner.is_wanda) and (not self.recover):
@@ -412,10 +418,11 @@ class BaCPTrainer:
                     L_snc_total = L_snc_sup + L_snc_unsup
 
             # Total loss calculation
-            ce_loss = CE_loss * self.lambda1
-            prc_loss = L_prc_total * self.lambda2
-            snc_loss = L_snc_total * self.lambda3
-            fic_loss = L_fic_total * self.lambda4
+            lambda1, lambda2, lambda3, lambda4 = self._normalize_lambdas()
+            ce_loss = CE_loss * lambda1
+            prc_loss = L_prc_total * lambda2
+            snc_loss = L_snc_total * lambda3
+            fic_loss = L_fic_total * lambda4
             total_loss = (
                 ce_loss +
                 prc_loss +
@@ -433,17 +440,17 @@ class BaCPTrainer:
             total += 1
             if self.enable_tqdm:
                 batchloader.set_postfix({
-                    'Loss': ce_loss.item(), 
+                    'Loss': total_loss.item(), 
                     'PrC Loss': prc_loss.item(), 
                     'SnC Loss': snc_loss.item(), 
                     'FiC Loss': fic_loss.item(), 
                     'CE Loss': ce_loss.item(),
                 })
             
-            self.lambda_history['lambda1'].append(self.lambda1)
-            self.lambda_history['lambda2'].append(self.lambda2)
-            self.lambda_history['lambda3'].append(self.lambda3)
-            self.lambda_history['lambda4'].append(self.lambda4)
+            self.lambda_history['lambda1'].append(lambda1)
+            self.lambda_history['lambda2'].append(lambda2)
+            self.lambda_history['lambda3'].append(lambda3)
+            self.lambda_history['lambda4'].append(lambda4)
         
         self._update_losses(losses, prc_losses, snc_losses, fic_losses, ce_losses, total)
 
