@@ -126,7 +126,7 @@ class BaCPTrainer:
         if isinstance(self.lambda1, nn.Parameter):
             self.optimizer.add_param_group({
                 'params': [self.lambda1, self.lambda2, self.lambda3, self.lambda4],
-                'lr': 5e-5,
+                'lr': 1e-4,
                 })
 
         self.lambda_history = {
@@ -332,7 +332,7 @@ class BaCPTrainer:
                 
                 CE_loss = nn.CrossEntropyLoss()(current_logits, labels)
 
-                if  hasattr(self, 'disable') and self.disable == 'disable_unsupervised_loss':
+                if  hasattr(self, 'disable') and self.disable == 'self':
                     # PrC Module
                     sup_features_prc = torch.cat((current_embeddings, pretrained_embeddings))
                     L_prc_sup = self._supervised_criterion(sup_features_prc, labels)
@@ -347,37 +347,50 @@ class BaCPTrainer:
                     L_snc_sup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(input_data)
-                            if hasattr(snapshot_embeddings, 'logits'):
-                                snapshot_embeddings = snapshot_embeddings.logits
-                            if mask is not None:
-                                snapshot_embeddings = snapshot_embeddings[mask]
+                            if self.model_type == 'llm':
+                                if self.model_task == 'wikitext2':
+                                    snapshot_embeddings = F.normalize(snapshot_model(input_data).hidden_states[-1], dim=1)
+                                    if mask is not None:
+                                        snapshot_embeddings = snapshot_embeddings[mask]
+                                else:
+                                    snapshot_embeddings = F.normalize(snapshot_model(input_data).hidden_states[-1][:, 0], dim=1)
+                            else:
+                                snapshot_embeddings = snapshot_model(input_data)
+                                if hasattr(snapshot_embeddings, 'logits'):
+                                    snapshot_embeddings = snapshot_embeddings.logits
+
                         sup_features_snc = torch.cat((current_embeddings, snapshot_embeddings))
                         L_snc_sup += self._supervised_criterion(sup_features_snc, labels)
-                    L_snc_total = L_snc_sup
+                    L_snc_total = L_snc_sup 
 
-                elif  hasattr(self, 'disable') and self.disable == 'disable_supervised_loss':
+                elif hasattr(self, 'disable') and self.disable == 'sup':
                     # PrC Module
                     L_prc_unsup = self._unsupervised_criterion(current_embeddings, pretrained_embeddings)
                     L_prc_total = L_prc_unsup
 
                     # FiC Module
                     L_fic_unsup = self._unsupervised_criterion(current_embeddings, finetuned_embeddings)
-                    L_fic_total = L_fic_unsup
+                    L_fic_total = L_fic_sup + L_fic_unsup
 
                     # SnC Module
                     L_snc_unsup = torch.tensor(0.0, device=self.device)
                     for snapshot_model in self.snapshots:
                         with torch.no_grad():
-                            snapshot_embeddings = snapshot_model(input_data)
-                            if hasattr(snapshot_embeddings, 'logits'):
-                                snapshot_embeddings = snapshot_embeddings.logits
-                            if mask is not None:
-                                snapshot_embeddings = snapshot_embeddings[mask]
+                            if self.model_type == 'llm':
+                                if self.model_task == 'wikitext2':
+                                    snapshot_embeddings = F.normalize(snapshot_model(input_data).hidden_states[-1], dim=1)
+                                    if mask is not None:
+                                        snapshot_embeddings = snapshot_embeddings[mask]
+                                else:
+                                    snapshot_embeddings = F.normalize(snapshot_model(input_data).hidden_states[-1][:, 0], dim=1)
+                            else:
+                                snapshot_embeddings = snapshot_model(input_data)
+                                if hasattr(snapshot_embeddings, 'logits'):
+                                    snapshot_embeddings = snapshot_embeddings.logits
                         L_snc_unsup += self._unsupervised_criterion(current_embeddings, snapshot_embeddings)
                     L_snc_total = L_snc_unsup
                 
-                elif  hasattr(self, 'disable') and self.disable == 'disable_all_loss':
+                elif  hasattr(self, 'disable') and self.disable == 'all':
                     L_prc_total = torch.tensor(0.0, device=self.device)
                     L_snc_total = torch.tensor(0.0, device=self.device)
                     L_fic_total = torch.tensor(0.0, device=self.device)
