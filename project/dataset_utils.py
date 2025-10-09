@@ -34,7 +34,6 @@ VALID_DATASETS = {
         'flowers102': lambda root_folder, size, n_views: Flowers102(root_folder, split='train', transform=AugmentData(get_train_transform('supervised', size, 'flowers102'), n_views), download=True),
         'emnist': lambda root_folder, size, n_views: EMNIST(root_folder, split='balanced', train=True, transform=AugmentData(get_train_transform('supervised', size, 'emnist'), n_views), download=True),
         'caltech101': lambda root_folder, size, n_views: Caltech101(root=root_folder, target_type='category', transform=AugmentData(get_train_transform('supervised', size, 'caltech101'), n_views), download=True),
-
     },
     
     'testset': {
@@ -375,16 +374,21 @@ def get_wikitext2_data(tokenizer, batch_size, cache_dir, num_workers=24):
 
 
 def get_data(args):
+    if args.is_bacp:
+        transform_type = 'contrastive'
+    else:
+        transform_type = 'supervised'
+
     if args.model_type == 'llm':
-        if args.model_task in get_dataset_config_names("glue"):
+        if args.dataset_name in get_dataset_config_names("glue"):
             return get_glue_data(
                 args.tokenizer, 
-                args.model_task, 
+                args.dataset_name, 
                 args.batch_size,
                 args.cache_dir, 
                 args.num_workers
                 )
-        elif args.model_task == 'wikitext2':
+        elif args.dataset_name == 'wikitext2':
             return get_wikitext2_data(
                 args.tokenizer, 
                 args.batch_size,
@@ -393,14 +397,13 @@ def get_data(args):
                 )
 
     elif args.model_type == 'cv':
-        learning_type = 'contrastive' if hasattr(args, 'is_bacp') and args.is_bacp else 'supervised'
         return get_cv_data(
-            args.model_task, 
+            args.dataset_name, 
             args.batch_size, 
             args.cache_dir,
             size=args.image_size,
             num_workers=args.num_workers,
-            learning_type=learning_type,
+            learning_type=transform_type,
             )
         
 

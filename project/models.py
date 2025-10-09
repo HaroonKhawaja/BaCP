@@ -1,245 +1,175 @@
+from dataclasses import dataclass
 import torch
-import torch.nn as nn 
+import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models import resnet50, resnet101, vgg11, vgg19, vit_b_16, vit_l_16
-from torchvision.models import ResNet50_Weights, ResNet101_Weights, VGG11_Weights, VGG19_Weights, ViT_B_16_Weights, ViT_L_16_Weights
-from transformers import AutoModelForImageClassification, AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoModelForMaskedLM, AutoTokenizer
-from transformers import ViTConfig, ViTModel
-from utils import freeze_weights
+from torchvision.models import resnet50, resnet101, vgg11, vgg19
+from torchvision.models import ResNet50_Weights, ResNet101_Weights, VGG11_Weights, VGG19_Weights
+from transformers import AutoModelForImageClassification, AutoModelForSequenceClassification, AutoModelForMaskedLM
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class ModelSpec:
+    fn: object
+    weight: object
+    family: str
+    type: str
 
 PRETRAINED = True
+
 MODELS = {
-    'resnet50': {
-        'fn': resnet50,
-        'weight': ResNet50_Weights.IMAGENET1K_V1,
-        'family': 'resnet',
-        'type': 'vision',
-    },
-    'resnet101': {
-        'fn': resnet101,
-        'weight': ResNet101_Weights.IMAGENET1K_V1,
-        'family': 'resnet',
-        'type': 'vision',
-    },
-    'vgg11': {
-        'fn': vgg11,
-        'weight': VGG11_Weights.IMAGENET1K_V1,
-        'family': 'vgg',
-        'type': 'vision',
-    },
-    'vgg19': {
-        'fn': vgg19,
-        'weight': VGG19_Weights.IMAGENET1K_V1,
-        'family': 'vgg',
-        'type': 'vision',
-    },
-    'vit_tiny': {
-        'fn': AutoModelForImageClassification,
-        'weight': 'WinKawaks/vit-tiny-patch16-224',
-        'family': 'vit',
-        'type': 'vision',
-    },
-    'vit_small': {
-        'fn': AutoModelForImageClassification,
-        'weight': 'WinKawaks/vit-small-patch16-224',
-        'family': 'vit',
-        'type': 'vision',
-    },
-    'distilbert-base-uncased-mlm': {
-        'fn': AutoModelForMaskedLM,
-        'weight': 'distilbert-base-uncased',
-        'family': 'bert',
-        'type': 'language',
-    },
-    'distilbert-base-uncased': {
-        'fn': AutoModelForSequenceClassification,
-        'weight': 'distilbert-base-uncased',
-        'family': 'bert',
-        'type': 'language',
-    },
-    'roberta-base-mlm': {
-        'fn': AutoModelForMaskedLM,
-        'weight': 'roberta-base',
-        'family': 'bert',
-        'type': 'language',
-    },
-    'roberta-base': {
-        'fn': AutoModelForSequenceClassification,
-        'weight': 'roberta-base',
-        'family': 'bert',
-        'type': 'language',
-    }
-        
+    'resnet50':     ModelSpec(resnet50, ResNet50_Weights.IMAGENET1K_V1,     'resnet',   'vision'),
+    'resnet101':    ModelSpec(resnet101, ResNet101_Weights.IMAGENET1K_V1,   'resnet',   'vision'),
+    'vgg11':    ModelSpec(vgg11, VGG11_Weights.IMAGENET1K_V1,   'vgg',    'vision'),
+    'vgg19':    ModelSpec(vgg19, VGG19_Weights.IMAGENET1K_V1,   'vgg',    'vision'),
+    'distilbert-base-uncased-mlm':  ModelSpec(AutoModelForMaskedLM,                 'distilbert-base-uncased',  'bert', 'language'),
+    'distilbert-base-uncased':      ModelSpec(AutoModelForSequenceClassification,   'distilbert-base-uncased',  'bert', 'language'),
+    'roberta-base-mlm': ModelSpec(AutoModelForMaskedLM,                 'roberta-base', 'bert', 'language'),
+    'roberta-base':     ModelSpec(AutoModelForSequenceClassification,   'roberta-base', 'bert', 'language'),
 }
 
-def initialize_model_components(model_name, pretrained=True, model_task=''):
-    if model_task == 'wikitext2':
-        model_name += '-mlm'
+def _get_embedded_dim_from_model(model):
+    """Returns the model's final embedded dimension"""
+    if hasattr(model, 'fc') and hasattr(model.fc, 'in_features'):
+        return model.fc.in_features
+    if hasattr(model, 'classifier'):
+        cls_head = model.classifier
+        if isinstance(cls_head, nn.Sequential):
+            return cls_head[-1].in_features
+        elif hasattr(cls_head, 'in_features'):
+            return cls_head.in_features
+    if hasattr(model, 'head') and hasattr(model.head, 'in_features'):
+        return model.head.in_features
+    if hasattr(model, 'config') and hasattr(model.config, 'hidden_size'):
+        return model.config.hidden_size
+    raise RuntimeError(f"Couldn't infer embedding dim for model: {model.__class__.__name__}")
     
+def initialize_model_components(model_name: str, pretrained: bool):
     if model_name not in MODELS:
-        raise ValueError(f"Unknown model: '{model_name}'. Available: {list(MODELS.keys())}")
-    
+        raise ValueError(f"Unknown model {model_name}. Choices: {list(MODELS.keys())}")
+
     spec = MODELS[model_name]
-
-    model_fn = spec['fn']
-    model_family = spec['family']
-    model_type = spec['type']
-    embedding_dim = None
-
-    if model_type == 'vision':
-        # Initializing model
-        if model_name.startswith('vit'):
-            model = model_fn.from_pretrained(spec['weight'] if pretrained else None)
-        else:
-            model = model_fn(weights=spec["weight"] if pretrained else None)
-        
-        # Initializing model embedded dimensions
-        if hasattr(model, 'fc'):
-            embedding_dim = model.fc.in_features
-        elif hasattr(model, 'classifier'):
-            if isinstance(model.classifier, nn.Sequential):
-                embedding_dim = model.classifier[-1].in_features
-            else:
-                embedding_dim = model.classifier.in_features
-        elif hasattr(model, 'head'):
-            embedding_dim = model.head.in_features
-
-    elif model_type == 'language':
-        model = model_fn.from_pretrained(spec['weight'] if pretrained else None)
-        embedding_dim = model.config.hidden_size
+    if spec.type == 'vision':
+        model = spec.fn(weights=spec.weight if pretrained else None)
     else:
-        raise ValueError(f"Model type '{model_type}' not supported.")
-    
+        raise ValueError(f"Unsupported model type: {spec.type}")
+
+    embedded_dim = _get_embedded_dim_from_model(model)
     return {
-        'model': model,
-        'embedding_dim': embedding_dim,
-        'model_type': model_type,
-        'model_family': model_family
+        'model':        model,
+        'embedded_dim': embedded_dim,
+        'model_type':   spec.type,
+        'model_family': spec.family,
     }
-
-def make_projection_head(args, output_dims=128):
-    if args.model_type == 'language':
-        args.projection_head = None
-        return
-
-    if args.model_family == 'resnet':
-        args.projection_head = nn.Sequential(
-            nn.Linear(args.embedding_dim, args.embedding_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(args.embedding_dim, output_dims)
-        )
-    elif args.model_family in ['vgg', 'vit']:
-        args.projection_head = nn.Sequential(
-            nn.Linear(args.embedding_dim, output_dims),
-        )
-    else:
-        raise ValueError(f"Model family '{args.model_family}' not supported.")
-
-def adapt_head_for_model(args, head):
-    if args.model_type == 'language':
-        if hasattr(args.model, 'model') and hasattr(args.model.model, 'classifier'):
-            args.model.model.classifier = head
-    
-    elif args.model_type == 'vision':
-        # ResNet Support
-        if hasattr(args.model, 'fc'):
-            args.model.fc = head
-        elif hasattr(args.model, 'classifier'):
-            # VGG Support
-            if isinstance(args.model.classifier, nn.Sequential):
-                args.model.classifier[-1] = head
-            else:
-                # ViT Support (HF)
-                args.model.classifier = head   
-        # ViT Support 
-        elif hasattr(args.model, 'head'):
-            args.model.head = head
-        else:
-            raise ValueError(f"Model '{args.model}' does not have a head.")
-    else:
-        raise ValueError(f"Model type '{args.model_type}' not supported.")
 
 def adapt_resnet_for_small_images(model):
     if hasattr(model, 'conv1'):
         model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
 
-class EncoderProjectionNetwork(nn.Module):
-    def __init__(self, model_name, output_dims=128, adapt=True, model_task='', pretrained=True):
+def make_classification_head(embedded_dim: int, num_out_features: int):
+    return nn.Linear(embedded_dim, num_out_features)
+
+def adapt_head_for_model(model, head: nn.Module, model_type: str, model_family: str):
+    if model_type == 'vision':
+        if hasattr(model, 'fc'):
+            model.fc = head
+            return
+        
+        if hasattr(model, 'classifier'):
+            cls_head = model.classifier
+            if isinstance(cls_head, nn.Sequential):
+                cls_head[-1] = head
+            else:
+                model.classifier = head
+            return
+        
+        if hasattr(model, 'head'):
+            model.head = head
+            return
+        
+        raise RuntimeError("Couldn't attach head to vision model: " + model.__class__.__name__)
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
+
+def remove_last_layer(model):
+    children = list(model.named_children())
+    last_name, last_module = children[-1]
+
+    if isinstance(last_module, nn.Sequential):
+        layers = list(last_module.children())[:-1]
+        layers.append(nn.Identity())
+        setattr(model, last_name, nn.Sequential(*layers))
+    elif isinstance(last_module, nn.Linear):
+        setattr(model, last_name, nn.Identity())
+    else:
+        raise ValueError(f"Unsupported module type: {type(last_module)}")
+    return model
+
+class BaseModelWrapper(nn.Module):
+    def __init__(self, model_name: str, device: str, pretrained: bool = True, adapt: bool = True):
         super().__init__()
-        
-        # Loading model components
-        # components = get_model_components(model_name, pretrained, num_llm_labels=output_dims, model_task=model_task)        
-        components = initialize_model_components(model_name, pretrained, model_task)
+        components = initialize_model_components(model_name, pretrained)
+        self.model        = components['model']
+        self.embedded_dim = components['embedded_dim']
+        self.model_type   = components['model_type']
+        self.model_family = components['model_family']
 
-        self.model = components["model"]
-        self.embedding_dim = components["embedding_dim"]
-        self.model_type = components["model_type"]
-        self.model_family = components["model_family"]
-        self.model_task = model_task
-
-        # Adapting the model for cifar10
-        if adapt and self.model_family == "resnet":
-            adapt_resnet_for_small_images(self.model)
-
-        make_projection_head(self, output_dims)
-        adapt_head_for_model(self, nn.Identity())
-
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.model.to(self.device)
-        if self.projection_head:
-            self.projection_head.to(self.device)   
-
-    def forward(self, x, extract_raw=False):
-        if self.model_type == "vision":
-            raw_features = self.model(x)
-            if hasattr(raw_features, 'logits'):
-                raw_features = raw_features.logits
-
-            if extract_raw:
-                return raw_features
-            embeddings = self.projection_head(raw_features)
-            return F.normalize(embeddings, dim=1)
-        else:
-            x = self.model(
-                **x,
-                output_hidden_states=True, 
-                return_dict=True
-                )
-            x.logits = F.normalize(x.logits, dim=1)
-            return x
-
-class ClassificationNetwork(nn.Module):
-    def __init__(self, model_name, num_classes=10, adapt=True, model_task='', pretrained=True, freeze=False):
-        super().__init__()
-        
-        # Loading model components
-        # components = get_model_components(model_name, num_llm_labels=num_classes, model_task=model_task)        
-        components = initialize_model_components(model_name, pretrained, model_task)
-
-        self.model = components["model"]
-        self.embedding_dim = components["embedding_dim"]
-        self.model_type = components["model_type"]
-        self.model_family = components["model_family"]
-        self.model_task = model_task
-        
-        # Freezing the model if applicable
-        if freeze:
-            freeze_weights(self.model)
-
-        # Adapting the model for cifar10
         if adapt and self.model_family == 'resnet':
             adapt_resnet_for_small_images(self.model)
-        
-        # Attaching the classification head
-        classification_head = nn.Linear(self.embedding_dim, num_classes)
-        adapt_head_for_model(self, classification_head)
 
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.model.to(device)
+        self.to(device)
+
+    def forward(self, *args, **kwargs):
+        raise NotImplementedError
+
+class ClassificationAndEncoderNetwork(BaseModelWrapper):
+    def __init__(self, model_name, num_classes, num_out_features=None, device='cuda', adapt=True, pretrained=True, freeze=False):
+        super().__init__(model_name, device, pretrained, adapt)
+        self.model_name = model_name
+        self.num_classes = num_classes
+        self.num_out_features = num_out_features
+        self.device = device
+
+        if freeze:
+            for p in self.model.parameters():
+                p.requires_grad = False
+        
+        self.model = remove_last_layer(self.model)
+        self.cls_head = make_classification_head(self.embedded_dim, self.num_classes).to(self.device)
+
+        if self.num_out_features is not None:
+            self.encoder_head = nn.Linear(self.embedded_dim, self.num_out_features).to(self.device)
     
-    def forward(self, x):
-        if self.model_type == "vision":
-            return self.model(x)
+    def get_embeddings(self, x):
+        raw_emb = self.encoder_head(x)
+        return F.normalize(raw_emb, dim=1)
+
+    def forward(self, x, return_emb=False, return_feat=False):
+        if self.model_type == 'vision':
+            x = self.model(x)
         else:
-            return self.model(**x)
+            x = self.model(**x)
+
+        if return_feat:
+            return x
+        if return_emb:
+            return self.get_embeddings(x)
+        return self.cls_head(x)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

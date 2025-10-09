@@ -1,8 +1,17 @@
 import os
 import torch
+import numpy as np
+import random
 import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
 import pickle
+
+def set_seed(seed=42):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def get_device():
     return 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -52,7 +61,6 @@ def load_weights(model, path):
             return True
         except:
             raise Exception(f"Error loading weights: {path}")
-    
     return False
               
 def graph_losses_n_accs(losses, train_accs, test_accs):

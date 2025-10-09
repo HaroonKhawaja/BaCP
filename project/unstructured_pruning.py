@@ -2,7 +2,6 @@ import os
 import torch
 import torch.nn as nn
 from abc import abstractmethod, ABC
-from utils import *
 
 def layer_check(name, param):
     if param is None:
@@ -12,6 +11,10 @@ def layer_check(name, param):
         return False
     
     exclusion_keywords = [
+        'cls_head',
+        'encoder_head',
+
+        
         'fc',   # ResNet
         'classifier.6', # VGG
         'embeddings', 'conv_proj', 'pos_embedding', 'heads', 'classifier.weight', # ViT        
@@ -19,6 +22,7 @@ def layer_check(name, param):
         'vocab_projector', 'vocab_transform', # DistilBERT
 
         'classifier.dense', 'classifier.out_proj', 'lm_head', # RoBERTA
+
 
         # 'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
         # 'class_token', 'pos_embedding', 'vocab_transform', 'lm_head',
@@ -91,9 +95,9 @@ def check_sparsity_distribution(model, verbose=True):
     plt.show()
 
 class Pruner(ABC):
-    def __init__(self, epochs, target_ratio, model, sparsity_scheduler="cubic"):
+    def __init__(self, model, epochs, target_sparsity, sparsity_scheduler="cubic"):
         self.epochs = epochs
-        self.target_ratio = target_ratio
+        self.target_ratio = target_sparsity
         self.ratio = 0.0
         self.masks = {}
 
@@ -119,7 +123,7 @@ class Pruner(ABC):
 
     def ratio_step(self, epoch, epochs, initial_sparsity, target_sparsity):
         if self.sparsity_scheduler == 'linear':
-            self.linear_scheduler()
+            self.linear_scheduler(epoch, epochs, initial_sparsity, target_sparsity)
         elif self.sparsity_scheduler == 'cubic':
             self.cubic_scheduler(epoch, epochs, initial_sparsity, target_sparsity)
             
@@ -184,45 +188,9 @@ class SNIPIterativePrune(Pruner):
         for name, importance in importance_cache.items():
             self.masks[name] = torch.gt(importance, threshold).float()
 
-class MovementPrune(Pruner):
-    def __init__(self, epochs, target_ratio, model, pruning_scheduler):
-        super().__init__(epochs, target_ratio, model, pruning_scheduler)
-        self.movement_scores = {
-            name: torch.zeros_like(param)
-            for name, param in model.named_parameters()
-            if layer_check(name, param)
-        }
-
-    @torch.no_grad()
-    def update_movement_scores(self, model, lr):
-        for name, param in model.named_parameters():
-            if name not in self.movement_scores:
-                continue
-            self.movement_scores[name] += -lr * param.grad
-
-    def prune(self, model):
-        all_importances = []
-        importance_cache = {}
-
-        for name, param in model.named_parameters():
-            if layer_check(name, param):
-                importance = self.movement_scores[name] * param.data
-                importance_cache[name] = importance
-                all_importances.append(importance.view(-1))
-
-        # Calculating global importance and threshold
-        global_importances = torch.cat(all_importances)
-        total_weights = global_importances.numel()
-        num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-        threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
-
-        # Updating masks
-        for name, importance in importance_cache.items():
-            self.masks[name] = torch.gt(importance, threshold).float()
-    
 class WandaPrune(Pruner):
-    def __init__(self, epochs, target_ratio, model, pruning_scheduler):
-        super().__init__(epochs, target_ratio, model, pruning_scheduler)
+    def __init__(self, model, target_sparsity, epochs, sparsity_scheduler):
+        super().__init__(model, target_sparsity, epochs, sparsity_scheduler)
         self.main_layers = {}
         self.wrapped_layers = {}
         self.current_epoch = 0
