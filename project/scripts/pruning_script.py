@@ -43,7 +43,7 @@ def run_training(args):
     
     training_args = TrainingArguments(**args_dict)
     trainer = Trainer(training_args)
-    
+
     if log_to_wandb:
         wandb_login()
         group = f'{args.model_name}-{experiment_type}'
@@ -53,20 +53,24 @@ def run_training(args):
             group=group,
             name=name,
             tags=[args.model_name, args.dataset_name, experiment_type, args.pruning_type, str(args.target_sparsity)],
-            config=trainer.logger_params,
+            config=trainer.logger_params
         ) as run:
+            
             trainer.train(run)
-            metrics = trainer.evaluate(run)
 
-            run.log_model(
-                path=trainer.save_path, 
-                name=name, 
-                )
+            # Evaluate and log metrics
+            metrics = trainer.evaluate(run)
+            wandb.log(metrics)
+
+            run.log_model(path=trainer.save_path, name=name)
             run.finish()
     else:
         trainer.train() 
         metrics = trainer.evaluate()
-    return trainer, metrics
+
+    print("\nRun finished. Metrics:")
+    for k, v in metrics.items():
+        print(f"{k}: {v}")
 
 def parse_args():
     """Parse command line arguments."""
@@ -78,7 +82,7 @@ def parse_args():
     parser.add_argument('--model_name', type=str, choices=['resnet50', 'resnet101', 'vgg11', 'vgg19'])
     parser.add_argument('--model_type', type=str, choices=['cv', 'llm'])
     parser.add_argument('--dataset_name', type=str, choices=['cifar10', 'cifar100'])
-    parser.add_argument('--num_out_features', type=int)
+    parser.add_argument('--num_classes', type=int)
 
     # Pruning arguments
     parser.add_argument('--pruning_type', type=str, choices=['magnitude_pruning', 'snip_pruning', 'wanda_pruning'])
@@ -108,10 +112,7 @@ def parse_args():
 def main():
     """Main training pipeline for command-line usage."""
     args = parse_args()
-    trainer, metrics = run_training(args)
-
-    for key, value in metrics.items():
-        print(f"{key}: {value}")
+    run_training(args)
 
 if __name__ == '__main__':
     main()

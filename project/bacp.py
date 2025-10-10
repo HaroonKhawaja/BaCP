@@ -27,10 +27,12 @@ class BaCPTrainingArguments:
     optimizer_type:         str
     learning_rate:          float
     tau:                    float
+    num_out_features:       int = 128       # Model embedded vector size
     image_size:             int = 32        # Image size for resizing
     epochs:                 int = 5         # Number of epochs to train
     scheduler_type:         str = None      # Scheduler type, e.g., "linear_with_warmup"
     trained_weights:        str = None      # Path to pretrained weights
+    encoder_trained_weights:str = None      # Path to pretrained encoder weights (pt_model)
     experiment_type:        str = ""        # Type of experiment, e.g., "bacp_baseline" or "bacp"
     log_epochs:             bool = False    # Whether to log epochs in directory
     enable_tqdm:            bool = False    # Whether to enable tqdm progress bar
@@ -44,6 +46,7 @@ class BaCPTrainingArguments:
     sparsity_scheduler:     str = None      # Sparsity scheduler, e.g., "cubic"
     recovery_epochs:        int = 10        # Number of epochs to recover after pruning
     retrain:                bool = True     # Whether to retrain after pruning
+    pruning_module:         object = None   # Pruning module
 
     # BaCP arguments
     lambdas:                list = None     # List of lambdas for BaCP
@@ -81,8 +84,8 @@ class BaCPTrainer:
         self._initialize_log_parameters()
 
         self.model.train()
-        self.pre_trained_model.eval()
-        self.finetuned_model.eval()
+        self.model_pt.eval()
+        self.model_ft.eval()
 
     def _initialize_heads(self):
         if self.num_classes is not None:
@@ -178,7 +181,7 @@ class BaCPTrainer:
         """Run a training epoch."""
         self._handle_wanda_hooks()
 
-        avg_total_loss, avg_prc_loss, avg_snc_loss, avg_fic_loss, avg_ce_loss = 0, 0, 0, 0, 0
+        total_loss, total_prc, total_snc, total_fic, total_ce = 0, 0, 0, 0, 0
         batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
 
         for step, batch in enumerate(batchloader):
@@ -187,16 +190,17 @@ class BaCPTrainer:
             data1, data2 = data
 
             with self.context:
-                curr_emb, curr_logits = self._get_embeddings_and_logits(
-                    data1 if self.model_type == 'cv' else raise ValueError("Model type not supported")
-                )
+                if self.model_type == 'cv':
+                    curr_emb, curr_logits = self._get_embeddings_and_logits(data1)
+                else:
+                    raise ValueError("Model type not supported")
 
                 with torch.no_grad():
                     if self.model_type == 'cv':
-                        pt_emb = self.pre_trained_model(data2)
+                        pt_emb = self.model_pt(data2, return_emb=True)
                         pt_emb = pt_emb.logits if hasattr(pt_emb, 'logits') else pt_emb
 
-                        ft_emb = self.finetuned_model(data2)
+                        ft_emb = self.model_ft(data2, return_emb=True)
                         ft_emb = ft_emb.logits if hasattr(ft_emb, 'logits') else ft_emb
                     else:
                         raise ValueError("Model type not supported")
@@ -212,50 +216,64 @@ class BaCPTrainer:
                 fic_loss = (L_fic_sup + L_fic_unsup) * self.lambda2
 
                 # SnC Module
-                L_snc_sup = torch.tensor(0.0, device=self.device)
-                L_snc_unsup = torch.tensor(0.0, device=self.device)
-                for ss_model in self.snapshots:
-                    ss_model.to(self.device)
-                    with torch.no_grad():
-                        if self.model_type == 'cv':
-                            ss_emb = ss_model(data2)
+                if len(self.snapshots) > 0:
+                    L_snc_sup = torch.tensor(0.0, device=self.device)
+                    L_snc_unsup = torch.tensor(0.0, device=self.device)
+                    for ss_model in self.snapshots:
+                        ss_model = ss_model.to(self.device)
+                        with torch.no_grad():
+                            ss_emb = ss_model(data2, return_emb=True)
                             ss_emb = ss_emb.logits if hasattr(ss_emb, 'logits') else ss_emb
-                        else:
-                            raise ValueError("Model type not supported")
-                    ss_model.to('cpu')
 
-                    L_snc_sup += self.supervised_criterion(curr_emb, ss_emb, labels)
-                    L_snc_unsup += self.unsupervised_criterion(curr_emb, ss_emb)
+                        L_snc_sup += self.supervised_criterion(curr_emb, ss_emb, labels)
+                        L_snc_unsup += self.unsupervised_criterion(curr_emb, ss_emb)
 
-                snc_loss = ((L_snc_sup + L_snc_unsup) / len(self.snapshots)) * self.lambda3
+                    snc_loss = ((L_snc_sup + L_snc_unsup) / len(self.snapshots)) * self.lambda3
+                else:
+                    snc_loss = torch.tensor(0.0, device=self.device)
 
                 # CE Module
                 ce_loss = nn.CrossEntropyLoss()(curr_logits, labels) * self.lambda4
 
-            total_loss = prc_loss + snc_loss + fic_loss + ce_loss
-            _handle_optimizer_and_pruning(self, total_loss, epoch, step)
+            loss = prc_loss + snc_loss + fic_loss + ce_loss
+            _handle_optimizer_and_pruning(self, loss, epoch, step)
+
+            total_loss += loss.item()
+            total_prc += prc_loss.item()
+            total_fic += fic_loss.item()
+            total_snc += snc_loss.item()
+            total_ce  += ce_loss.item()
 
             # Calculating running mean of loss components
-            avg_prc_loss += prc_loss / (step + 1)
-            avg_snc_loss += snc_loss / (step + 1)
-            avg_fic_loss += fic_loss / (step + 1)
-            avg_ce_loss += ce_loss / (step + 1)
-            avg_total_loss += total_loss / (step + 1)
-
             loss_metrics = {
-                "total_loss": ,
-                "prc_loss": avg_prc_loss.item(),
-                "snc_loss": avg_snc_loss.item(),
-                "fic_loss": avg_fic_loss.item(),
-                "ce_loss": avg_ce_loss.item(),
-                "lambda1": _to_float(self.lambda1),
-                "lambda2": _to_float(self.lambda2),
-                "lambda3": _to_float(self.lambda3),
-                "lambda4": _to_float(self.lambda4),
+                "Total Loss": total_loss / (step + 1),
+                "PrC Loss": total_prc / (step + 1),
+                "SnC Loss": total_fic / (step + 1),
+                "FiC Loss": total_snc / (step + 1),
+                "CE Loss": total_ce / (step + 1),
+                "lambdas":[
+                    _to_float(self.lambda1),
+                    _to_float(self.lambda2),
+                    _to_float(self.lambda3),
+                    _to_float(self.lambda4),
+                    ],
             }
             self._handle_tqdm_logs(batchloader, loss_metrics)
-        return loss_metrics
 
+        avg_loss_metrics = {
+            "Total Loss": total_loss / len(self.trainloader),
+            "PrC Loss": total_prc / len(self.trainloader),
+            "SnC Loss": total_snc / len(self.trainloader),
+            "FiC Loss": total_fic / len(self.trainloader),
+            "CE Loss": total_ce / len(self.trainloader),
+            "lambdas":[
+                _to_float(self.lambda1),
+                _to_float(self.lambda2),
+                _to_float(self.lambda3),
+                _to_float(self.lambda4),
+            ]
+        }
+        return avg_loss_metrics
 
     def _get_sparsity_key(self):
         """Get current model sparsity as a rounded key."""
@@ -272,7 +290,7 @@ class BaCPTrainer:
         metrics['sparsity'] = self._get_sparsity_key()
         # Creating information string
         for k, v in metrics.items():
-            if v is None:
+            if v is None or not isinstance(v, (int, float)):
                 continue
             info += f" - {k}: {v:.4f}"
         print(info)
@@ -309,7 +327,11 @@ class BaCPTrainer:
     
     def _handle_data_to_device(self, data):
         if self.is_bacp:
-            data
+            data, labels = data
+            data = [d.to(self.device) for d in data]
+            labels = labels.to(self.device)
+            return data, labels
+        
         if isinstance(data, list):
             data = [x.to(self.device) for x in data]
             data, labels = data
@@ -322,15 +344,17 @@ class BaCPTrainer:
     
     def _update_metric_lists(self, loss, accuracy=None):
         sparsity_key = self._get_sparsity_key()
-        self.total_losses.setdefault(sparsity_key, []).append(loss.get('total_loss'))
-        self.prc_losses.setdefault(sparsity_key, []).append(loss.get('prc_loss'))
-        self.snc_losses.setdefault(sparsity_key, []).append(loss.get('snc_loss'))
-        self.fic_losses.setdefault(sparsity_key, []).append(loss.get('fic_loss'))
-        self.ce_losses.setdefault(sparsity_key, []).append(loss.get('ce_loss'))
-        self.lambda_history['lambda1'].append(loss.get('lambda1'))
-        self.lambda_history['lambda2'].append(loss.get('lambda2'))
-        self.lambda_history['lambda3'].append(loss.get('lambda3'))
-        self.lambda_history['lambda4'].append(loss.get('lambda4'))
+        self.total_losses.setdefault(sparsity_key, []).append(loss.get('Total Loss'))
+        self.prc_losses.setdefault(sparsity_key, []).append(loss.get('PrC Loss'))
+        self.snc_losses.setdefault(sparsity_key, []).append(loss.get('SnC Loss'))
+        self.fic_losses.setdefault(sparsity_key, []).append(loss.get('FiC Loss'))
+        self.ce_losses.setdefault(sparsity_key, []).append(loss.get('CE Loss'))
+
+        lambda1, lambda2, lambda3, lambda4 = loss.get('lambdas')
+        self.lambda_history['lambda1'].append(lambda1)
+        self.lambda_history['lambda2'].append(lambda2)
+        self.lambda_history['lambda3'].append(lambda3)
+        self.lambda_history['lambda4'].append(lambda4)
 
     def _get_embeddings_and_logits(self, data):
         features = self._extract_features(data)
@@ -366,8 +390,9 @@ class BaCPTrainer:
     def _save_model(self, epoch):
         """Save the model based on the total loss."""
         if self.save_path:
-            dir_path = 
-            os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
+            dir_path = os.path.dirname(self.save_path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
 
         sparsity_key = self._get_sparsity_key()
         loss_list = self.total_losses[sparsity_key]
@@ -381,7 +406,7 @@ class BaCPTrainer:
                 return True
         return False
 
-    def create_pruning_module(self):
+    def get_pruner(self):
         # Loading sparse weights
         load_weights(self.model, self.save_path)
 

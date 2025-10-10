@@ -13,9 +13,6 @@ from trainer import Trainer, TrainingArguments
 from bacp import BaCPTrainer, BaCPTrainingArguments
 from utils import set_seed, get_device
 
-# -------------------
-# Environment setup
-# -------------------
 disable_progress_bar()
 os.environ["HF_DATASETS_CACHE"] = "/dbfs/hf_datasets"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -27,16 +24,18 @@ def wandb_login():
         raise ValueError("WANDB_API_KEY not set in environment.")
     wandb.login(key=wandb_api_key)
 
-def sweep_train(args):
+def run_training(args):
     # Display device info
     device = get_device()
-    experiment_type = 'bacp_pruning'
 
     # Setup training arguments
     args_dict = vars(args)
-    log_to_wandb = args_dict.pop('log_to_wandb')
-    seed = args_dict.pop('seed')
+
+    experiment_type = 'bacp_pruning'
     args_dict['experiment_type'] = experiment_type
+
+    log_to_wandb    = args_dict.pop('log_to_wandb')
+    seed            = args_dict.pop('seed')
     set_seed(seed)
 
     print(f"\nUsing device: {device}")
@@ -46,57 +45,65 @@ def sweep_train(args):
     # Start a W&B run
     group = f'{args.model_name}-{experiment_type}'
     name = f'{args.model_name}-{args.dataset_name}-{args.pruning_type}-{args.target_sparsity}'
-    with wandb.init(
-        project='Backbone-Contrastive-Pruning',
-        group=group,
-        name=name,
-        tags=[args.model_name, args.dataset_name, experiment_type, args.pruning_type, str(args.target_sparsity), 'sweep'],
-    ) as run:
-        # Merge sweep config into CLI/default args
-        config = run.config
-        args_dict.update(config)
 
-        learning_rate_bacp = args_dict.pop('learning_rate_bacp')
-        optimizer_type_bacp = args_dict.pop('optimizer_type_bacp')
-        tau = args_dict.pop('tau')
+    if log_to_wandb:
+        wandb_login()
+        with wandb.init(
+            project='Backbone-Contrastive-Pruning',
+            group=group,
+            name=name,
+            tags=[args.model_name, args.dataset_name, experiment_type, args.pruning_type, str(args.target_sparsity)],
+        ) as run:
+            # BaCP training parameters
+            learning_rate_bacp = args_dict.pop('learning_rate_bacp')
+            optimizer_type_bacp = args_dict.pop('optimizer_type_bacp')
+            tau = args_dict.pop('tau')
 
-        learning_rate_ip = args_dict.pop('learning_rate_ip')
-        optimizer_type_ip = args_dict.pop('optimizer_type_ip')
+            # Finetuning training parameters
+            learning_rate_ip = args_dict.pop('learning_rate_ip')
+            optimizer_type_ip = args_dict.pop('optimizer_type_ip')
 
-        # BaCP trainer
-        bacp_dict = args_dict.copy()
-        bacp_dict.update({
-            'learning_rate': learning_rate_bacp, 
-            'optimizer_type': optimizer_type_bacp, 
-            'tau': tau, 
-            'epochs': 5
-            })
-        bacp_args = BaCPTrainingArguments(**bacp_dict)
-        bacp_trainer = BaCPTrainer(bacp_args)
-        bacp_trainer.train(run)
+            # BaCP trainer
+            bacp_dict = args_dict.copy()
+            bacp_dict.update({
+                'learning_rate': learning_rate_bacp, 
+                'optimizer_type': optimizer_type_bacp, 
+                'tau': tau, 
+                })
+            bacp_args = BaCPTrainingArguments(**bacp_dict)
+            bacp_trainer = BaCPTrainer(bacp_args)
 
-        # Baseline trainer
-        pruner = bacp_trainer.get_pruner()
-        trainer_dict = args_dict.copy()
-        trainer_dict.update({
-            'learning_rate': learning_rate_ip, 
-            'optimizer_type': optimizer_type_ip, 
-            'epochs': 50, 
-            'pruning_module': pruner,
-            'trained_weights': bacp_trainer.save_path,
-            'experiment_type': 'bacp_finetuning'
-            })
-        training_args = TrainingArguments(**trainer_dict)
-        trainer = Trainer(training_args)
-        trainer.train(run)
+            bacp_trainer.train(run)
+            run.log_model(path=bacp_trainer.save_path, name=name)
 
-        # Evaluate and log metrics
-        metrics = trainer.evaluate(run)
-        wandb.log(metrics)
+            # Baseline trainer
+            pruner = bacp_trainer.get_pruner()
+            trainer_dict = args_dict.copy()
+            trainer_dict.update({
+                'learning_rate': learning_rate_ip, 
+                'optimizer_type': optimizer_type_ip, 
+                'epochs': 50, 
+                'trained_weights': bacp_trainer.save_path,
+                'experiment_type': 'bacp_finetuning',
+                'pruning_module': pruner,
+                })
+            training_args = TrainingArguments(**trainer_dict)
+            trainer = Trainer(training_args)
+            trainer.train(run)
 
-        print("\nRun finished. Metrics:")
-        for k, v in metrics.items():
-            print(f"{k}: {v}")
+            # Evaluate and log metrics
+            metrics = trainer.evaluate(run)
+            wandb.log(metrics)
+
+            run.log_model(path=trainer.save_path, name=name)
+            run.finish()
+    else:
+        raise NotImplementedError
+
+    print("\nRun finished. Metrics:")
+    for k, v in metrics.items():
+        print(f"{k}: {v}")
+
 
 def parse_args():
     """Parse command line arguments."""
@@ -113,14 +120,27 @@ def parse_args():
     parser.add_argument('--target_sparsity', type=float)
     parser.add_argument('--trained_weights', type=str)
 
-    # Defaults
-    parser.add_argument('--num_out_features', type=int, default=128)
-    parser.add_argument('--sparsity_scheduler', type=str, default='cubic')
+    # Default optimizers, learning rate, and tau (we can edit these later)
+    parser.add_argument('--learning_rate_bacp', type=float, default=0.1)
+    parser.add_argument('--optimizer_type_bacp', type=str, default='sgd')
+    parser.add_argument('--tau', type=float, default=0.15)
+
+    parser.add_argument('--learning_rate_ip', type=float, default=0.005)
+    parser.add_argument('--optimizer_type_ip', type=str, default='sgd')
+    
+    # Default epochs of 5, batch size of 512, and no training scheduler
+    parser.add_argument('--epochs', type=int, default=5)
     parser.add_argument('--batch_size', type=int, default=512)
     parser.add_argument('--scheduler_type', type=str, default=None)
-    parser.add_argument('--epochs', type=int, default=5)
+
+    # Default cubic sparsity scheduler and 10 recovery epochs
+    parser.add_argument('--sparsity_scheduler', type=str, default='cubic')
     parser.add_argument('--recovery_epochs', type=int, default=10)
+
+    # Default small image size of 32, embedding dimensions of 128
+    parser.add_argument('--num_out_features', type=int, default=128)
     parser.add_argument('--image_size', type=int, default=32)
+
     parser.add_argument('--databricks_env', type=bool, default=True)
     parser.add_argument('--log_to_wandb', type=bool, default=True)
     parser.add_argument('--seed', type=int, default=42)
@@ -131,10 +151,7 @@ def parse_args():
 def main():
     """Main training pipeline for command-line usage."""
     args = parse_args()
-    trainer, metrics = run_training(args)
-
-    for key, value in metrics.items():
-        print(f"{key}: {value}")
+    run_training(args)
 
 if __name__ == '__main__':
     main()
