@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Dict, Any
 
 import torch
+import numpy as np
 import torch.optim as optim
 from torch.nn import CrossEntropyLoss
 from transformers import get_linear_schedule_with_warmup
@@ -203,6 +204,88 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
         
         if step == 1 and args.prune and not args.recover:
             args.current_sparsity = check_model_sparsity(args.model)
+
+def _handle_wanda_hooks(args):
+    if args.prune and hasattr(args.pruner, 'is_wanda') and args.pruner.is_wanda:
+        if not args.recover:    # We don't want to register hooks during recovery
+            args.pruner.calibrate(args.model, args.trainloader)
+        else:
+            pass
+
+def _initialize_log_parameters(args):
+    """Initialize parameters for logging purposes."""
+    allowed_types = (int, float, str, bool, torch.Tensor, np.ndarray, list, dict, type(None))
+    args.logger_params = {
+        k: v for k, v in vars(args).items()
+        if isinstance(v, allowed_types) and v is not None
+    }
+    
+def _handle_data_to_device(args, batch_data):
+    if isinstance(batch_data, (list, tuple)) and len(batch_data) == 2:
+        data, labels = batch_data
+        if isinstance(data, (list, tuple)) and len(data) == 2:
+            data = [d.to(args.device) for d in data]
+        else:
+            data = data.to(args.device)
+        labels = labels.to(args.device)
+    elif isinstance(batch_data, dict):
+        data = {k: v.to(args.device) for k, v in batch_data.items()}
+        labels = data.get('labels', None)
+    
+    return data, labels
+
+def _handle_tqdm_logs(args, batchloader, metrics):
+    if args.enable_tqdm:
+        display_metrics = {}
+        for key, value in metrics.items():
+            if value is None:
+                continue
+            display_metrics[key] = f"{value:.4f}"
+        batchloader.set_postfix(**display_metrics)
+    else:
+        return
+
+def _log_metrics(args, info, metrics, run=None):
+    metrics['sparsity'] = _get_sparsity_key(args)
+    # Creating information string
+    for k, v in metrics.items():
+        if v is None or not isinstance(v, (int, float)):
+            continue
+        info += f" - {k}: {v:.4f}"
+    print(info)
+
+    # Logging to wandb or logger
+    if run: 
+        run.log(metrics)
+
+    if args.logger is not None:
+        args.logger.log_epochs(info)
+
+def _get_sparsity_key(args):
+    """Get current model sparsity as a rounded key."""
+    return round(args.current_sparsity, 4)
+
+def _initialize_logs(args):
+    if args.logger is not None:
+        args.logger.create_log()
+        args.logger.log_hyperparameters(args.logger_params)
+    else:
+        pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

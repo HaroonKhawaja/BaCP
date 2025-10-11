@@ -29,13 +29,12 @@ def wandb_login():
 def run_training(args):
     # Display device info
     device = get_device()
-    experiment_type = 'pruning'    
 
     # Setup training arguments
     args_dict = vars(args)
     log_to_wandb = args_dict.pop('log_to_wandb')
+    experiment_type = args_dict.pop('experiment_type')
     seed = args_dict.pop('seed')
-    args_dict['experiment_type'] = experiment_type
     set_seed(seed)
 
     print(f"\nUsing device: {device}")
@@ -106,6 +105,7 @@ def parse_args():
     parser.add_argument('--log_to_wandb', type=bool, default=True)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--enable_tqdm', type=bool, default=False)
+    parser.add_argument('--experiment_type', type=str, default='pruning')
 
     return parser.parse_args()
 

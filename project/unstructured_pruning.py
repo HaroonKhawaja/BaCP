@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 from abc import abstractmethod, ABC
 
 def layer_check(name, param):
@@ -11,7 +12,7 @@ def layer_check(name, param):
         return False
     
     exclusion_keywords = [
-        'cls_head',
+        # 'cls_head',
         'encoder_head',
 
         
@@ -229,8 +230,37 @@ class WandaPrune(Pruner):
         for name in self.wrapped_layers:
             self.hooks.append(self.main_layers[name].register_forward_hook(self.activation_hook(name, model))) 
 
+    def calibrate(self, model, trainloader, num_calibration_batches=100):
+        from training_utils import _handle_data_to_device
+        self.register_hooks(model)
+
+        print(f"[Pruner] Calibrating with {num_calibration_batches} batches...")
+        model.eval()
+        with torch.no_grad():
+            for i, batch in enumerate(trainloader):
+                if i > num_calibration_batches:
+                    break
+                # Handling different batch formats
+                data, labels = _handle_data_to_device(self, batch)
+
+                # Forward pass
+                if len(data) == 2:
+                    for d in data:
+                        _ = model(d, return_emb=True)
+                else:
+                    _ = model(data)
+
+                # Print progress every 10 batches
+                if (i + 1) % 10 == 0:
+                    print(f"  Calibration progress: {i+1}/{num_calibration_batches} batches")
+        
+        model.train()
+        print("[Pruner] Calibration complete!")
+
+        self.remove_hooks()
+
     def remove_hooks(self):
-        print("\n[Pruner] Removing hooks")
+        print("[Pruner] Removing hooks")
         for hook in self.hooks:
             hook.remove()
         self.hooks = []
@@ -242,7 +272,7 @@ class WandaPrune(Pruner):
                 if name in self.wrapped_layers:
                     self.wrapped_layers[name].add_batch(input_tensor.data.to(self.device))
         return hook
-
+    
     def prune(self, model):
         all_importances = []
         importance_cache = {}
@@ -275,45 +305,40 @@ class WandaPrune(Pruner):
         for name, importance in importance_cache.items():
             self.masks[name] = torch.gt(importance, threshold).float()
 
-        self.remove_hooks()
-
     class WrappedLayer:
         def __init__(self, layer, name):
             self.layer = layer
-            self.device, self.rows, self.cols, self.scaler_row = None, 0, 0, None
+            self.device, self.out_channels, self.in_channels, self.scaler_row = None, 0, 0, None
             if hasattr(self.layer, 'weight') and self.layer.weight is not None:
-                self.rows, self.cols = self.layer.weight.shape[0], self.layer.weight.shape[1]
+                self.out_channels, self.in_channels = self.layer.weight.shape[0], self.layer.weight.shape[1]
                 self.device = self.layer.weight.device
-                self.scaler_row = torch.zeros((self.cols), device=self.device)
+                self.scaler_row = torch.zeros((self.in_channels), device=self.device)
             else:
                 self.device = layer.device
                 
             self.layer_name = name
             self.nsamples = 0
 
-        def add_batch(self, input_tensor):
+        def add_batch(self, activation_tensor):
             if self.scaler_row is None:
                 return
 
+            self.nsamples += 1
+
             # Handling batch size of 1
-            if len(input_tensor.shape) == 2:
-                input_tensor = input_tensor.unsqueeze(0)
-            batch_size = input_tensor.shape[0]
+            if len(activation_tensor.shape) == 2:
+                activation_tensor = activation_tensor.unsqueeze(0)
 
-            if len(input_tensor.shape) == 3:
-                input_tensor = input_tensor.reshape(-1, input_tensor.shape[-1])
-            elif len(input_tensor.shape) == 4:
-                input_tensor = input_tensor.permute(0, 2, 3, 1)
-                input_tensor = input_tensor.reshape(-1, self.cols)
+            if len(activation_tensor.shape) == 3:
+                activation_tensor = activation_tensor.reshape(-1, activation_tensor.shape[-1])
+            elif len(activation_tensor.shape) == 4:
+                activation_tensor = activation_tensor.permute(0, 2, 3, 1)           # Shape: [B, H, W, C]
+                activation_tensor = activation_tensor.reshape(-1, self.in_channels) # Shape: [B*H*W, C]
+            
+            total_activations = activation_tensor.shape[0]  # B*H*C
 
-            input_tensor = input_tensor.to(self.device).type(torch.float32)
-
-            self.scaler_row = self.scaler_row.float()
-            self.scaler_row *= self.nsamples / (self.nsamples + batch_size)
-            self.nsamples += batch_size
-
-            batch_norm = torch.norm(input_tensor, dim=0, p=2) ** 2
-            self.scaler_row += batch_norm / self.nsamples
+            activation_norm = torch.norm(activation_tensor, dim=0, p=2) ** 2    # Shape: [C]
+            self.scaler_row += activation_norm / total_activations
 
 PRUNER_DICT = {
     "magnitude_pruning": MagnitudePrune,

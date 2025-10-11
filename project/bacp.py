@@ -1,21 +1,30 @@
+import os
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import os
+import contextlib
 from tqdm import tqdm
 from copy import deepcopy
 from torch.amp import autocast, GradScaler
-from unstructured_pruning import *
-from utils import *
-import contextlib
+from dataclasses import dataclass
 from training_utils import (
-    _initialize_models, _initialize_optimizer, _initialize_scheduler,
-    _initialize_data_loaders, _initialize_pruner,
-    _initialize_paths_and_logger, _handle_optimizer_and_pruning
+    _initialize_models,
+    _initialize_data_loaders,
+    _initialize_optimizer,
+    _initialize_scheduler,
+    _initialize_pruner,
+    _initialize_paths_and_logger,
+    _handle_optimizer_and_pruning,
+    _handle_wanda_hooks,
+    _initialize_log_parameters,
+    _handle_data_to_device,
+    _handle_tqdm_logs,
+    _log_metrics,
+    _get_sparsity_key,
+    _initialize_logs
 )
 from loss_functions import SupConLoss, NTXentLoss
-from dataclasses import dataclass
-import numpy as np
+from unstructured_pruning import *
+from utils import *
 
 @dataclass
 class BaCPTrainingArguments:
@@ -52,7 +61,6 @@ class BaCPTrainingArguments:
     lambdas:                list = None     # List of lambdas for BaCP
     learnable_lambdas:      bool = False    # Whether to learn lambdas or keep them static
     n_views:                int = 2         # Number of views for contrast  
-
     
     def __post_init__(self):
         self.scaler = GradScaler() if self.enable_mixed_precision else None
@@ -67,6 +75,7 @@ class BaCPTrainingArguments:
         _initialize_scheduler(self)
         _initialize_pruner(self)
         _initialize_paths_and_logger(self)
+        _initialize_log_parameters(self)
 
 class BaCPTrainer:
     def __init__(self, bacp_training_args):
@@ -78,20 +87,12 @@ class BaCPTrainer:
         self.snapshots = []
         self.current_sparsity = check_model_sparsity(self.model)
         self.context = autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext()
-        self._initialize_heads()
         self._initialize_lambdas()
         self._initialize_metric_lists()
-        self._initialize_log_parameters()
 
         self.model.train()
         self.model_pt.eval()
         self.model_ft.eval()
-
-    def _initialize_heads(self):
-        if self.num_classes is not None:
-            self.classification_head = nn.Linear(self.embedded_dim, self.num_classes).to(self.device)
-        else:
-            self.classification_head = None
 
     def _initialize_lambdas(self):
         # Default static value of 0.25 (equal weightage of each)
@@ -122,16 +123,8 @@ class BaCPTrainer:
         self.fic_losses = {}
         self.ce_losses = {}
 
-    def _initialize_log_parameters(self):
-        """Initialize parameters for logging purposes."""
-        allowed_types = (int, float, str, bool, torch.Tensor, np.ndarray, list, dict, type(None))
-        self.logger_params = {
-            k: v for k, v in vars(self).items()
-            if isinstance(v, allowed_types) and v is not None
-        }
-    
     def train(self, run):
-        self._initialize_logs()
+        _initialize_logs(self)
 
         for epoch in range(self.epochs):
             # Training phase
@@ -145,7 +138,7 @@ class BaCPTrainer:
             self._update_metric_lists(loss_metrics)    
 
             # Logs these metrics to the logger or to W&B
-            self._log_metrics(curr_epoch_str, loss_metrics, run)      
+            _log_metrics(self, curr_epoch_str, loss_metrics, run)      
 
             # Saving model 
             self._handle_save(epoch)
@@ -171,22 +164,20 @@ class BaCPTrainer:
             self._update_metric_lists(loss_metrics)      
 
             # Logs these metrics to the logger or to W&B
-            self._log_metrics(curr_rec_epoch_str, loss_metrics, run)          
+            _log_metrics(self, curr_rec_epoch_str, loss_metrics, run)      
 
-            # Saving model 
-            self._handle_save(epoch)
         self.recover = False
 
     def _run_train_epoch(self, epoch, desc=""):
         """Run a training epoch."""
-        self._handle_wanda_hooks()
+        _handle_wanda_hooks(self)
 
         total_loss, total_prc, total_snc, total_fic, total_ce = 0, 0, 0, 0, 0
         batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
 
         for step, batch in enumerate(batchloader):
             # Unpacking batch and moving to device
-            data, labels = self._handle_data_to_device(batch)
+            data, labels = _handle_data_to_device(self, batch)
             data1, data2 = data
 
             with self.context:
@@ -246,11 +237,11 @@ class BaCPTrainer:
 
             # Calculating running mean of loss components
             loss_metrics = {
-                "Total Loss": total_loss / (step + 1),
-                "PrC Loss": total_prc / (step + 1),
-                "SnC Loss": total_fic / (step + 1),
-                "FiC Loss": total_snc / (step + 1),
-                "CE Loss": total_ce / (step + 1),
+                "Total Loss": _to_float(total_loss / (step + 1)),
+                "PrC Loss": _to_float(total_prc / (step + 1)),
+                "SnC Loss": _to_float(total_snc / (step + 1)),
+                "FiC Loss": _to_float(total_fic / (step + 1)),
+                "CE Loss": _to_float(total_ce / (step + 1)),
                 "lambdas":[
                     _to_float(self.lambda1),
                     _to_float(self.lambda2),
@@ -258,92 +249,17 @@ class BaCPTrainer:
                     _to_float(self.lambda4),
                     ],
             }
-            self._handle_tqdm_logs(batchloader, loss_metrics)
+            _handle_tqdm_logs(self, batchloader, loss_metrics)
 
-        avg_loss_metrics = {
-            "Total Loss": total_loss / len(self.trainloader),
-            "PrC Loss": total_prc / len(self.trainloader),
-            "SnC Loss": total_snc / len(self.trainloader),
-            "FiC Loss": total_fic / len(self.trainloader),
-            "CE Loss": total_ce / len(self.trainloader),
-            "lambdas":[
-                _to_float(self.lambda1),
-                _to_float(self.lambda2),
-                _to_float(self.lambda3),
-                _to_float(self.lambda4),
-            ]
-        }
-        return avg_loss_metrics
-
-    def _get_sparsity_key(self):
-        """Get current model sparsity as a rounded key."""
-        return round(self.current_sparsity, 4)
-    
-    def _initialize_logs(self):
-        if self.logger is not None:
-            self.logger.create_log()
-            self.logger.log_hyperparameters(self.logger_params)
-        else:
-            return
-
-    def _log_metrics(self, info, metrics, run=None):
-        metrics['sparsity'] = self._get_sparsity_key()
-        # Creating information string
-        for k, v in metrics.items():
-            if v is None or not isinstance(v, (int, float)):
-                continue
-            info += f" - {k}: {v:.4f}"
-        print(info)
-
-        # Logging to wandb or logger
-        if run: 
-            run.log(metrics)
-
-        if self.logger is not None:
-            self.logger.log_epochs(info)
-                
-    def _handle_tqdm_logs(self, batchloader, metrics):
-        if self.enable_tqdm:
-            display_metrics = {}
-            for key, value in metrics.items():
-                if value is None:
-                    continue
-                display_metrics[key] = f"{value:.4f}"
-            batchloader.set_postfix(**display_metrics)
-        else:
-            return
+        return loss_metrics
 
     def _handle_snapshot_creation(self):
         if len(self.snapshots) < self.epochs - 1:
             ss_model = deepcopy(self.model).to('cpu').eval()
             self.snapshots.append(ss_model)
-
-    def _handle_wanda_hooks(self):
-        if self.prune and hasattr(self.pruner, 'is_wanda') and self.pruner.is_wanda:
-            if not self.recover:    # We don't want to register hooks during recovery
-                self.pruner.register_hooks(self.model)
-            else:
-                pass
-    
-    def _handle_data_to_device(self, data):
-        if self.is_bacp:
-            data, labels = data
-            data = [d.to(self.device) for d in data]
-            labels = labels.to(self.device)
-            return data, labels
-        
-        if isinstance(data, list):
-            data = [x.to(self.device) for x in data]
-            data, labels = data
-        elif isinstance(data, dict):
-            data = {k: v.to(self.device) for k, v in data.items()}
-            labels = data.get('labels', None)
-        else:
-            raise ValueError(f"Data type {type(data)} not supported")
-        return data, labels
     
     def _update_metric_lists(self, loss, accuracy=None):
-        sparsity_key = self._get_sparsity_key()
+        sparsity_key = _get_sparsity_key(self)
         self.total_losses.setdefault(sparsity_key, []).append(loss.get('Total Loss'))
         self.prc_losses.setdefault(sparsity_key, []).append(loss.get('PrC Loss'))
         self.snc_losses.setdefault(sparsity_key, []).append(loss.get('SnC Loss'))
@@ -355,6 +271,30 @@ class BaCPTrainer:
         self.lambda_history['lambda2'].append(lambda2)
         self.lambda_history['lambda3'].append(lambda3)
         self.lambda_history['lambda4'].append(lambda4)
+
+    def _handle_save(self, epoch):
+        """Saves the model or stops training if no improvements are seen."""
+        if self._save_model(epoch):
+            print(f"[TRAINER] weights saved!")
+    
+    def _save_model(self, epoch):
+        """Save the model based on the total loss."""
+        if self.save_path:
+            dir_path = os.path.dirname(self.save_path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
+
+        sparsity_key = _get_sparsity_key(self)
+        loss_list = self.total_losses[sparsity_key]
+
+        if len(loss_list) <= 1:
+            torch.save(self.model.state_dict(), self.save_path)
+            return True
+        elif len(loss_list) > 1:
+            if loss_list[-1] < min(loss_list[:-1]):
+                torch.save(self.model.state_dict(), self.save_path)
+                return True
+        return False
 
     def _get_embeddings_and_logits(self, data):
         features = self._extract_features(data)
@@ -381,30 +321,6 @@ class BaCPTrainer:
             return self.model.get_embeddings(features)
         else:
             raise ValueError("Model type not supported")
-
-    def _handle_save(self, epoch):
-        """Saves the model or stops training if no improvements are seen."""
-        if self._save_model(epoch):
-            print(f"[TRAINER] weights saved!")
-    
-    def _save_model(self, epoch):
-        """Save the model based on the total loss."""
-        if self.save_path:
-            dir_path = os.path.dirname(self.save_path)
-            if dir_path:
-                os.makedirs(dir_path, exist_ok=True)
-
-        sparsity_key = self._get_sparsity_key()
-        loss_list = self.total_losses[sparsity_key]
-
-        if len(loss_list) <= 1:
-            torch.save(self.model.state_dict(), self.save_path)
-            return True
-        elif len(loss_list) > 1:
-            if loss_list[-1] < min(loss_list[:-1]):
-                torch.save(self.model.state_dict(), self.save_path)
-                return True
-        return False
 
     def get_pruner(self):
         # Loading sparse weights
