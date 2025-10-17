@@ -4,18 +4,20 @@ import logging
 from typing import Optional, Dict, Any
 
 import torch
+import torch.nn as nn
 import numpy as np
 import torch.optim as optim
 from torch.nn import CrossEntropyLoss
 from transformers import get_linear_schedule_with_warmup
 
 from datasets import get_dataset_config_names
-from constants import *
-from dataset_utils import get_data
 from logger import Logger
-from models import ClassificationAndEncoderNetwork
-from unstructured_pruning import check_model_sparsity, PRUNER_DICT
 from utils import get_device, load_weights, set_seed
+from dataset_utils_old import get_data
+
+from model_factory import ClassificationAndEncoderNetwork
+from dataset_factory import get_dataloaders
+from pruning_factory import check_model_sparsity, PRUNER_DICT
 
 def _initialize_models(args):
     if getattr(args, 'is_bacp', False):
@@ -37,6 +39,7 @@ def _initialize_models(args):
             adapt=adapt,
             pretrained=True,
             freeze=False,
+            dyrelu_enabled=args.dyrelu_enabled,
         )
         args.embedded_dim = args.model.embedded_dim
         if args.trained_weights:
@@ -59,7 +62,16 @@ def create_models_for_bacp(args):
     )
     
     # Current projection model
-    model = deepcopy(model_pt).to(args.device)
+    model = ClassificationAndEncoderNetwork(
+        model_name=args.model_name,
+        num_classes=args.num_classes,
+        num_out_features=args.num_out_features,
+        device=args.device,
+        adapt=adapt,
+        pretrained=True,
+        freeze=False,
+        dyrelu_enabled=args.dyrelu_enabled,
+    )
     if args.encoder_trained_weights:
         load = load_weights(model, args.encoder_trained_weights)
         if load:
@@ -86,7 +98,8 @@ def _initialize_data_loaders(args):
     # Initializing cache directory for datasets
     args.cache_dir = '/dbfs/cache' if args.databricks_env else './cache'
 
-    data = get_data(args)
+    data = get_dataloaders(args)
+    # data = get_data(args)
     args.trainloader = data.get("trainloader")
     args.valloader = data.get("valloader")
     args.testloader = data.get("testloader")
@@ -158,7 +171,7 @@ def _initialize_pruner(args):
 
 def _initialize_paths_and_logger(args):
     base_dir = '/dbfs' if args.databricks_env else '.'
-    args.base_path = os.path.join(base_dir, 'research', args.model_name, args.dataset_name)
+    args.base_path = os.path.join(base_dir, 'research/bacp', args.model_name, args.dataset_name)
 
     if args.prune or args.pruning_module is not None:
         weights_path = f'{args.model_name}_{args.dataset_name}_{args.pruning_type}_{args.target_sparsity}_{args.experiment_type}.pt'

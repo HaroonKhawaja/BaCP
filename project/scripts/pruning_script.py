@@ -33,7 +33,6 @@ def run_training(args):
     # Setup training arguments
     args_dict = vars(args)
     log_to_wandb = args_dict.pop('log_to_wandb')
-    experiment_type = args_dict.pop('experiment_type')
     seed = args_dict.pop('seed')
     set_seed(seed)
 
@@ -45,13 +44,13 @@ def run_training(args):
 
     if log_to_wandb:
         wandb_login()
-        group = f'{args.model_name}-{experiment_type}'
+        group = f'{args.model_name}-{args.experiment_type}'
         name = f'{args.model_name}-{args.dataset_name}-{args.pruning_type}-{str(args.target_sparsity)}'
         with wandb.init(
             project='Backbone-Contrastive-Pruning',
             group=group,
             name=name,
-            tags=[args.model_name, args.dataset_name, experiment_type, args.pruning_type, str(args.target_sparsity)],
+            tags=[args.model_name, args.dataset_name, args.experiment_type, args.pruning_type, str(args.target_sparsity)],
             config=trainer.logger_params
         ) as run:
             
@@ -85,7 +84,7 @@ def parse_args():
 
     # Pruning arguments
     parser.add_argument('--pruning_type', type=str, choices=['magnitude_pruning', 'snip_pruning', 'wanda_pruning'])
-    parser.add_argument('--target_sparsity', type=float, choices=[TARGET_SPARSITY_LOW, TARGET_SPARSITY_MID, TARGET_SPARSITY_HIGH])
+    parser.add_argument('--target_sparsity', type=float)
     parser.add_argument('--trained_weights', type=str)
 
     # Default pruning arguments
@@ -102,10 +101,11 @@ def parse_args():
     parser.add_argument('--image_size', type=int, default=32)
     parser.add_argument('--patience', type=int, default=20)
     parser.add_argument('--databricks_env', type=bool, default=True)
-    parser.add_argument('--log_to_wandb', type=bool, default=True)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--enable_tqdm', type=bool, default=False)
     parser.add_argument('--experiment_type', type=str, default='pruning')
+    parser.add_argument('--dyrelu_phase_enabled', action='store_true')
+    parser.add_argument('--log_to_wandb', action='store_true')
 
     return parser.parse_args()
 

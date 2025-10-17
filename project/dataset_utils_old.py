@@ -6,7 +6,6 @@ from torch.utils.data import random_split
 from datasets import load_dataset 
 from transformers import DataCollatorForLanguageModeling
 from utils import *
-from constants import *
 from functools import lru_cache
 from datasets import get_dataset_config_names
 
@@ -196,15 +195,17 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
 
 class CreateDatasets:
     def __init__(self):
-        self.valid_keys = {
-            'learning_types':  ['contrastive', 'supervised'],
-            'dataset_names': CV_DATASETS
-        }
+        self.t_types = ['contrastive', 'supervised']
 
-    def get_dataset_fn(self, learning_type, dataset_name):
-        assert learning_type in self.valid_keys['learning_types'], 'Learning type does not exist.'
-        assert dataset_name in self.valid_keys['dataset_names'], 'dataset does not exist.'
-        train_dataset_fn = VALID_DATASETS[learning_type][dataset_name]
+    def get_dataset_fn(self, dataset_name, t_type):
+        if dataset_name not in CV_DATASETS:
+            raise ValueError(f"Unsupported dataset: {dataset_name}")
+
+        if t_type not in self.t_types:
+            raise ValueError(f"Unsupported transformation type: {t_type}")
+
+
+        train_dataset_fn = VALID_DATASETS[t_type][dataset_name]
         test_dataset_fn = VALID_DATASETS['testset'][dataset_name]
 
         return train_dataset_fn, test_dataset_fn
@@ -280,7 +281,6 @@ class GlueDataset(Dataset):
             "labels": example["labels"]
         }
 
-@lru_cache()
 def _load_glue_dataset(task_name, cache_dir):
     return load_dataset("glue", task_name, cache_dir=cache_dir)
 
@@ -325,7 +325,6 @@ def get_glue_data(tokenizer, task_name, batch_size, cache_dir, num_workers=24):
         data["testloader"] = testloader
     return data
 
-@lru_cache()
 def _load_wikitext2_dataset(cache_dir):
     return load_dataset('wikitext', 'wikitext-2-raw-v1', cache_dir=cache_dir)
 
@@ -371,7 +370,6 @@ def get_wikitext2_data(tokenizer, batch_size, cache_dir, num_workers=24):
         "testloader": testloader
     }
     return data
-
 
 def get_data(args):
     if args.is_bacp:

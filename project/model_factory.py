@@ -2,54 +2,66 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models import resnet50, resnet101, vgg11, vgg19
-from torchvision.models import ResNet50_Weights, ResNet101_Weights, VGG11_Weights, VGG19_Weights
+from torchvision.models import vgg11, vgg19
 from transformers import AutoModelForImageClassification, AutoModelForSequenceClassification, AutoModelForMaskedLM
 from dataclasses import dataclass
+from utils import load_weights
+
+from models.resnet import resnet34, resnet50, resnet101
+# from torchvision.models import ResNet50_Weights, ResNet101_Weights, VGG11_Weights, VGG19_Weights, ResNet34_Weights
 
 @dataclass(frozen=True)
 class ModelSpec:
     fn: object
-    weight: object
+    weight: str
     family: str
     type: str
 
 PRETRAINED = True
+DYRELU_ENABLED = False
 
 MODELS = {
-    'resnet50':     ModelSpec(resnet50, ResNet50_Weights.IMAGENET1K_V1,     'resnet',   'vision'),
-    'resnet101':    ModelSpec(resnet101, ResNet101_Weights.IMAGENET1K_V1,   'resnet',   'vision'),
-    'vgg11':    ModelSpec(vgg11, VGG11_Weights.IMAGENET1K_V1,   'vgg',    'vision'),
-    'vgg19':    ModelSpec(vgg19, VGG19_Weights.IMAGENET1K_V1,   'vgg',    'vision'),
-    'distilbert-base-uncased-mlm':  ModelSpec(AutoModelForMaskedLM,                 'distilbert-base-uncased',  'bert', 'language'),
-    'distilbert-base-uncased':      ModelSpec(AutoModelForSequenceClassification,   'distilbert-base-uncased',  'bert', 'language'),
-    'roberta-base-mlm': ModelSpec(AutoModelForMaskedLM,                 'roberta-base', 'bert', 'language'),
-    'roberta-base':     ModelSpec(AutoModelForSequenceClassification,   'roberta-base', 'bert', 'language'),
+    'resnet34':     ModelSpec(resnet34, '/dbfs/research/bacp/resnet34_imagenet.pth',     'resnet',   'vision'),
+    'resnet50':     ModelSpec(resnet50, '/dbfs/research/bacp/resnet50_imagenet.pth',     'resnet',   'vision'),
+    'resnet101':    ModelSpec(resnet101, '/dbfs/research/bacp/resnet101_imagenet.pth',   'resnet',   'vision'),
+
+    # 'vgg11':    ModelSpec(vgg11, VGG11_Weights.IMAGENET1K_V1,   'vgg',    'vision'),
+    # 'vgg19':    ModelSpec(vgg19, VGG19_Weights.IMAGENET1K_V1,   'vgg',    'vision'),
+    # 'distilbert-base-uncased-mlm':  ModelSpec(AutoModelForMaskedLM,                 'distilbert-base-uncased',  'bert', 'language'),
+    # 'distilbert-base-uncased':      ModelSpec(AutoModelForSequenceClassification,   'distilbert-base-uncased',  'bert', 'language'),
+    # 'roberta-base-mlm': ModelSpec(AutoModelForMaskedLM,                 'roberta-base', 'bert', 'language'),
+    # 'roberta-base':     ModelSpec(AutoModelForSequenceClassification,   'roberta-base', 'bert', 'language'),
 }
 
 def _get_embedded_dim_from_model(model):
     """Returns the model's final embedded dimension"""
     if hasattr(model, 'fc') and hasattr(model.fc, 'in_features'):
         return model.fc.in_features
+    
     if hasattr(model, 'classifier'):
         cls_head = model.classifier
         if isinstance(cls_head, nn.Sequential):
             return cls_head[-1].in_features
         elif hasattr(cls_head, 'in_features'):
             return cls_head.in_features
+        
     if hasattr(model, 'head') and hasattr(model.head, 'in_features'):
         return model.head.in_features
+    
     if hasattr(model, 'config') and hasattr(model.config, 'hidden_size'):
         return model.config.hidden_size
+    
     raise RuntimeError(f"Couldn't infer embedding dim for model: {model.__class__.__name__}")
     
-def initialize_model_components(model_name: str, pretrained: bool):
+def initialize_model_components(model_name: str, pretrained: bool, dyrelu_enabled: bool):
     if model_name not in MODELS:
         raise ValueError(f"Unknown model {model_name}. Choices: {list(MODELS.keys())}")
 
     spec = MODELS[model_name]
     if spec.type == 'vision':
-        model = spec.fn(weights=spec.weight if pretrained else None)
+        model = spec.fn(dyrelu_enabled=dyrelu_enabled)
+        if pretrained:
+            load_weights(model, spec.weight)
     else:
         raise ValueError(f"Unsupported model type: {spec.type}")
 
@@ -105,9 +117,16 @@ def remove_last_layer(model):
     return model
 
 class BaseModelWrapper(nn.Module):
-    def __init__(self, model_name: str, device: str, pretrained: bool = True, adapt: bool = True):
+    def __init__(
+        self, 
+        model_name:     str, 
+        device:         str, 
+        pretrained:     bool = True, 
+        adapt:          bool = True,
+        dyrelu_enabled: bool = False,
+        ):
         super().__init__()
-        components = initialize_model_components(model_name, pretrained)
+        components = initialize_model_components(model_name, pretrained, dyrelu_enabled)
         self.model        = components['model']
         self.embedded_dim = components['embedded_dim']
         self.model_type   = components['model_type']
@@ -122,8 +141,18 @@ class BaseModelWrapper(nn.Module):
         raise NotImplementedError
 
 class ClassificationAndEncoderNetwork(BaseModelWrapper):
-    def __init__(self, model_name, num_classes, num_out_features=None, device='cuda', adapt=True, pretrained=True, freeze=False):
-        super().__init__(model_name, device, pretrained, adapt)
+    def __init__(
+        self, 
+        model_name:         str, 
+        num_classes:        int, 
+        num_out_features:   int = None, 
+        device:             str = 'cuda', 
+        adapt:              bool = True, 
+        pretrained:         bool = True, 
+        freeze:             bool = False, 
+        dyrelu_enabled:     bool = False
+        ):
+        super().__init__(model_name, device, pretrained, adapt, dyrelu_enabled)
         self.model_name = model_name
         self.num_classes = num_classes
         self.num_out_features = num_out_features

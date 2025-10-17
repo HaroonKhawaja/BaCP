@@ -57,10 +57,16 @@ class BaCPTrainingArguments:
     retrain:                bool = True     # Whether to retrain after pruning
     pruning_module:         object = None   # Pruning module
 
+    # Fine-tuning arguments
+    ft_epochs:              int = 50        # Number of epochs to fine-tune pruned model
+
     # BaCP arguments
     lambdas:                list = None     # List of lambdas for BaCP
     learnable_lambdas:      bool = False    # Whether to learn lambdas or keep them static
     n_views:                int = 2         # Number of views for contrast  
+
+    # DyReLU Phasing
+    dyrelu_enabled:   bool = False
     
     def __post_init__(self):
         self.scaler = GradScaler() if self.enable_mixed_precision else None
@@ -122,8 +128,9 @@ class BaCPTrainer:
         self.snc_losses = {}
         self.fic_losses = {}
         self.ce_losses = {}
+        self.training_acc = {}
 
-    def train(self, run):
+    def train(self, run=None):
         _initialize_logs(self)
 
         for epoch in range(self.epochs):
@@ -132,13 +139,13 @@ class BaCPTrainer:
 
             # Training
             desc = f"Training {curr_epoch_str}"
-            loss_metrics = self._run_train_epoch(epoch, desc)
+            metrics = self._run_train_epoch(epoch, desc)
 
             # Appends training loss and validation accuracy to lists
-            self._update_metric_lists(loss_metrics)    
+            self._update_metric_lists(metrics)    
 
             # Logs these metrics to the logger or to W&B
-            _log_metrics(self, curr_epoch_str, loss_metrics, run)      
+            _log_metrics(self, curr_epoch_str, metrics, run)      
 
             # Saving model 
             self._handle_save(epoch)
@@ -148,6 +155,7 @@ class BaCPTrainer:
                 self._retrain(run) 
 
             self._handle_snapshot_creation()
+            torch.save(self.model.state_dict(), self.save_path)
     
     def _retrain(self, run=None):
         """Recover model performance by running additional training epochs."""
@@ -158,21 +166,51 @@ class BaCPTrainer:
 
             # Recovery training
             desc = f"Training {curr_rec_epoch_str}"
-            loss_metrics = self._run_train_epoch(epoch, desc)
+            metrics = self._run_train_epoch(epoch, desc)
 
             # Appends training loss and validation accuracy to lists
-            self._update_metric_lists(loss_metrics)      
+            self._update_metric_lists(metrics)      
 
             # Logs these metrics to the logger or to W&B
-            _log_metrics(self, curr_rec_epoch_str, loss_metrics, run)      
+            _log_metrics(self, curr_rec_epoch_str, metrics, run)     
+
+            # Saving model 
+            self._handle_save(epoch) 
 
         self.recover = False
+
+    def finetune(self, run=None):
+        for epoch in range(self.ft_epochs):
+            # Training phase
+            curr_epoch_str = f"Fine-tuning Epoch [{epoch+1}/{self.ft_epochs}]"
+
+            # Training
+            desc = f"Training {curr_epoch_str}"
+            metrics = self._run_train_epoch(epoch, desc)
+
+            # Appends training loss and validation accuracy to lists
+            self._update_metric_lists(metrics)    
+
+            # Logs these metrics to the logger or to W&B
+            _log_metrics(self, curr_epoch_str, metrics, run)      
+
+            # Saving model 
+            self._handle_save(epoch)
+            
+            # Pruning and recovery schedule
+            if self.retrain:
+                self._retrain(run) 
+
+            self._handle_snapshot_creation()
+            torch.save(self.model.state_dict(), self.save_path)
+
+
 
     def _run_train_epoch(self, epoch, desc=""):
         """Run a training epoch."""
         _handle_wanda_hooks(self)
 
-        total_loss, total_prc, total_snc, total_fic, total_ce = 0, 0, 0, 0, 0
+        total_loss, total_prc, total_snc, total_fic, total_ce, total_acc = 0, 0, 0, 0, 0, 0
         batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
 
         for step, batch in enumerate(batchloader):
@@ -225,6 +263,8 @@ class BaCPTrainer:
 
                 # CE Module
                 ce_loss = nn.CrossEntropyLoss()(curr_logits, labels) * self.lambda4
+                preds = curr_logits.max(1)[1]
+                accuracy = ((preds == labels).sum() / labels.size(0)) * 100
 
             loss = prc_loss + snc_loss + fic_loss + ce_loss
             _handle_optimizer_and_pruning(self, loss, epoch, step)
@@ -234,14 +274,16 @@ class BaCPTrainer:
             total_fic += fic_loss.item()
             total_snc += snc_loss.item()
             total_ce  += ce_loss.item()
+            total_acc += accuracy.item()
 
             # Calculating running mean of loss components
-            loss_metrics = {
+            metrics = {
                 "Total Loss": _to_float(total_loss / (step + 1)),
                 "PrC Loss": _to_float(total_prc / (step + 1)),
                 "SnC Loss": _to_float(total_snc / (step + 1)),
                 "FiC Loss": _to_float(total_fic / (step + 1)),
                 "CE Loss": _to_float(total_ce / (step + 1)),
+                "Training Accuracy": _to_float(total_acc / (step + 1)),
                 "lambdas":[
                     _to_float(self.lambda1),
                     _to_float(self.lambda2),
@@ -249,24 +291,34 @@ class BaCPTrainer:
                     _to_float(self.lambda4),
                     ],
             }
-            _handle_tqdm_logs(self, batchloader, loss_metrics)
+            _handle_tqdm_logs(self, batchloader, metrics)
 
-        return loss_metrics
+        return metrics
+
+    def _run_finetune_epochs(self, epoch, desc=""):
+        ft_total_loss, ft_acc = 0, 0
+        train_batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
+        val_batchloader = tqdm(self.valloader, desc=desc, leave=False) if self.enable_tqdm else self.valloader
+
+        
+
+
 
     def _handle_snapshot_creation(self):
         if len(self.snapshots) < self.epochs - 1:
             ss_model = deepcopy(self.model).to('cpu').eval()
             self.snapshots.append(ss_model)
     
-    def _update_metric_lists(self, loss, accuracy=None):
+    def _update_metric_lists(self, metrics, accuracy=None):
         sparsity_key = _get_sparsity_key(self)
-        self.total_losses.setdefault(sparsity_key, []).append(loss.get('Total Loss'))
-        self.prc_losses.setdefault(sparsity_key, []).append(loss.get('PrC Loss'))
-        self.snc_losses.setdefault(sparsity_key, []).append(loss.get('SnC Loss'))
-        self.fic_losses.setdefault(sparsity_key, []).append(loss.get('FiC Loss'))
-        self.ce_losses.setdefault(sparsity_key, []).append(loss.get('CE Loss'))
+        self.total_losses.setdefault(sparsity_key, []).append(metrics.get('Total Loss'))
+        self.prc_losses.setdefault(sparsity_key, []).append(metrics.get('PrC Loss'))
+        self.snc_losses.setdefault(sparsity_key, []).append(metrics.get('SnC Loss'))
+        self.fic_losses.setdefault(sparsity_key, []).append(metrics.get('FiC Loss'))
+        self.ce_losses.setdefault(sparsity_key, []).append(metrics.get('CE Loss'))
+        self.training_acc.setdefault(sparsity_key, []).append(metrics.get('Training Accuracy'))
 
-        lambda1, lambda2, lambda3, lambda4 = loss.get('lambdas')
+        lambda1, lambda2, lambda3, lambda4 = metrics.get('lambdas')
         self.lambda_history['lambda1'].append(lambda1)
         self.lambda_history['lambda2'].append(lambda2)
         self.lambda_history['lambda3'].append(lambda3)

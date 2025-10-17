@@ -22,8 +22,8 @@ from training_utils import (
     _get_sparsity_key,
     _initialize_logs
 )
-from constants import *
-from unstructured_pruning import *
+from dyrelu_adapter import DyReLUAdapter
+from pruning_factory import *
 from utils import *
 
 @dataclass
@@ -57,6 +57,9 @@ class TrainingArguments:
     retrain:                bool = False    # Whether to retrain after pruning
     pruning_module:         object = None   # Pruning module
 
+    # DyReLU Phasing
+    dyrelu_enabled:   bool = False
+
     def __post_init__(self):
         self.scaler = GradScaler() if self.enable_mixed_precision else None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -69,6 +72,11 @@ class TrainingArguments:
         _initialize_pruner(self)
         _initialize_paths_and_logger(self)
         _initialize_log_parameters(self)
+
+        # if self.dyrelu_phase_enabled:
+        #     t_end = self.epochs + (self.epochs * self.recovery_epochs) if self.recovery_epochs else self.epochs
+        #     self.dyrelu_adapter = DyReLUAdapter(t_start=0, t_end=t_end, device=self.device)
+        #     self.dyrelu_adapter.attach_to_model(self.model)
 
 class Trainer:
     """Unified trainer class for training, fine-tuning, and pruning both CV and LLM models."""
@@ -194,6 +202,12 @@ class Trainer:
 
             running_loss = total_loss / (step + 1)
             _handle_tqdm_logs(self, batchloader, {'loss': running_loss})
+
+        # if self.dyrelu_phase_enabled:
+        #     self.dyrelu_adapter.step()
+        #     beta = self.dyrelu_adapter.get_beta()
+        #     print(f'[DyReLU PHASE] beta value is now {beta}')
+
 
         avg_loss = total_loss / len(self.trainloader)    
         return avg_loss

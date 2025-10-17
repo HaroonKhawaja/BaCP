@@ -31,17 +31,16 @@ def run_training(args):
     # Setup training arguments
     args_dict = vars(args)
     log_to_wandb    = args_dict.pop('log_to_wandb')
-    experiment_type = args_dict.pop('experiment_type')
     seed            = args_dict.pop('seed')
     set_seed(seed)
 
     print(f"\nUsing device: {device}")
-    print(f"Training {args.model_name} on {args.dataset_name}, Experiment: {experiment_type}")
+    print(f"Training {args.model_name} on {args.dataset_name}, Experiment: {args.experiment_type}")
     print(f"Final args for this run:\n{args_dict}")
 
     # Start a W&B run
-    group = f'{args.model_name}-{experiment_type}'
-    name = f'{args.model_name}-{args.dataset_name}-{args.pruning_type}-{args.target_sparsity}'
+    group = f'{args.model_name}-{args.pruning_type}-BaCP-training'
+    name = f'{args.model_name}-{args.dataset_name}-{args.pruning_type}-{args.target_sparsity}-BaCP'
 
     if log_to_wandb:
         wandb_login()
@@ -49,7 +48,7 @@ def run_training(args):
             project='Backbone-Contrastive-Pruning',
             group=group,
             name=name,
-            tags=[args.model_name, args.dataset_name, experiment_type, args.pruning_type, str(args.target_sparsity)],
+            tags=[args.model_name, args.dataset_name, args.pruning_type, str(args.target_sparsity)],
         ) as run:
             # BaCP training parameters
             learning_rate_bacp = args_dict.pop('learning_rate_bacp')
@@ -142,7 +141,7 @@ def parse_args():
     parser.add_argument('--log_to_wandb', type=bool, default=True)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--enable_tqdm', type=bool, default=False)
-    parser.add_argument('--experiment_type', type=str, default='bacp_pruning')
+    parser.add_argument('--experiment_type', type=str, default='bacp_pretraining')
 
     return parser.parse_args()
 

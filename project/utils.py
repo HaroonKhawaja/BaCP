@@ -42,14 +42,14 @@ def freeze_weights(model):
 def load_weights(model, path):
     if not os.path.exists(path):
         print(f"[ERROR] Could not load weights. Path does not exist: {path}")
-        raise Exception("Error loading weights: {path}")
+        raise Exception(f"Error loading weights: {path}")
     try:
         state_dict = torch.load(path, map_location=get_device())
         model.load_state_dict(state_dict)
         return True
     except:
         print(f"[ERROR] Could not load weights: {path}")
-        print(f"[ERROR] Attempting partial load")
+        print(f"Attempting partial load")
     
         state_dict = torch.load(path, map_location=get_device())
         filtered_state_dict = {
@@ -57,10 +57,11 @@ def load_weights(model, path):
             if not any(head_key in k for head_key in ['fc', 'classifier', 'head', 'vocab_projector'])
             }
         try:
-            model.load_state_dict(filtered_state_dict, strict=False)
+            missing, unexpected = model.load_state_dict(filtered_state_dict, strict=False)
+            print(f"[SUCCESS] Partial load successful!")
             return True
         except:
-            raise Exception(f"Error loading weights: {path}")
+            raise Exception(f"[FAIL] Error loading weights: {path}")
     return False
               
 def graph_losses_n_accs(losses, train_accs, test_accs):

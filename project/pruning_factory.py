@@ -14,6 +14,7 @@ def layer_check(name, param):
     exclusion_keywords = [
         # 'cls_head',
         'encoder_head',
+        'relu'
 
         
         'fc',   # ResNet
