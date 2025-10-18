@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dyrelu_adapter import DyReLUB
+from dyrelu_adapter import DyReLUB, DyReLUAdapter
 
 class BasicBlock(nn.Module):
     """ResNet Basic block with DyReLU (for ResNet-18, 34)"""
@@ -9,7 +9,7 @@ class BasicBlock(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, 
                  groups=1, base_width=64, dilation=1, norm_layer=None,
-                 dyrelu_enabled=False
+                 dyrelu_en=False, dyrelu_phasing_en=False,
                  ):
         super(BasicBlock, self).__init__()
         if norm_layer is None:
@@ -19,7 +19,8 @@ class BasicBlock(nn.Module):
         if dilation > 1:
             raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
         
-        self.dyrelu_enabled = dyrelu_enabled
+        self.dyrelu_en = dyrelu_en
+        self.dyrelu_phasing_en = dyrelu_phasing_en
 
         # 3x3 conv
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
@@ -32,9 +33,12 @@ class BasicBlock(nn.Module):
         self.downsample = downsample
         self.stride = stride
 
-        if self.dyrelu_enabled:
+        if self.dyrelu_en:
             self.relu_v1 = DyReLUB(planes)
             self.relu_v2 = DyReLUB(planes)
+        elif self.dyrelu_phasing_en:
+            self.relu_v1 = DyReLUAdapter(planes)
+            self.relu_v2 = DyReLUAdapter(planes)
         else:
             self.relu_v1 = nn.ReLU()
             self.relu_v2 = nn.ReLU()
@@ -70,7 +74,8 @@ class Bottleneck(nn.Module):
         base_width: int = 64,
         dilation: int = 1,
         norm_layer: None = None,
-        dyrelu_enabled: bool = False,
+        dyrelu_en: bool = False,
+        dyrelu_phasing_en: bool = False,
         ):
         super().__init__()
         if norm_layer is None:
@@ -86,10 +91,14 @@ class Bottleneck(nn.Module):
         self.conv3 = nn.Conv2d(width, planes * self.expansion, kernel_size=1, bias=False)
         self.bn3 = norm_layer(planes * self.expansion)
 
-        if dyrelu_enabled:
+        if dyrelu_en:
             self.relu_v1 = DyReLUB(width)
             self.relu_v2 = DyReLUB(width)
             self.relu_v3 = DyReLUB(planes * self.expansion)
+        elif dyrelu_phasing_en:
+            self.relu_v1 = DyReLUAdapter(width)
+            self.relu_v2 = DyReLUAdapter(width)
+            self.relu_v3 = DyReLUAdapter(planes * self.expansion)
         else:
             self.relu_v1 = nn.ReLU()
             self.relu_v2 = nn.ReLU()
@@ -126,13 +135,14 @@ class ResNet(nn.Module):
         block,
         layers,
         num_classes: int = 1000,
-        dyrelu_enabled: bool = False,
+        dyrelu_en: bool = False,
+        dyrelu_phasing_en: bool = False,
         zero_init_residual: bool = False,
         groups: int = 1,
         width_per_group: int = 64,
         replace_stride_with_dilation = None,
         norm_layer = None,
-    ):
+        ):
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -151,10 +161,13 @@ class ResNet(nn.Module):
         self.base_width = width_per_group
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(self.inplanes)
-        self.dyrelu_enabled = dyrelu_enabled
+        self.dyrelu_en = dyrelu_en
+        self.dyrelu_phasing_en = dyrelu_phasing_en
 
-        if dyrelu_enabled:
+        if dyrelu_en:
             self.relu_v1 = DyReLUB(self.inplanes)
+        elif dyrelu_phasing_en:
+            self.relu_v1 = DyReLUAdapter(self.inplanes)
         else:
             self.relu_v1 = nn.ReLU(inplace=True)
 
@@ -185,7 +198,7 @@ class ResNet(nn.Module):
         blocks: int,
         stride: int = 1,
         dilate: bool = False,
-    ):
+        ):
         norm_layer = self._norm_layer
         downsample = None
         previous_dilation = self.dilation
@@ -201,7 +214,7 @@ class ResNet(nn.Module):
         layers = []
         layers.append(
             block(
-                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_layer, self.dyrelu_enabled
+                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_layer, self.dyrelu_en, self.dyrelu_phasing_en
             )
         )
         self.inplanes = planes * block.expansion
@@ -214,7 +227,8 @@ class ResNet(nn.Module):
                     base_width=self.base_width,
                     dilation=self.dilation,
                     norm_layer=norm_layer,
-                    dyrelu_enabled=self.dyrelu_enabled,
+                    dyrelu_en=self.dyrelu_en,
+                    dyrelu_phasing_en=self.dyrelu_phasing_en,
                 )
             )
 
@@ -241,20 +255,50 @@ class ResNet(nn.Module):
         return self._forward_impl(x)
 
 
-def resnet18(num_classes=1000, dyrelu_enabled=False, **kwargs):
+def resnet18(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwargs):
     """ResNet-18"""
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes=num_classes, dyrelu_enabled=dyrelu_enabled, **kwargs)
+    return ResNet(
+        BasicBlock, [2, 2, 2, 2], num_classes=num_classes,
+        dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en, 
+        **kwargs)
 
-def resnet34(num_classes=1000, dyrelu_enabled=False, **kwargs):
+def resnet34(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwargs):
     """ResNet-34"""
-    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes=num_classes, dyrelu_enabled=dyrelu_enabled, **kwargs)
+    return ResNet(
+        BasicBlock, [3, 4, 6, 3], num_classes=num_classes,
+        dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en, 
+        **kwargs
+        )
 
 
-def resnet50(num_classes=1000, dyrelu_enabled=False, **kwargs):
+def resnet50(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwargs):
     """ResNet-50"""
-    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes=num_classes, dyrelu_enabled=dyrelu_enabled, **kwargs)
+    return ResNet(
+        Bottleneck, [3, 4, 6, 3], num_classes=num_classes,
+        dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en, 
+        **kwargs
+        )
 
 
-def resnet101(num_classes=1000, dyrelu_enabled=False, **kwargs):
+def resnet101(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwargs):
     """ResNet-101"""
-    return ResNet(Bottleneck, [3, 4, 23, 3], num_classes=num_classes, dyrelu_enabled=dyrelu_enabled, **kwargs)
+    return ResNet(
+        Bottleneck, [3, 4, 23, 3], num_classes=num_classes, 
+        dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en, 
+        **kwargs
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

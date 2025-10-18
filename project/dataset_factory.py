@@ -9,6 +9,7 @@ from utils import *
 from functools import lru_cache
 from datasets import get_dataset_config_names
 import inspect
+from copy import deepcopy
 
 
 # VALID_DATASETS = {
@@ -72,7 +73,7 @@ class AugmentData(object):
     def __init__(self, base_transform, n_views=2):
         self.base_transform = base_transform
         self.n_views = n_views
-    
+
     def __call__(self, x):
         if self.n_views == 1:
             return self.base_transform(x)
@@ -114,7 +115,7 @@ def get_train_transform(dataset_name: str, t_type: str, size: int):
                 T.RandomApply([T.ColorJitter(0.8, 0.8, 0.8, 0.2)], p=0.8), 
                 T.RandomGrayscale(p=0.2), 
                 T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)), 
-                AutoAugment(policy=AutoAugmentPolicy.CIFAR10),
+                # AutoAugment(policy=AutoAugmentPolicy.CIFAR10),
             ]
     else:
         raise ValueError(f"Unsupported dataset: {dataset_name}")
@@ -131,14 +132,14 @@ def get_test_transform(dataset_name: str, size: int):
     return T.Compose(transform)
 
 def get_dataset_train_fn(
-    cls:          type,
+    dataset_class:type,
     dataset_name: str,
     t_type:       str,
     size:         int,
     n_views:      int,
     cache_dir:    str = './cache',
     ):
-    sig = inspect.signature(cls.__init__)
+    sig = inspect.signature(dataset_class.__init__)
     dataset_args = {
         'root': cache_dir,
         'transform': AugmentData(
@@ -153,16 +154,16 @@ def get_dataset_train_fn(
     if dataset_name == 'emnist':
         dataset_args['split'] = 'balanced'
 
-    return lambda: cls(**dataset_args)
+    return lambda: dataset_class(**dataset_args)
 
 
 def get_dataset_test_fn(
-    cls:          type,
+    dataset_class:type,
     dataset_name: str,
     size:         int,
     cache_dir:    str = './cache',
     ):
-    sig = inspect.signature(cls.__init__)
+    sig = inspect.signature(dataset_class.__init__)
     dataset_args = {
         'root': cache_dir,
         'transform': get_test_transform(dataset_name, size),
@@ -175,7 +176,7 @@ def get_dataset_test_fn(
     if dataset_name == 'emnist':
         dataset_args['split'] = 'balanced'
 
-    return lambda: cls(**dataset_args)
+    return lambda: dataset_class(**dataset_args)
 
 def get_dataset_fn(
     dataset_name: str, 
@@ -202,7 +203,6 @@ def get_dataset_fn(
 
     return train_dataset_fn, test_dataset_fn
 
-@lru_cache()
 def load_cv_datasets(
     dataset_name:   str,
     t_type:         str,
@@ -218,15 +218,19 @@ def load_cv_datasets(
 
     # Loading train and test data
     trainset = train_dataset_fn()
-    testset = test_dataset_fn(cache_dir, size)
+    testset = test_dataset_fn()
 
-    # Creating validation split
-    train_size = len(trainset)
-    val_size = int(0.20 * train_size)
-    train_size = train_size - val_size
-    trainset, valset = random_split(trainset, [train_size, val_size])
+    if t_type == 'supervised':
+        # Creating validation split
+        train_size = len(trainset)
+        val_size = int(0.20 * train_size)
+        train_size = train_size - val_size
+        trainset, valset = random_split(trainset, [train_size, val_size])
 
-    valset.dataset.transform = get_test_transform(dataset_name, size)
+        valset = deepcopy(valset)
+        valset.dataset.transform = get_test_transform(dataset_name, size)
+    else:
+        valset = None        
 
     return {
         'train': trainset,
@@ -243,7 +247,6 @@ def load_cv_dataloaders(
     num_workers:    int,
     cache_dir:      str = './cache',
     ):
-
     try:
         datasets = load_cv_datasets(dataset_name, t_type, size, n_views, cache_dir)
         loader_args = {
@@ -256,8 +259,12 @@ def load_cv_dataloaders(
         
         # Creating dataloaders
         trainloader = DataLoader(datasets["train"], shuffle=True, **loader_args)
-        valloader = DataLoader(datasets["validation"], shuffle=False, **loader_args)
         testloader = DataLoader(datasets["test"], shuffle=False, **loader_args)
+
+        if datasets["validation"] is not None:
+            valloader = DataLoader(datasets["validation"], shuffle=False, **loader_args)
+        else:
+            valloader = None
         
         return {
             "trainloader": trainloader,

@@ -53,13 +53,13 @@ def _get_embedded_dim_from_model(model):
     
     raise RuntimeError(f"Couldn't infer embedding dim for model: {model.__class__.__name__}")
     
-def initialize_model_components(model_name: str, pretrained: bool, dyrelu_enabled: bool):
+def initialize_model_components(model_name: str, pretrained: bool, dyrelu_en: bool, dyrelu_phasing_en: bool):
     if model_name not in MODELS:
         raise ValueError(f"Unknown model {model_name}. Choices: {list(MODELS.keys())}")
 
     spec = MODELS[model_name]
     if spec.type == 'vision':
-        model = spec.fn(dyrelu_enabled=dyrelu_enabled)
+        model = spec.fn(dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en)
         if pretrained:
             load_weights(model, spec.weight)
     else:
@@ -119,14 +119,15 @@ def remove_last_layer(model):
 class BaseModelWrapper(nn.Module):
     def __init__(
         self, 
-        model_name:     str, 
-        device:         str, 
-        pretrained:     bool = True, 
-        adapt:          bool = True,
-        dyrelu_enabled: bool = False,
+        model_name:        str, 
+        device:            str, 
+        pretrained:        bool = True, 
+        adapt:             bool = True,
+        dyrelu_en:         bool = False,
+        dyrelu_phasing_en: bool = False,
         ):
         super().__init__()
-        components = initialize_model_components(model_name, pretrained, dyrelu_enabled)
+        components = initialize_model_components(model_name, pretrained, dyrelu_en, dyrelu_phasing_en)
         self.model        = components['model']
         self.embedded_dim = components['embedded_dim']
         self.model_type   = components['model_type']
@@ -150,9 +151,10 @@ class ClassificationAndEncoderNetwork(BaseModelWrapper):
         adapt:              bool = True, 
         pretrained:         bool = True, 
         freeze:             bool = False, 
-        dyrelu_enabled:     bool = False
+        dyrelu_en:          bool = False,
+        dyrelu_phasing_en:  bool = False
         ):
-        super().__init__(model_name, device, pretrained, adapt, dyrelu_enabled)
+        super().__init__(model_name, device, pretrained, adapt, dyrelu_en, dyrelu_phasing_en)
         self.model_name = model_name
         self.num_classes = num_classes
         self.num_out_features = num_out_features

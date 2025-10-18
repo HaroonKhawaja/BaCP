@@ -9,7 +9,7 @@ class DyReLUB(nn.Module):
 
         self.hyperfunction = nn.Sequential(
             nn.Linear(channels, channels//reduction),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Linear(channels//reduction, 2*K*channels),
             nn.Sigmoid()
         )
@@ -41,76 +41,45 @@ class DyReLUB(nn.Module):
         return out
 
 class DyReLUAdapter(nn.Module):
-    def __init__(self, t_start, t_end, device='cuda'):
+    def __init__(self, channels):
         super().__init__()
-        self.t_start = t_start
-        self.t_end = t_end
+        self.channels = channels
+        self.dyrelu = DyReLUB(channels)
+        self.relu = nn.ReLU()
+
+        self.t_start = None
+        self.t_end = None
         self.t = 0
-        self.device = device
-        self.dyrelu_cache = {}
-        self.activations = {}
-        self.call_counts = {}
-        self._registered = False
 
     def get_beta(self):
+        if self.t_start is None or self.t_end is None:
+            raise Exception("Please set t_start and t_end")
+
         if self.t_start <= self.t <= self.t_end:
             return 1 - ((self.t - self.t_start) / (self.t_end - self.t_start))
         else:
             return 0.0
         
+    def forward(self, x):
+        beta = self.get_beta()
+        return beta * self.dyrelu(x) + (1 - beta) * self.relu(x)
+
     def step(self):
         self.t += 1
 
-    def hook_pre(self, module, input):
-        self.activations[module] = input[0].detach()
-    
-    def hook_post(self, module, input, output):
-        beta = self.get_beta()
-        activ = self.activations.get(module, None)
-        if activ is None:
-            return output
-        
-        m_id = id(module)
-        in_channels = activ.shape[1]
-        self.call_counts[id(module)] = self.call_counts.get(id(module), 0) + 1
-        occurance = self.call_counts[id(module)]
-        key = (m_id, in_channels, occurance)
-        if key not in self.dyrelu_cache:
-            self.dyrelu_cache[key] = DyReLUB(in_channels).to(self.device)
+def set_t_for_dyrelu_adapter(model, t_start, t_end):
+    print(f'[DyReLU ADAPTER] Setting t_start={t_start}, t_end={t_end}')
+    for m in model.modules():
+        if isinstance(m, DyReLUAdapter):
+            m.t_start = t_start
+            m.t_end = t_end
 
-        dyrelu = self.dyrelu_cache[key]
-        dy_output = dyrelu(activ)
-        return beta * dy_output + (1 - beta) * output
-
-    def register_hooks(self, model):
-        if self._registered:
-            return
-        for module in model.modules():
-            if isinstance(module, nn.ReLU):
-                module.register_forward_pre_hook(self.hook_pre)
-                module.register_forward_hook(self.hook_post)
-        self._registered = True
-
-    def reset_per_forward(self):
-        self.activations.clear()
-        self.call_counts.clear()
-
-    def attach_to_model(self, model):
-        self.register_hooks(model)
-        orig_forward = model.forward
-
-        def wrapped_forward(*args, **kwargs):
-            self.reset_per_forward()
-            return orig_forward(*args, **kwargs)
-
-        model.forward = wrapped_forward
-
-
-
-
-
-
-
+def step_dyrelu_adapter(model):
+    for m in model.modules():
+        if isinstance(m, DyReLUAdapter):
+            m.step()
+            beta = m.get_beta()
+    print(f'[DyReLU ADAPTER] Updated Beta: {beta:.4f}')
 
 
 

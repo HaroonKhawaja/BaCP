@@ -4,6 +4,12 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from abc import abstractmethod, ABC
 
+import torch
+import torch.nn as nn
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
 def layer_check(name, param):
     if param is None:
         return False
@@ -12,25 +18,27 @@ def layer_check(name, param):
         return False
     
     exclusion_keywords = [
+        'hyperfucntion', 'relu',
+        'encoder_head'
+
+
+
         # 'cls_head',
-        'encoder_head',
-        'relu'
-
-        
-        'fc',   # ResNet
-        'classifier.6', # VGG
-        'embeddings', 'conv_proj', 'pos_embedding', 'heads', 'classifier.weight', # ViT        
-        'projection_head', # Encoder heads
-        'vocab_projector', 'vocab_transform', # DistilBERT
-
-        'classifier.dense', 'classifier.out_proj', 'lm_head', # RoBERTA
-
+        # 'encoder_head',
+        # 'hyperfunction',
+        # 'fc',   # ResNet
+        # 'classifier.6', # VGG
+        # 'embeddings', 'conv_proj', 'pos_embedding', 'heads', 'classifier.weight', # ViT        
+        # 'projection_head', # Encoder heads
+        # 'vocab_projector', 'vocab_transform', # DistilBERT
+        # 'classifier.dense', 'classifier.out_proj', 'lm_head', # RoBERTA
 
         # 'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
         # 'class_token', 'pos_embedding', 'vocab_transform', 'lm_head',
         # 'projection_head'
         ]
-    if any(keyword in name for keyword in exclusion_keywords):
+    
+    if any(keyword in name.lower() for keyword in exclusion_keywords):
         return False
     return True
 
@@ -68,8 +76,8 @@ def check_sparsity_distribution(model, verbose=True):
                 total_backbone_weights += num_layer_weights
                 total_backbone_zero_weights += num_zero_weights
 
-            names.append(name)
-            sparsities.append(layer_sparsity)
+                names.append(name)
+                sparsities.append(layer_sparsity)
 
             if verbose:
                 print(f"{name}:\t{layer_sparsity * 100:.4f}%\t|\tsparsity: ({num_zero_weights}/{num_layer_weights})")
@@ -82,6 +90,7 @@ def check_sparsity_distribution(model, verbose=True):
         print("-" * 80)
         print(f"Model sparsity:\t\t\t{overall_sparsity:.4f}")
         print(f"Backbone sparsity:\t\t{backbone_sparsity:.4f}")
+        print(f"Backbone Sparse Weights to Total:{total_backbone_zero_weights:.4f} - {total_backbone_weights:.4f}")
         print(f"Total parameters analyzed:\t{total_weights}")
         print(f"Number of non-zero parameters:\t{total_weights - total_zero_weights}")
         print(f"Number of zero parameters:\t{total_zero_weights}\n")

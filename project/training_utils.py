@@ -18,6 +18,8 @@ from dataset_utils_old import get_data
 from model_factory import ClassificationAndEncoderNetwork
 from dataset_factory import get_dataloaders
 from pruning_factory import check_model_sparsity, PRUNER_DICT
+from dyrelu_adapter import set_t_for_dyrelu_adapter
+
 
 def _initialize_models(args):
     if getattr(args, 'is_bacp', False):
@@ -39,7 +41,8 @@ def _initialize_models(args):
             adapt=adapt,
             pretrained=True,
             freeze=False,
-            dyrelu_enabled=args.dyrelu_enabled,
+            dyrelu_en=args.dyrelu_en,
+            dyrelu_phasing_en=args.dyrelu_phasing_en,
         )
         args.embedded_dim = args.model.embedded_dim
         if args.trained_weights:
@@ -48,6 +51,16 @@ def _initialize_models(args):
                 print("[TRAINER] Weights loaded")
             else: 
                 raise ValueError("[TRAINER] Failed to load weights")
+
+    if args.dyrelu_phasing_en:
+        if args.recovery_epochs and args.ft_epochs:
+            # t_end = args.epochs + (args.recovery_epochs * args.epochs) + (0.25 * args.ft_epochs)
+            t_end = int(0.75 * args.ft_epochs)
+        else:
+            t_end = args.epochs
+
+        set_t_for_dyrelu_adapter(args.model, 0, t_end)
+
 
 def create_models_for_bacp(args):
     adapt = True if args.image_size and args.image_size <= 64 else False
@@ -70,7 +83,8 @@ def create_models_for_bacp(args):
         adapt=adapt,
         pretrained=True,
         freeze=False,
-        dyrelu_enabled=args.dyrelu_enabled,
+        dyrelu_en=args.dyrelu_en,
+        dyrelu_phasing_en=args.dyrelu_phasing_en,
     )
     if args.encoder_trained_weights:
         load = load_weights(model, args.encoder_trained_weights)
@@ -94,9 +108,11 @@ def create_models_for_bacp(args):
         "model_ft": model_ft
         }
 
+
 def _initialize_data_loaders(args):
     # Initializing cache directory for datasets
     args.cache_dir = '/dbfs/cache' if args.databricks_env else './cache'
+    args.n_views = 1 if not args.is_bacp else args.n_views
 
     data = get_dataloaders(args)
     # data = get_data(args)
@@ -108,7 +124,9 @@ def _initialize_data_loaders(args):
     print('[TRAINER] Validation Loader Initialized' if args.valloader else '[TRAINER] Validation Loader not initialized')
     print('[TRAINER] Test Loader Initialized' if args.testloader else '[TRAINER] Test Loader not initialized')
 
+
 def _initialize_optimizer(args):
+
     opt_type = getattr(args, 'optimizer_type', None)
     lr = getattr(args, 'learning_rate', None)
 
@@ -121,11 +139,13 @@ def _initialize_optimizer(args):
 
     print(f'[TRAINER] Optimizer type w/ learning rate: ({opt_type}, {lr})')
     
+
 def _initialize_scheduler(args):
+    if not getattr(args, "trainloader", None):
+        raise RuntimeError("trainloader required for scheduler initialization.")
+
     scheduler_type = getattr(args, "scheduler_type", None)
     if scheduler_type:
-        if not getattr(args, "trainloader", None):
-            raise RuntimeError("trainloader required for scheduler initialization.")
         args.total_steps = int(getattr(args, "epochs", 0) * len(args.trainloader))
         args.warmup_steps = int(args.total_steps * 0.1)
 
@@ -141,6 +161,7 @@ def _initialize_scheduler(args):
     else:
         args.scheduler = None
         print("[TRAINER] No scheduler initialized")
+
 
 def _initialize_pruner(args):
     args.initial_sparsity = check_model_sparsity(args.model)
@@ -169,6 +190,7 @@ def _initialize_pruner(args):
         # else:
         #     print('[TRAINER] Pruning not initialized')
 
+
 def _initialize_paths_and_logger(args):
     base_dir = '/dbfs' if args.databricks_env else '.'
     args.base_path = os.path.join(base_dir, 'research/bacp', args.model_name, args.dataset_name)
@@ -184,12 +206,14 @@ def _initialize_paths_and_logger(args):
     args.logger = Logger(args.model_name, logger_path) if args.log_epochs else None
     print(f'[TRAINER] Saving model to: {args.save_path}')
 
+
 def _apply_pruning(args, epoch, step):
     if not args.prune or args.recover:
         return
     if step == 1:
         args.pruner.ratio_step(epoch, args.epochs, args.initial_sparsity, args.target_sparsity)
         args.pruner.prune(args.model)
+
 
 def _handle_optimizer_and_pruning(args, loss, epoch, step):
     """Handle backpropagation, pruning, and weight update in a single step."""
@@ -218,12 +242,14 @@ def _handle_optimizer_and_pruning(args, loss, epoch, step):
         if step == 1 and args.prune and not args.recover:
             args.current_sparsity = check_model_sparsity(args.model)
 
+
 def _handle_wanda_hooks(args):
     if args.prune and hasattr(args.pruner, 'is_wanda') and args.pruner.is_wanda:
         if not args.recover:    # We don't want to register hooks during recovery
             args.pruner.calibrate(args.model, args.trainloader)
         else:
             pass
+
 
 def _initialize_log_parameters(args):
     """Initialize parameters for logging purposes."""
@@ -233,6 +259,7 @@ def _initialize_log_parameters(args):
         if isinstance(v, allowed_types) and v is not None
     }
     
+
 def _handle_data_to_device(args, batch_data):
     if isinstance(batch_data, (list, tuple)) and len(batch_data) == 2:
         data, labels = batch_data
@@ -247,16 +274,18 @@ def _handle_data_to_device(args, batch_data):
     
     return data, labels
 
+
 def _handle_tqdm_logs(args, batchloader, metrics):
     if args.enable_tqdm:
         display_metrics = {}
-        for key, value in metrics.items():
-            if value is None:
+        for k, v in metrics.items():
+            if v is None or not isinstance(v, (int, float)):
                 continue
-            display_metrics[key] = f"{value:.4f}"
+            display_metrics[k] = f"{v:.4f}"
         batchloader.set_postfix(**display_metrics)
     else:
         return
+
 
 def _log_metrics(args, info, metrics, run=None):
     metrics['sparsity'] = _get_sparsity_key(args)
@@ -274,9 +303,11 @@ def _log_metrics(args, info, metrics, run=None):
     if args.logger is not None:
         args.logger.log_epochs(info)
 
+
 def _get_sparsity_key(args):
     """Get current model sparsity as a rounded key."""
     return round(args.current_sparsity, 4)
+
 
 def _initialize_logs(args):
     if args.logger is not None:
