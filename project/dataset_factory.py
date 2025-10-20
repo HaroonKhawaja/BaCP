@@ -168,15 +168,13 @@ def get_dataset_train_fn(
             ),
         'download': True
     }
-    if dataset_name == 'imagenet':
+
+    if 'train' in sig.parameters:
+        dataset_args['train'] = True
+    if 'split' in sig.parameters:
         dataset_args['split'] = 'train'
-    else:
-        if 'train' in sig.parameters:
-            dataset_args['train'] = True
-        if 'split' in sig.parameters:
-            dataset_args['split'] = 'train'
-        if dataset_name == 'emnist':
-            dataset_args['split'] = 'balanced'
+    if dataset_name == 'emnist':
+        dataset_args['split'] = 'balanced'
 
     return lambda: dataset_class(**dataset_args)
 
@@ -193,15 +191,14 @@ def get_dataset_test_fn(
         'transform': get_test_transform(dataset_name, size),
         'download': True
     }
+    if 'train' in sig.parameters:
+        dataset_args['train'] = False
+    if 'split' in sig.parameters:
+        dataset_args['split'] = 'test'
+    if dataset_name == 'emnist':
+        dataset_args['split'] = 'balanced'
     if dataset_name == 'imagenet':
         dataset_args['split'] = 'val'
-    else:    
-        if 'train' in sig.parameters:
-            dataset_args['train'] = False
-        if 'split' in sig.parameters:
-            dataset_args['split'] = 'test'
-        if dataset_name == 'emnist':
-            dataset_args['split'] = 'balanced'
 
     return lambda: dataset_class(**dataset_args)
 
