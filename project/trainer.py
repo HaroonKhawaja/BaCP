@@ -129,7 +129,7 @@ class Trainer:
 
         self.model.eval()
         self.model.to(self.device)
-
+        
         desc = "Evaluating"
         metrics = self._run_validation_epoch(desc, 'eval')
 
@@ -324,22 +324,3 @@ class Trainer:
                     torch.save(self.model.state_dict(), self.save_path)
                     return True
             return False
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        

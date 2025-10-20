@@ -1,4 +1,4 @@
-from torchvision.datasets import  CIFAR10, SVHN, MNIST, FashionMNIST, Food101, Flowers102, CIFAR100, EMNIST, Caltech101
+from torchvision.datasets import  CIFAR10, SVHN, MNIST, FashionMNIST, Food101, Flowers102, CIFAR100, EMNIST, Caltech101, ImageNet
 import torchvision.transforms as T
 from torchvision.transforms import AutoAugment, AutoAugmentPolicy
 from torch.utils.data import DataLoader, Dataset
@@ -48,7 +48,7 @@ VALID_DATASETS = {
     },
 }
 
-CV_DATASETS = ['cifar10', 'svhn', 'mnist', 'fmnist', 'emnist', 'cifar100']
+CV_DATASETS = ['cifar10', 'svhn', 'mnist', 'fmnist', 'emnist', 'cifar100', 'imagenet']
 DATASET_STATS = {
     "cifar10": ([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]),
     "cifar100": ([0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]),
@@ -56,6 +56,7 @@ DATASET_STATS = {
     "mnist": ([0.1307], [0.3081]),
     "fmnist": ([0.2860], [0.3530]),
     "emnist": ([0.1307], [0.3081]),
+    "imagenet": ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     } 
 GRAYSCALE_DATASETS = {"mnist", "fmnist", "emnist"}
 
@@ -110,6 +111,11 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
             transforms = [
                 T.Resize((size, size)),
                 T.RandomRotation(10)
+            ]
+        elif dataset_name == 'imagenet':
+             transforms = [
+                T.RandomResizedCrop(size),
+                T.RandomHorizontalFlip(),
             ]
         else:
             raise ValueError(f"Unsupported dataset: {dataset_name}")
@@ -178,6 +184,15 @@ def get_train_transform(learning_type, size=32, dataset_name="", s=1):
                 T.RandomGrayscale(p=0.2),
                 T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
             ]
+        elif dataset_name == 'imagenet':
+            color_jitter = T.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s) # dont know about this i saw this in cifars so i added here too
+            transforms = [
+                T.RandomResizedCrop(size=size, scale=(0.2, 1.0)),
+                T.RandomHorizontalFlip(),
+                T.RandomApply([color_jitter], p=0.8),
+                T.RandomGrayscale(p=0.2),
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
+            ]
         else:
             raise ValueError(f"Unsupported dataset: {dataset_name}")
         
@@ -215,14 +230,25 @@ def load_cv_dataset(dataset_name, cache_dir, learning_type, size):
     valid_datasets = CV_DATASETS
     assert dataset_name in valid_datasets, f"Unsupported CV dataset: {dataset_name}"
     
-    # Creating datasets
-    dataset = CreateDatasets()
-    train_dataset_fn, test_dataset_fn = dataset.get_dataset_fn(learning_type, dataset_name)
-    n_views = 1 if learning_type == 'supervised' else 2
 
-    # Loading train and test data
-    trainset = train_dataset_fn(cache_dir, size, n_views)
-    testset = test_dataset_fn(cache_dir, size)
+    if dataset_name == 'imagenet':
+        n_views = 1 if learning_type == 'supervised' else 2
+        train_transform = get_train_transform(learning_type, size, 'imagenet')
+        test_transform = get_eval_transform('imagenet', size)
+
+        #  ImageNet must be downloaded manually. It has no `download=True` arg.
+        # It uses split='train' for training and split='val' for testing.
+        trainset = ImageNet(root=cache_dir, split='train', transform=AugmentData(train_transform, n_views))
+        testset = ImageNet(root=cache_dir, split='val', transform=test_transform)
+    # Creating datasets
+    else:
+        dataset = CreateDatasets()
+        train_dataset_fn, test_dataset_fn = dataset.get_dataset_fn(learning_type, dataset_name)
+        n_views = 1 if learning_type == 'supervised' else 2
+
+        # Loading train and test data
+        trainset = train_dataset_fn(cache_dir, size, n_views)
+        testset = test_dataset_fn(cache_dir, size)
 
     train_size = len(trainset)
     val_size = int(0.15 * train_size)

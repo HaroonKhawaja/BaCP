@@ -19,6 +19,7 @@ from model_factory import ClassificationAndEncoderNetwork
 from dataset_factory import get_dataloaders
 from pruning_factory import check_model_sparsity, PRUNER_DICT
 from dyrelu_adapter import set_t_for_dyrelu_adapter
+from pruning_factory import apply_erk_initialization
 
 
 def _initialize_models(args):
@@ -45,6 +46,7 @@ def _initialize_models(args):
             dyrelu_phasing_en=args.dyrelu_phasing_en,
         )
         args.embedded_dim = args.model.embedded_dim
+
         if args.trained_weights:
             loaded = load_weights(args.model, args.trained_weights)
             if loaded:
