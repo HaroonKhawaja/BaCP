@@ -19,6 +19,7 @@ from model_factory import ClassificationAndEncoderNetwork
 from dataset_factory import get_dataloaders
 from pruning_factory import check_model_sparsity, PRUNER_DICT
 from dyrelu_adapter import set_t_for_dyrelu_adapter
+from pruning_factory import apply_erk_initialization
 
 
 def _initialize_models(args):
@@ -45,6 +46,18 @@ def _initialize_models(args):
             dyrelu_phasing_en=args.dyrelu_phasing_en,
         )
         args.embedded_dim = args.model.embedded_dim
+
+        if getattr(args, 'use_erk_init', False):
+            if getattr(args, 'erk_init_sparsity', None) is None:
+                raise ValueError("`erk_init_sparsity` must be set when `use_erk_init` is True.")
+            
+            erk_masks = apply_erk_initialization(
+                model=args.model,
+                target_sparsity=args.erk_init_sparsity,
+                erk_power_scale=getattr(args, 'erk_power_scale', 1.0)
+            )
+            print("[TRAINER] ERK initialization complete.")
+
         if args.trained_weights:
             loaded = load_weights(args.model, args.trained_weights)
             if loaded:

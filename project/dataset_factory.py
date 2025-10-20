@@ -1,4 +1,4 @@
-from torchvision.datasets import  CIFAR10, SVHN, MNIST, FashionMNIST, Food101, Flowers102, CIFAR100, EMNIST, Caltech101
+from torchvision.datasets import  CIFAR10, SVHN, MNIST, FashionMNIST, Food101, Flowers102, CIFAR100, EMNIST, Caltech101, ImageNet
 import torchvision.transforms as T
 from torchvision.transforms import AutoAugment, AutoAugmentPolicy
 from torch.utils.data import DataLoader, Dataset
@@ -57,6 +57,7 @@ CV_DATASETS = {
     'mnist': MNIST,
     'fmnist': FashionMNIST,
     'emnist': EMNIST,
+    'imagenet': ImageNet,
 }
 
 GRAYSCALE_DATASETS = ["mnist", "fmnist", "emnist"]
@@ -67,6 +68,7 @@ DATASET_STATS = {
     "mnist": ([0.1307], [0.3081]),
     "fmnist": ([0.2860], [0.3530]),
     "emnist": ([0.1307], [0.3081]),
+    "imagenet": ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     } 
 
 class AugmentData(object):
@@ -117,6 +119,20 @@ def get_train_transform(dataset_name: str, t_type: str, size: int):
                 T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)), 
                 # AutoAugment(policy=AutoAugmentPolicy.CIFAR10),
             ]
+    elif dataset_name == 'imagenet':
+        if t_type == 'supervised':
+            transform = [
+                T.RandomResizedCrop(size),
+                T.RandomHorizontalFlip(),
+            ]
+        elif t_type == 'contrastive':
+            transform = [
+                T.RandomResizedCrop(size=size, scale=(0.2, 1.0)),
+                T.RandomHorizontalFlip(),
+                T.RandomApply([T.ColorJitter(0.8, 0.8, 0.8, 0.2)], p=0.8),
+                T.RandomGrayscale(p=0.2),
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
+            ]
     else:
         raise ValueError(f"Unsupported dataset: {dataset_name}")
         
@@ -125,9 +141,14 @@ def get_train_transform(dataset_name: str, t_type: str, size: int):
     return T.Compose(transform)
     
 def get_test_transform(dataset_name: str, size: int):
-    transform = [
-        T.Resize((size, size)),
-    ]
+    if dataset_name == 'imagenet':
+        # ImageNet standard eval: resize shorter side to 256 then center crop to size
+        transform = [
+            T.Resize(256),
+            T.CenterCrop(size),
+        ]
+    else:
+        transform = [T.Resize((size, size))]
     transform.extend(normalize_data(dataset_name))
     return T.Compose(transform)
 
@@ -147,12 +168,15 @@ def get_dataset_train_fn(
             ),
         'download': True
     }
-    if 'train' in sig.parameters:
-        dataset_args['train'] = True
-    if 'split' in sig.parameters:
+    if dataset_name == 'imagenet':
         dataset_args['split'] = 'train'
-    if dataset_name == 'emnist':
-        dataset_args['split'] = 'balanced'
+    else:
+        if 'train' in sig.parameters:
+            dataset_args['train'] = True
+        if 'split' in sig.parameters:
+            dataset_args['split'] = 'train'
+        if dataset_name == 'emnist':
+            dataset_args['split'] = 'balanced'
 
     return lambda: dataset_class(**dataset_args)
 
@@ -169,12 +193,15 @@ def get_dataset_test_fn(
         'transform': get_test_transform(dataset_name, size),
         'download': True
     }
-    if 'train' in sig.parameters:
-        dataset_args['train'] = False
-    if 'split' in sig.parameters:
-        dataset_args['split'] = 'test'
-    if dataset_name == 'emnist':
-        dataset_args['split'] = 'balanced'
+    if dataset_name == 'imagenet':
+        dataset_args['split'] = 'val'
+    else:    
+        if 'train' in sig.parameters:
+            dataset_args['train'] = False
+        if 'split' in sig.parameters:
+            dataset_args['split'] = 'test'
+        if dataset_name == 'emnist':
+            dataset_args['split'] = 'balanced'
 
     return lambda: dataset_class(**dataset_args)
 

@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from abc import abstractmethod, ABC
+from typing import Dict
 
 import torch
 import torch.nn as nn
@@ -104,6 +105,66 @@ def check_sparsity_distribution(model, verbose=True):
     plt.xlim(0, 1.0)
     plt.tight_layout()
     plt.show()
+
+
+def erk_initialization(model: torch.nn.Module,target_sparsity: float,erk_power_scale: float = 1.0,) -> Dict[str, torch.Tensor]:
+    # target_sparsity is fraction of weights to zero out (0.0 - 1.0)
+    if not (0.0 <= target_sparsity <= 1.0):
+        raise ValueError("target_sparsity must be between 0 and 1")
+
+    prunable_params = {}
+    for name, param in model.named_parameters():
+        if param.requires_grad and param.dim() >= 2 and "weight" in name:
+            prunable_params[name] = param
+    erk_scores = {}
+    for name, param in prunable_params.items():
+        if param.dim() == 2:  # Linear: (out, in)
+            n_out, n_in = param.shape
+        elif param.dim() == 4:  # Conv2d: (out, in, k_h, k_w)
+            n_out, n_in, k_h, k_w = param.shape
+            n_in = n_in * k_h * k_w
+        else:
+            # treat remaining dims by flattening input side
+            shape = param.shape
+            n_out = shape[0]
+            n_in = int(torch.prod(torch.tensor(shape[1:])).item())
+        # ERK score proportional to (n_in + n_out) / (n_in * n_out)
+        erk_scores[name] = (n_in + n_out) / (n_in * n_out)
+    if not erk_scores:
+        return {}
+
+    # normalize
+    total_score = sum(erk_scores.values())
+    normalized = {k: (v / total_score) ** erk_power_scale for k, v in erk_scores.items()}
+
+    total_params = float(sum(p.numel() for p in prunable_params.values()))
+    target_remaining = total_params * (1.0 - target_sparsity)
+    expected_remaining_per_layer = {k: normalized[k] * p.numel() for k, p in prunable_params.items() if k in normalized}
+    sum_expected = sum(expected_remaining_per_layer.values())
+    if sum_expected == 0:
+        raise RuntimeError("Sum of expected remaining parameters is zero; check model shapes and erk scores.")
+    scale = float(target_remaining) / float(sum_expected)
+    masks: Dict[str, torch.Tensor] = {}
+    for name, param in prunable_params.items():
+        if name in normalized:
+            layer_density = normalized[name] * scale  # fraction kept
+        else:
+            layer_density = 1.0 - target_sparsity
+        layer_density = float(max(0.0, min(1.0, layer_density)))  # clamp to [0,1]
+        keep_prob = layer_density
+        mask = (torch.rand_like(param) < keep_prob).to(dtype=param.dtype)
+        masks[name] = mask
+    return masks
+
+
+def apply_erk_initialization(model: torch.nn.Module,target_sparsity: float,erk_power_scale: float = 1.0):
+    masks = erk_initialization(model, target_sparsity, erk_power_scale)
+    with torch.no_grad():
+        for name, param in model.named_parameters():
+            if name in masks:
+                param.mul_(masks[name])
+    return masks
+
 
 class Pruner(ABC):
     def __init__(self, model, epochs, target_sparsity, sparsity_scheduler="cubic"):
