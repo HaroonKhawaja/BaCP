@@ -25,7 +25,6 @@ from training_utils import (
 from dyrelu_adapter import step_dyrelu_adapter
 from pruning_factory import *
 from utils import *
-from compute_metrics import *
 
 @dataclass
 class TrainingArguments:
@@ -57,11 +56,6 @@ class TrainingArguments:
     recovery_epochs:        int = None      # Number of epochs to recover after pruning
     retrain:                bool = False    # Whether to retrain after pruning
     pruning_module:         object = None   # Pruning module
-
-    # erk
-    use_erk_init:           bool = False
-    erk_init_sparsity:      float = None
-    erk_power_scale:        float = 1.0
 
     # DyReLU Phasing
     dyrelu_en:   bool = False
@@ -136,14 +130,6 @@ class Trainer:
         self.model.eval()
         self.model.to(self.device)
         
-        # calculating flops and inference time
-        dataloader = self.testloader if self.testloader else self.valloader
-        sample_input, _ = next(iter(dataloader))
-        sample_input = sample_input[0:1].to(self.device)
-        gflops = calculate_gflops(self.model, sample_input)
-        inference_time_ms = calculate_inference_time(self.model, sample_input)
-        # --------------
-
         desc = "Evaluating"
         metrics = self._run_validation_epoch(desc, 'eval')
 
@@ -154,8 +140,6 @@ class Trainer:
                 continue
             final_metrics[key] = value
         final_metrics['sparsity'] = sparsity
-        final_metrics['gflops'] = gflops
-        final_metrics['inference_time_ms'] = inference_time_ms
 
         _log_metrics(self, 'Final', final_metrics, run) 
 
