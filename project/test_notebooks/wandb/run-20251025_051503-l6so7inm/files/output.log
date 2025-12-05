@@ -1,0 +1,91 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+Epoch [1/250] - accuracy: 9.6354 - loss: 2.3029 - sparsity: 0.9995
+[TRAINER] weights saved!
+Epoch [2/250] - accuracy: 10.0461 - loss: 2.3028 - sparsity: 0.9995
+[TRAINER] weights saved!
+Epoch [3/250] - accuracy: 9.6354 - loss: 2.3028 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+Epoch [4/250] - accuracy: 9.8357 - loss: 2.3030 - sparsity: 0.9995
+Epoch [5/250] - accuracy: 9.9659 - loss: 2.3030 - sparsity: 0.9995
+Epoch [6/250] - accuracy: 10.0461 - loss: 2.3030 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+Epoch [7/250] - accuracy: 9.6354 - loss: 2.3029 - sparsity: 0.9995
+Epoch [8/250] - accuracy: 9.7857 - loss: 2.3028 - sparsity: 0.9995
+Epoch [9/250] - accuracy: 10.1362 - loss: 2.3028 - sparsity: 0.9995
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+Epoch [10/250] - accuracy: 9.6855 - loss: 2.3028 - sparsity: 0.9995
+Epoch [11/250] - accuracy: 9.8357 - loss: 2.3029 - sparsity: 0.9995
+Epoch [12/250] - accuracy: 9.6855 - loss: 2.3029 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+Epoch [13/250] - accuracy: 9.8357 - loss: 2.3029 - sparsity: 0.9995
+Epoch [14/250] - accuracy: 10.0461 - loss: 2.3028 - sparsity: 0.9995
+Epoch [15/250] - accuracy: 10.1362 - loss: 2.3028 - sparsity: 0.9995
+Epoch [16/250] - accuracy: 9.6354 - loss: 2.3028 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29317560.
+Epoch [17/250] - accuracy: 10.2464 - loss: 2.3030 - sparsity: 0.9995
+[TRAINER] weights saved!
+Epoch [18/250] - accuracy: 9.6855 - loss: 2.3029 - sparsity: 0.9995
+Epoch [19/250] - accuracy: 9.6354 - loss: 2.3028 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29040670.
+Epoch [20/250] - accuracy: 9.7857 - loss: 2.3028 - sparsity: 0.9995
+Epoch [21/250] - accuracy: 9.8357 - loss: 2.3028 - sparsity: 0.9995
+Epoch [22/250] - accuracy: 9.7857 - loss: 2.3028 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.28718534.
+Epoch [23/250] - accuracy: 10.0461 - loss: 2.3028 - sparsity: 0.9995
+Epoch [24/250] - accuracy: 9.7857 - loss: 2.3030 - sparsity: 0.9995
+Epoch [25/250] - accuracy: 9.6855 - loss: 2.3029 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.28352187.
+Epoch [26/250] - accuracy: 10.2464 - loss: 2.3028 - sparsity: 0.9995
+Epoch [27/250] - accuracy: 10.0461 - loss: 2.3028 - sparsity: 0.9995
+Epoch [28/250] - accuracy: 9.7857 - loss: 2.3028 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.27942810.
+Epoch [29/250] - accuracy: 10.2464 - loss: 2.3028 - sparsity: 0.9995
+Epoch [30/250] - accuracy: 9.6855 - loss: 2.3028 - sparsity: 0.9995
+Epoch [31/250] - accuracy: 10.1362 - loss: 2.3028 - sparsity: 0.9995
+Epoch [32/250] - accuracy: 9.9659 - loss: 2.3029 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.27332339.
+Epoch [33/250] - accuracy: 9.8357 - loss: 2.3028 - sparsity: 0.9995
+Epoch [34/250] - accuracy: 9.6855 - loss: 2.3029 - sparsity: 0.9995
+Epoch [35/250] - accuracy: 9.7857 - loss: 2.3028 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.26827923.
+Epoch [36/250] - accuracy: 9.6354 - loss: 2.3028 - sparsity: 0.9995
+Epoch [37/250] - accuracy: 10.0461 - loss: 2.3028 - sparsity: 0.9995
+Epoch [38/250] - accuracy: 9.6354 - loss: 2.3029 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.26285393.
+Epoch [39/250] - accuracy: 9.6855 - loss: 2.3028 - sparsity: 0.9995
+Epoch [40/250] - accuracy: 9.8357 - loss: 2.3029 - sparsity: 0.9995
+Epoch [41/250] - accuracy: 9.8357 - loss: 2.3029 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.25706491.
+Epoch [42/250] - accuracy: 9.6855 - loss: 2.3028 - sparsity: 0.9995
+Epoch [43/250] - accuracy: 9.7857 - loss: 2.3029 - sparsity: 0.9995
+Epoch [44/250] - accuracy: 9.7857 - loss: 2.3029 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.25093088.
+Epoch [45/250] - accuracy: 10.1362 - loss: 2.3028 - sparsity: 0.9995
+Epoch [46/250] - accuracy: 9.6354 - loss: 2.3029 - sparsity: 0.9995
+Epoch [47/250] - accuracy: 9.7857 - loss: 2.3028 - sparsity: 0.9995
+Epoch [48/250] - accuracy: 9.9659 - loss: 2.3028 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.24224977.
+Epoch [49/250] - accuracy: 9.6354 - loss: 2.3028 - sparsity: 0.9995
+Traceback (most recent call last):
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/../scripts/pruning_script.py", line 42, in run_training
+    trainer.train(run)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 101, in train
+    loss = self._run_train_epoch(epoch, desc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 197, in _run_train_epoch
+    _handle_optimizer_and_pruning(self, loss, epoch, step)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/training_utils.py", line 245, in _handle_optimizer_and_pruning
+    scaler.step(args.optimizer)
+  File "/databricks/python/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 461, in step
+    retval = self._maybe_opt_step(optimizer, optimizer_state, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 355, in _maybe_opt_step
+    if not sum(v.item() for v in optimizer_state["found_inf_per_device"].values()):
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 355, in <genexpr>
+    if not sum(v.item() for v in optimizer_state["found_inf_per_device"].values()):
+               ^^^^^^^^
+KeyboardInterrupt

@@ -1,0 +1,350 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+Epoch [1/100] - accuracy: 9.7857 - loss: 2.2775 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29983009.
+[Pruner] Fraction of weights to prune/regrow is 0.29983009.
+[Pruner] Fraction of weights to prune/regrow is 0.29983009.
+[Pruner] Fraction of weights to prune/regrow is 0.29983009.
+Epoch [2/100] - accuracy: 36.2680 - loss: 1.9026 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29932079.
+[Pruner] Fraction of weights to prune/regrow is 0.29932079.
+[Pruner] Fraction of weights to prune/regrow is 0.29932079.
+[Pruner] Fraction of weights to prune/regrow is 0.29932079.
+Epoch [3/100] - accuracy: 48.5877 - loss: 1.5005 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29847322.
+[Pruner] Fraction of weights to prune/regrow is 0.29847322.
+[Pruner] Fraction of weights to prune/regrow is 0.29847322.
+[Pruner] Fraction of weights to prune/regrow is 0.29847322.
+Epoch [4/100] - accuracy: 59.7155 - loss: 1.2255 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29728931.
+[Pruner] Fraction of weights to prune/regrow is 0.29728931.
+[Pruner] Fraction of weights to prune/regrow is 0.29728931.
+[Pruner] Fraction of weights to prune/regrow is 0.29728931.
+Epoch [5/100] - accuracy: 62.8105 - loss: 1.0530 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29577173.
+[Pruner] Fraction of weights to prune/regrow is 0.29577173.
+[Pruner] Fraction of weights to prune/regrow is 0.29577173.
+[Pruner] Fraction of weights to prune/regrow is 0.29577173.
+Epoch [6/100] - accuracy: 68.8502 - loss: 0.9260 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29392394.
+[Pruner] Fraction of weights to prune/regrow is 0.29392394.
+[Pruner] Fraction of weights to prune/regrow is 0.29392394.
+[Pruner] Fraction of weights to prune/regrow is 0.29392394.
+Epoch [7/100] - accuracy: 67.6282 - loss: 0.8271 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.29175013.
+[Pruner] Fraction of weights to prune/regrow is 0.29175013.
+[Pruner] Fraction of weights to prune/regrow is 0.29175013.
+[Pruner] Fraction of weights to prune/regrow is 0.29175013.
+Epoch [8/100] - accuracy: 74.6895 - loss: 0.7386 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.28925518.
+[Pruner] Fraction of weights to prune/regrow is 0.28925518.
+[Pruner] Fraction of weights to prune/regrow is 0.28925518.
+[Pruner] Fraction of weights to prune/regrow is 0.28925518.
+Epoch [9/100] - accuracy: 73.8782 - loss: 0.6788 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.28644480.
+[Pruner] Fraction of weights to prune/regrow is 0.28644480.
+[Pruner] Fraction of weights to prune/regrow is 0.28644480.
+[Pruner] Fraction of weights to prune/regrow is 0.28644480.
+Epoch [10/100] - accuracy: 77.2736 - loss: 0.6173 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.28332531.
+[Pruner] Fraction of weights to prune/regrow is 0.28332531.
+[Pruner] Fraction of weights to prune/regrow is 0.28332531.
+[Pruner] Fraction of weights to prune/regrow is 0.28332531.
+Epoch [11/100] - accuracy: 77.4740 - loss: 0.5799 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.27990382.
+[Pruner] Fraction of weights to prune/regrow is 0.27990382.
+[Pruner] Fraction of weights to prune/regrow is 0.27990382.
+[Pruner] Fraction of weights to prune/regrow is 0.27990382.
+Epoch [12/100] - accuracy: 78.6859 - loss: 0.5391 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.27618803.
+[Pruner] Fraction of weights to prune/regrow is 0.27618803.
+[Pruner] Fraction of weights to prune/regrow is 0.27618803.
+[Pruner] Fraction of weights to prune/regrow is 0.27618803.
+Epoch [13/100] - accuracy: 81.1098 - loss: 0.5067 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.27218639.
+[Pruner] Fraction of weights to prune/regrow is 0.27218639.
+[Pruner] Fraction of weights to prune/regrow is 0.27218639.
+[Pruner] Fraction of weights to prune/regrow is 0.27218639.
+Epoch [14/100] - accuracy: 81.8810 - loss: 0.4841 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.26790796.
+[Pruner] Fraction of weights to prune/regrow is 0.26790796.
+[Pruner] Fraction of weights to prune/regrow is 0.26790796.
+[Pruner] Fraction of weights to prune/regrow is 0.26790796.
+Epoch [15/100] - accuracy: 81.6907 - loss: 0.4580 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.26336244.
+[Pruner] Fraction of weights to prune/regrow is 0.26336244.
+[Pruner] Fraction of weights to prune/regrow is 0.26336244.
+[Pruner] Fraction of weights to prune/regrow is 0.26336244.
+Epoch [16/100] - accuracy: 81.0597 - loss: 0.4447 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.25856010.
+[Pruner] Fraction of weights to prune/regrow is 0.25856010.
+[Pruner] Fraction of weights to prune/regrow is 0.25856010.
+[Pruner] Fraction of weights to prune/regrow is 0.25856010.
+Epoch [17/100] - accuracy: 80.2183 - loss: 0.4193 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.25351185.
+[Pruner] Fraction of weights to prune/regrow is 0.25351185.
+[Pruner] Fraction of weights to prune/regrow is 0.25351185.
+[Pruner] Fraction of weights to prune/regrow is 0.25351185.
+Epoch [18/100] - accuracy: 82.5721 - loss: 0.4014 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.24822911.
+[Pruner] Fraction of weights to prune/regrow is 0.24822911.
+[Pruner] Fraction of weights to prune/regrow is 0.24822911.
+[Pruner] Fraction of weights to prune/regrow is 0.24822911.
+Epoch [19/100] - accuracy: 81.9010 - loss: 0.3930 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.24272386.
+[Pruner] Fraction of weights to prune/regrow is 0.24272386.
+[Pruner] Fraction of weights to prune/regrow is 0.24272386.
+[Pruner] Fraction of weights to prune/regrow is 0.24272386.
+Epoch [20/100] - accuracy: 82.5821 - loss: 0.3712 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.23700854.
+[Pruner] Fraction of weights to prune/regrow is 0.23700854.
+[Pruner] Fraction of weights to prune/regrow is 0.23700854.
+[Pruner] Fraction of weights to prune/regrow is 0.23700854.
+Epoch [21/100] - accuracy: 83.5537 - loss: 0.3639 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.23109612.
+[Pruner] Fraction of weights to prune/regrow is 0.23109612.
+[Pruner] Fraction of weights to prune/regrow is 0.23109612.
+[Pruner] Fraction of weights to prune/regrow is 0.23109612.
+Epoch [22/100] - accuracy: 84.9659 - loss: 0.3518 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.22500000.
+[Pruner] Fraction of weights to prune/regrow is 0.22500000.
+[Pruner] Fraction of weights to prune/regrow is 0.22500000.
+[Pruner] Fraction of weights to prune/regrow is 0.22500000.
+Epoch [23/100] - accuracy: 84.1346 - loss: 0.3371 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.21873398.
+[Pruner] Fraction of weights to prune/regrow is 0.21873398.
+[Pruner] Fraction of weights to prune/regrow is 0.21873398.
+[Pruner] Fraction of weights to prune/regrow is 0.21873398.
+Epoch [24/100] - accuracy: 84.0545 - loss: 0.3283 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.21231226.
+[Pruner] Fraction of weights to prune/regrow is 0.21231226.
+[Pruner] Fraction of weights to prune/regrow is 0.21231226.
+[Pruner] Fraction of weights to prune/regrow is 0.21231226.
+Epoch [25/100] - accuracy: 84.3650 - loss: 0.3197 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.20574937.
+[Pruner] Fraction of weights to prune/regrow is 0.20574937.
+[Pruner] Fraction of weights to prune/regrow is 0.20574937.
+[Pruner] Fraction of weights to prune/regrow is 0.20574937.
+Epoch [26/100] - accuracy: 83.1931 - loss: 0.3089 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.19906020.
+[Pruner] Fraction of weights to prune/regrow is 0.19906020.
+[Pruner] Fraction of weights to prune/regrow is 0.19906020.
+[Pruner] Fraction of weights to prune/regrow is 0.19906020.
+Epoch [27/100] - accuracy: 84.7957 - loss: 0.3042 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.19225988.
+[Pruner] Fraction of weights to prune/regrow is 0.19225988.
+[Pruner] Fraction of weights to prune/regrow is 0.19225988.
+[Pruner] Fraction of weights to prune/regrow is 0.19225988.
+Epoch [28/100] - accuracy: 84.3149 - loss: 0.2963 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.18536384.
+[Pruner] Fraction of weights to prune/regrow is 0.18536384.
+[Pruner] Fraction of weights to prune/regrow is 0.18536384.
+[Pruner] Fraction of weights to prune/regrow is 0.18536384.
+Epoch [29/100] - accuracy: 85.0461 - loss: 0.2813 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.17838770.
+[Pruner] Fraction of weights to prune/regrow is 0.17838770.
+[Pruner] Fraction of weights to prune/regrow is 0.17838770.
+[Pruner] Fraction of weights to prune/regrow is 0.17838770.
+Epoch [30/100] - accuracy: 85.0761 - loss: 0.2824 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.17134724.
+[Pruner] Fraction of weights to prune/regrow is 0.17134724.
+[Pruner] Fraction of weights to prune/regrow is 0.17134724.
+[Pruner] Fraction of weights to prune/regrow is 0.17134724.
+Epoch [31/100] - accuracy: 83.7039 - loss: 0.2708 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.16425841.
+[Pruner] Fraction of weights to prune/regrow is 0.16425841.
+[Pruner] Fraction of weights to prune/regrow is 0.16425841.
+[Pruner] Fraction of weights to prune/regrow is 0.16425841.
+Epoch [32/100] - accuracy: 84.3650 - loss: 0.2671 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.15713729.
+[Pruner] Fraction of weights to prune/regrow is 0.15713729.
+[Pruner] Fraction of weights to prune/regrow is 0.15713729.
+[Pruner] Fraction of weights to prune/regrow is 0.15713729.
+Epoch [33/100] - accuracy: 85.3666 - loss: 0.2629 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.14999999.
+[Pruner] Fraction of weights to prune/regrow is 0.14999999.
+[Pruner] Fraction of weights to prune/regrow is 0.14999999.
+[Pruner] Fraction of weights to prune/regrow is 0.14999999.
+Epoch [34/100] - accuracy: 84.4551 - loss: 0.2521 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.14286270.
+[Pruner] Fraction of weights to prune/regrow is 0.14286270.
+[Pruner] Fraction of weights to prune/regrow is 0.14286270.
+[Pruner] Fraction of weights to prune/regrow is 0.14286270.
+Epoch [35/100] - accuracy: 85.5168 - loss: 0.2504 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.13574158.
+[Pruner] Fraction of weights to prune/regrow is 0.13574158.
+[Pruner] Fraction of weights to prune/regrow is 0.13574158.
+[Pruner] Fraction of weights to prune/regrow is 0.13574158.
+Epoch [36/100] - accuracy: 85.3666 - loss: 0.2433 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.12865277.
+[Pruner] Fraction of weights to prune/regrow is 0.12865277.
+[Pruner] Fraction of weights to prune/regrow is 0.12865277.
+[Pruner] Fraction of weights to prune/regrow is 0.12865277.
+Epoch [37/100] - accuracy: 85.6971 - loss: 0.2341 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.12161231.
+[Pruner] Fraction of weights to prune/regrow is 0.12161231.
+[Pruner] Fraction of weights to prune/regrow is 0.12161231.
+[Pruner] Fraction of weights to prune/regrow is 0.12161231.
+Epoch [38/100] - accuracy: 86.3882 - loss: 0.2352 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.11463616.
+[Pruner] Fraction of weights to prune/regrow is 0.11463616.
+[Pruner] Fraction of weights to prune/regrow is 0.11463616.
+[Pruner] Fraction of weights to prune/regrow is 0.11463616.
+Epoch [39/100] - accuracy: 86.5885 - loss: 0.2270 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.10774011.
+[Pruner] Fraction of weights to prune/regrow is 0.10774011.
+[Pruner] Fraction of weights to prune/regrow is 0.10774011.
+[Pruner] Fraction of weights to prune/regrow is 0.10774011.
+Epoch [40/100] - accuracy: 85.6270 - loss: 0.2198 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.10093979.
+[Pruner] Fraction of weights to prune/regrow is 0.10093979.
+[Pruner] Fraction of weights to prune/regrow is 0.10093979.
+[Pruner] Fraction of weights to prune/regrow is 0.10093979.
+Epoch [41/100] - accuracy: 86.9491 - loss: 0.2210 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.09425063.
+[Pruner] Fraction of weights to prune/regrow is 0.09425063.
+[Pruner] Fraction of weights to prune/regrow is 0.09425063.
+[Pruner] Fraction of weights to prune/regrow is 0.09425063.
+Epoch [42/100] - accuracy: 86.5084 - loss: 0.2172 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.08768772.
+[Pruner] Fraction of weights to prune/regrow is 0.08768772.
+[Pruner] Fraction of weights to prune/regrow is 0.08768772.
+[Pruner] Fraction of weights to prune/regrow is 0.08768772.
+Epoch [43/100] - accuracy: 86.9692 - loss: 0.2113 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.08126603.
+[Pruner] Fraction of weights to prune/regrow is 0.08126603.
+[Pruner] Fraction of weights to prune/regrow is 0.08126603.
+[Pruner] Fraction of weights to prune/regrow is 0.08126603.
+Epoch [44/100] - accuracy: 86.3081 - loss: 0.2094 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.07499999.
+[Pruner] Fraction of weights to prune/regrow is 0.07499999.
+[Pruner] Fraction of weights to prune/regrow is 0.07499999.
+[Pruner] Fraction of weights to prune/regrow is 0.07499999.
+Epoch [45/100] - accuracy: 85.7572 - loss: 0.2005 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.06890388.
+[Pruner] Fraction of weights to prune/regrow is 0.06890388.
+[Pruner] Fraction of weights to prune/regrow is 0.06890388.
+[Pruner] Fraction of weights to prune/regrow is 0.06890388.
+Epoch [46/100] - accuracy: 85.3165 - loss: 0.1996 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.06299148.
+[Pruner] Fraction of weights to prune/regrow is 0.06299148.
+[Pruner] Fraction of weights to prune/regrow is 0.06299148.
+[Pruner] Fraction of weights to prune/regrow is 0.06299148.
+Epoch [47/100] - accuracy: 85.5168 - loss: 0.1983 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.05727615.
+[Pruner] Fraction of weights to prune/regrow is 0.05727615.
+[Pruner] Fraction of weights to prune/regrow is 0.05727615.
+[Pruner] Fraction of weights to prune/regrow is 0.05727615.
+Epoch [48/100] - accuracy: 85.7272 - loss: 0.1874 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.05177090.
+[Pruner] Fraction of weights to prune/regrow is 0.05177090.
+[Pruner] Fraction of weights to prune/regrow is 0.05177090.
+[Pruner] Fraction of weights to prune/regrow is 0.05177090.
+Epoch [49/100] - accuracy: 86.5885 - loss: 0.1898 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.04648814.
+[Pruner] Fraction of weights to prune/regrow is 0.04648814.
+[Pruner] Fraction of weights to prune/regrow is 0.04648814.
+[Pruner] Fraction of weights to prune/regrow is 0.04648814.
+Epoch [50/100] - accuracy: 86.2480 - loss: 0.1909 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.04143990.
+[Pruner] Fraction of weights to prune/regrow is 0.04143990.
+[Pruner] Fraction of weights to prune/regrow is 0.04143990.
+[Pruner] Fraction of weights to prune/regrow is 0.04143990.
+Epoch [51/100] - accuracy: 86.8289 - loss: 0.1852 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.03663755.
+[Pruner] Fraction of weights to prune/regrow is 0.03663755.
+[Pruner] Fraction of weights to prune/regrow is 0.03663755.
+[Pruner] Fraction of weights to prune/regrow is 0.03663755.
+Epoch [52/100] - accuracy: 86.8389 - loss: 0.1851 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.03209203.
+[Pruner] Fraction of weights to prune/regrow is 0.03209203.
+[Pruner] Fraction of weights to prune/regrow is 0.03209203.
+[Pruner] Fraction of weights to prune/regrow is 0.03209203.
+Epoch [53/100] - accuracy: 87.2196 - loss: 0.1850 - sparsity: 0.9005
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.02781361.
+[Pruner] Fraction of weights to prune/regrow is 0.02781361.
+[Pruner] Fraction of weights to prune/regrow is 0.02781361.
+[Pruner] Fraction of weights to prune/regrow is 0.02781361.
+Epoch [54/100] - accuracy: 86.6386 - loss: 0.1804 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.02381196.
+[Pruner] Fraction of weights to prune/regrow is 0.02381196.
+[Pruner] Fraction of weights to prune/regrow is 0.02381196.
+[Pruner] Fraction of weights to prune/regrow is 0.02381196.
+Epoch [55/100] - accuracy: 86.8389 - loss: 0.1700 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.02009619.
+[Pruner] Fraction of weights to prune/regrow is 0.02009619.
+[Pruner] Fraction of weights to prune/regrow is 0.02009619.
+[Pruner] Fraction of weights to prune/regrow is 0.02009619.
+Epoch [56/100] - accuracy: 86.8089 - loss: 0.1758 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.01667468.
+[Pruner] Fraction of weights to prune/regrow is 0.01667468.
+[Pruner] Fraction of weights to prune/regrow is 0.01667468.
+[Pruner] Fraction of weights to prune/regrow is 0.01667468.
+Epoch [57/100] - accuracy: 84.1046 - loss: 0.1673 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.01355520.
+[Pruner] Fraction of weights to prune/regrow is 0.01355520.
+[Pruner] Fraction of weights to prune/regrow is 0.01355520.
+[Pruner] Fraction of weights to prune/regrow is 0.01355520.
+Epoch [58/100] - accuracy: 85.3666 - loss: 0.1675 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.01074481.
+[Pruner] Fraction of weights to prune/regrow is 0.01074481.
+[Pruner] Fraction of weights to prune/regrow is 0.01074481.
+[Pruner] Fraction of weights to prune/regrow is 0.01074481.
+Epoch [59/100] - accuracy: 86.5986 - loss: 0.1657 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.00824988.
+[Pruner] Fraction of weights to prune/regrow is 0.00824988.
+[Pruner] Fraction of weights to prune/regrow is 0.00824988.
+[Pruner] Fraction of weights to prune/regrow is 0.00824988.
+Epoch [60/100] - accuracy: 86.6587 - loss: 0.1630 - sparsity: 0.9005
+[Pruner] Fraction of weights to prune/regrow is 0.00607605.
+[Pruner] Fraction of weights to prune/regrow is 0.00607605.
+[Pruner] Fraction of weights to prune/regrow is 0.00607605.
+Traceback (most recent call last):
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/../scripts/pruning_script.py", line 42, in run_training
+    trainer.train(run)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 101, in train
+    loss = self._run_train_epoch(epoch, desc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 197, in _run_train_epoch
+    _handle_optimizer_and_pruning(self, loss, epoch, step)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/training_utils.py", line 234, in _handle_optimizer_and_pruning
+    scaler.scale(loss).backward()
+  File "/databricks/python/lib/python3.12/site-packages/torch/_tensor.py", line 648, in backward
+    torch.autograd.backward(
+  File "/databricks/python/lib/python3.12/site-packages/torch/autograd/__init__.py", line 353, in backward
+    _engine_run_backward(
+  File "/databricks/python/lib/python3.12/site-packages/torch/autograd/graph.py", line 824, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

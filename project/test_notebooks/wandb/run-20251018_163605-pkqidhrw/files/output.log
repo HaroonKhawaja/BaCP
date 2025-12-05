@@ -1,0 +1,145 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+Epoch [1/100] - accuracy: 51.8606 - loss: 1.8506 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [2/100] - accuracy: 69.4490 - loss: 1.0774 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [3/100] - accuracy: 71.7208 - loss: 0.7670 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [4/100] - accuracy: 76.5522 - loss: 0.5948 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [5/100] - accuracy: 78.1867 - loss: 0.4832 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [6/100] - accuracy: 80.1501 - loss: 0.4273 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [7/100] - accuracy: 79.0090 - loss: 0.4074 - sparsity: 0.0000
+Epoch [8/100] - accuracy: 80.3660 - loss: 0.3713 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [9/100] - accuracy: 81.1472 - loss: 0.3645 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [10/100] - accuracy: 82.7405 - loss: 0.3498 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [11/100] - accuracy: 81.3425 - loss: 0.3248 - sparsity: 0.0000
+Epoch [12/100] - accuracy: 82.9667 - loss: 0.2987 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [13/100] - accuracy: 84.5292 - loss: 0.2761 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [14/100] - accuracy: 81.0752 - loss: 0.2604 - sparsity: 0.0000
+Epoch [15/100] - accuracy: 84.8581 - loss: 0.2411 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [16/100] - accuracy: 83.9330 - loss: 0.2374 - sparsity: 0.0000
+Epoch [17/100] - accuracy: 80.6949 - loss: 0.2211 - sparsity: 0.0000
+Epoch [18/100] - accuracy: 85.0432 - loss: 0.2132 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [19/100] - accuracy: 85.8553 - loss: 0.2044 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [20/100] - accuracy: 84.7451 - loss: 0.1986 - sparsity: 0.0000
+Epoch [21/100] - accuracy: 84.7965 - loss: 0.1890 - sparsity: 0.0000
+Epoch [22/100] - accuracy: 86.3178 - loss: 0.1827 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [23/100] - accuracy: 85.4646 - loss: 0.1760 - sparsity: 0.0000
+Epoch [24/100] - accuracy: 87.1813 - loss: 0.1769 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [25/100] - accuracy: 85.6497 - loss: 0.1676 - sparsity: 0.0000
+Epoch [26/100] - accuracy: 86.1020 - loss: 0.1635 - sparsity: 0.0000
+Epoch [27/100] - accuracy: 82.9153 - loss: 0.1600 - sparsity: 0.0000
+Epoch [28/100] - accuracy: 86.9038 - loss: 0.1518 - sparsity: 0.0000
+Epoch [29/100] - accuracy: 85.8553 - loss: 0.1443 - sparsity: 0.0000
+Epoch [30/100] - accuracy: 87.6439 - loss: 0.1538 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [31/100] - accuracy: 87.1299 - loss: 0.1421 - sparsity: 0.0000
+Epoch [32/100] - accuracy: 85.5572 - loss: 0.1419 - sparsity: 0.0000
+Epoch [33/100] - accuracy: 86.5440 - loss: 0.1412 - sparsity: 0.0000
+Epoch [34/100] - accuracy: 85.2385 - loss: 0.1308 - sparsity: 0.0000
+Epoch [35/100] - accuracy: 88.6102 - loss: 0.1370 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [36/100] - accuracy: 87.7467 - loss: 0.1241 - sparsity: 0.0000
+Epoch [37/100] - accuracy: 86.2973 - loss: 0.1190 - sparsity: 0.0000
+Epoch [38/100] - accuracy: 87.4383 - loss: 0.1211 - sparsity: 0.0000
+Epoch [39/100] - accuracy: 86.5029 - loss: 0.1178 - sparsity: 0.0000
+Epoch [40/100] - accuracy: 87.8392 - loss: 0.1138 - sparsity: 0.0000
+Epoch [41/100] - accuracy: 87.8084 - loss: 0.1136 - sparsity: 0.0000
+Epoch [42/100] - accuracy: 85.6394 - loss: 0.1098 - sparsity: 0.0000
+Epoch [43/100] - accuracy: 86.4309 - loss: 0.1050 - sparsity: 0.0000
+Epoch [44/100] - accuracy: 85.6291 - loss: 0.1050 - sparsity: 0.0000
+Epoch [45/100] - accuracy: 86.1637 - loss: 0.1004 - sparsity: 0.0000
+Epoch [46/100] - accuracy: 86.8524 - loss: 0.1102 - sparsity: 0.0000
+Epoch [47/100] - accuracy: 88.3224 - loss: 0.0977 - sparsity: 0.0000
+Epoch [48/100] - accuracy: 86.8524 - loss: 0.0970 - sparsity: 0.0000
+Epoch [49/100] - accuracy: 87.9523 - loss: 0.0922 - sparsity: 0.0000
+Epoch [50/100] - accuracy: 86.2356 - loss: 0.0893 - sparsity: 0.0000
+Epoch [51/100] - accuracy: 87.3458 - loss: 0.0894 - sparsity: 0.0000
+Epoch [52/100] - accuracy: 88.8261 - loss: 0.0850 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [53/100] - accuracy: 87.8289 - loss: 0.0790 - sparsity: 0.0000
+Epoch [54/100] - accuracy: 87.8701 - loss: 0.0831 - sparsity: 0.0000
+Epoch [55/100] - accuracy: 86.8627 - loss: 0.0715 - sparsity: 0.0000
+Epoch [56/100] - accuracy: 88.9083 - loss: 0.0715 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [57/100] - accuracy: 87.2019 - loss: 0.0636 - sparsity: 0.0000
+Epoch [58/100] - accuracy: 88.6719 - loss: 0.0659 - sparsity: 0.0000
+Epoch [59/100] - accuracy: 88.4252 - loss: 0.0589 - sparsity: 0.0000
+Epoch [60/100] - accuracy: 89.1653 - loss: 0.0610 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [61/100] - accuracy: 88.9905 - loss: 0.0633 - sparsity: 0.0000
+Epoch [62/100] - accuracy: 89.5970 - loss: 0.0591 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [63/100] - accuracy: 89.1036 - loss: 0.0508 - sparsity: 0.0000
+Epoch [64/100] - accuracy: 88.9597 - loss: 0.0524 - sparsity: 0.0000
+Epoch [65/100] - accuracy: 88.8672 - loss: 0.0522 - sparsity: 0.0000
+Epoch [66/100] - accuracy: 89.5662 - loss: 0.0426 - sparsity: 0.0000
+Epoch [67/100] - accuracy: 90.1110 - loss: 0.0397 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [68/100] - accuracy: 89.8335 - loss: 0.0382 - sparsity: 0.0000
+Epoch [69/100] - accuracy: 90.1213 - loss: 0.0384 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [70/100] - accuracy: 90.3372 - loss: 0.0350 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [71/100] - accuracy: 90.3783 - loss: 0.0322 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [72/100] - accuracy: 90.2138 - loss: 0.0331 - sparsity: 0.0000
+Epoch [73/100] - accuracy: 90.4194 - loss: 0.0269 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [74/100] - accuracy: 90.1419 - loss: 0.0245 - sparsity: 0.0000
+Epoch [75/100] - accuracy: 91.1801 - loss: 0.0240 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [76/100] - accuracy: 91.3651 - loss: 0.0200 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [77/100] - accuracy: 90.6558 - loss: 0.0206 - sparsity: 0.0000
+Epoch [78/100] - accuracy: 91.4885 - loss: 0.0162 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [79/100] - accuracy: 91.2212 - loss: 0.0150 - sparsity: 0.0000
+Epoch [80/100] - accuracy: 90.8203 - loss: 0.0129 - sparsity: 0.0000
+Epoch [81/100] - accuracy: 91.3651 - loss: 0.0151 - sparsity: 0.0000
+Epoch [82/100] - accuracy: 91.5604 - loss: 0.0115 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [83/100] - accuracy: 91.2212 - loss: 0.0114 - sparsity: 0.0000
+Epoch [84/100] - accuracy: 91.8483 - loss: 0.0097 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [85/100] - accuracy: 92.0539 - loss: 0.0080 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [86/100] - accuracy: 92.3314 - loss: 0.0063 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [87/100] - accuracy: 92.4753 - loss: 0.0050 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [88/100] - accuracy: 92.4239 - loss: 0.0047 - sparsity: 0.0000
+Epoch [89/100] - accuracy: 92.4959 - loss: 0.0041 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [90/100] - accuracy: 92.6192 - loss: 0.0031 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [91/100] - accuracy: 92.6809 - loss: 0.0028 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [92/100] - accuracy: 92.8454 - loss: 0.0023 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [93/100] - accuracy: 92.8146 - loss: 0.0023 - sparsity: 0.0000
+Epoch [94/100] - accuracy: 92.7940 - loss: 0.0022 - sparsity: 0.0000
+Epoch [95/100] - accuracy: 92.6809 - loss: 0.0019 - sparsity: 0.0000
+Epoch [96/100] - accuracy: 92.9276 - loss: 0.0016 - sparsity: 0.0000
+[TRAINER] weights saved!
+Epoch [97/100] - accuracy: 92.9174 - loss: 0.0014 - sparsity: 0.0000
+Epoch [98/100] - accuracy: 92.9276 - loss: 0.0017 - sparsity: 0.0000
+Epoch [99/100] - accuracy: 92.8762 - loss: 0.0015 - sparsity: 0.0000
+Epoch [100/100] - accuracy: 92.9174 - loss: 0.0013 - sparsity: 0.0000
+[TRAINER] Weights loaded successfully
+Final - accuracy: 92.9893 - sparsity: 0.0000

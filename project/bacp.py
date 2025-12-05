@@ -24,7 +24,7 @@ from training_utils import (
     _initialize_logs
 )
 from dataset_factory import load_cv_dataloaders
-from dyrelu_adapter import step_dyrelu_adapter
+from dyrelu_adapter import step_dyrelu_adapter, set_t_for_dyrelu_adapter
 from loss_functions import SupConLoss, NTXentLoss
 from pruning_factory import *
 from utils import *
@@ -38,13 +38,13 @@ class BaCPTrainingArguments:
     batch_size:             int
     optimizer_type:         str
     learning_rate:          float
-    tau:                    float
+    tau:                    float = 0.07
     num_out_features:       int = 128       # Model embedded vector size
     image_size:             int = 32        # Image size for resizing
     epochs:                 int = 5         # Number of epochs to train
     scheduler_type:         str = None      # Scheduler type, e.g., "linear_with_warmup"
+    patience:               int = None      # Number of epochs to wait before early stopping
     trained_weights:        str = None      # Path to pretrained weights
-    encoder_trained_weights:str = None      # Path to pretrained encoder weights (pt_model)
     experiment_type:        str = ""        # Type of experiment, e.g., "bacp_baseline" or "bacp"
     log_epochs:             bool = False    # Whether to log epochs in directory
     enable_tqdm:            bool = False    # Whether to enable tqdm progress bar
@@ -56,15 +56,14 @@ class BaCPTrainingArguments:
     pruning_type:           str = None      # Pruning type, e.g., "magnitude_pruning"
     target_sparsity:        float = None    # Target sparsity for pruning
     sparsity_scheduler:     str = None      # Sparsity scheduler, e.g., "cubic"
-    recovery_epochs:        int = 10        # Number of epochs to recover after pruning
-    retrain:                bool = True     # Whether to retrain after pruning
+    recovery_epochs:        int = 0         # Number of epochs to recover after pruning
     pruning_module:         object = None   # Pruning module
 
     # Fine-tuning arguments
     enable_finetune:        bool = True
-    ft_epochs:              int = 100        # Number of epochs to fine-tune pruned model
-    ft_optimizer_type:      str = 'sgd'      # Optimizer type for fine-tuning
-    ft_learning_rate:       float = 0.005    # Learning rate for fine-tuning
+    epochs_ft:              int = 100
+    optimizer_type_ft:      str = 'sgd'      # Optimizer type for fine-tuning
+    learning_rate_ft:       float = 0.005    # Learning rate for fine-tuning
 
     # BaCP arguments
     lambdas:                list = None     # List of lambdas for BaCP
@@ -72,7 +71,7 @@ class BaCPTrainingArguments:
     n_views:                int = 2         # Number of views for contrast  
 
     # DyReLU Phasing
-    dyrelu_en:         bool = False
+    dyrelu_en:              bool = False
     dyrelu_phasing_en:      bool = False
     
     def __post_init__(self):
@@ -80,6 +79,7 @@ class BaCPTrainingArguments:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.supervised_criterion = SupConLoss(self.tau, self.tau, self.device).to(self.device)
         self.unsupervised_criterion = NTXentLoss(self.tau, self.device).to(self.device)
+        self.retrain = True if self.recovery_epochs > 0 else False
         self.is_bacp = True
 
         _initialize_models(self)
@@ -103,9 +103,35 @@ class BaCPTrainer:
         self._initialize_lambdas()
         self._initialize_metric_lists()
 
+        # Initializing list for GPU-resident snapshots
+        self.ss_models_on_device = []
+
+        # Initializing DyReLU Phasing Schedule
+        self._initialize_dyrelu_phasing()
+
         self.model.train()
         self.model_pt.eval()
         self.model_ft.eval()
+
+
+    def _initialize_dyrelu_phasing(self):
+        """
+        Calculates the total number of steps for the DyReLU phase-out 
+        and sets the schedule on the model.
+        The DyReLU is phased out linearly from t_start (100% DyReLU) 
+        to t_end (100% standard ReLU).
+        """
+        if self.dyrelu_phasing_en:
+            t_start = 0
+
+            # Phasing runs through pre-training (self.epochs), recovery (self.recovery_epochs), 
+            # and a fraction of the fine-tuning phase (0.25 * self.epochs_ft).
+            t_end = self.epochs = self.recovery_epochs + (0.25 * self.epochs_ft)
+            t_end = int(t_end)
+
+            set_t_for_dyrelu(self.model, t_start, t_end)
+            print(f"[DyReLU Phasing] Schedule set: t_start={t_start}, t_end={t_end}")
+
 
     def _initialize_lambdas(self):
         # Default static value of 0.25 (equal weightage of each)
@@ -123,11 +149,9 @@ class BaCPTrainer:
             print("- Lambdas are learnable.")
 
         self.lambda_history = {
-            'lambda1': [],
-            'lambda2': [],
-            'lambda3': [],
-            'lambda4': [],
+            'lambda1': [], 'lambda2': [], 'lambda3': [], 'lambda4': [],
         }
+
 
     def _initialize_metric_lists(self):
         self.total_losses = {}
@@ -139,13 +163,8 @@ class BaCPTrainer:
         self.finetuning_loss = {}
         self.finetuning_acc = {}
 
-    def _handle_snapshot_creation(self):
-        if len(self.snapshots) < self.epochs - 1:
-            ss_model = deepcopy(self.model).to('cpu').eval()
-            self.snapshots.append(ss_model)
 
     def train(self, run=None):
-
         _initialize_logs(self)
 
         for epoch in range(self.epochs):
@@ -171,150 +190,37 @@ class BaCPTrainer:
 
             self._handle_snapshot_creation()
             torch.save(self.model.state_dict(), self.save_path)
-
-        self.finetune(run)
-
-    def _retrain(self, run=None):
-        """Recover model performance by running additional training epochs."""
-        self.recover = True
         
-        for epoch in range(self.recovery_epochs):
-            curr_rec_epoch_str = f"Recovery Epoch [{epoch+1}/{self.recovery_epochs}]"
+        if self.enable_finetune:
+            # self.finetune(run)
+            pass
 
-            # Recovery training
-            desc = f"Training {curr_rec_epoch_str}"
-            metrics = self._run_train_epoch(epoch, desc)
-
-            # Appends training loss and validation accuracy to lists
-            self._update_metric_lists(metrics)      
-
-            # Logs these metrics to the logger or to W&B
-            _log_metrics(self, curr_rec_epoch_str, metrics, run)     
-
-            # Saving model 
-            self._handle_save(epoch) 
-
-        self.recover = False
-
-    def _run_train_epoch(self, epoch, desc=""):
-        """Run a training epoch."""
-        _handle_wanda_hooks(self)
-
-        total_loss, total_prc, total_snc, total_fic, total_ce, total_acc = 0, 0, 0, 0, 0, 0
-        batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
-
-        for step, batch in enumerate(batchloader):
-            # Unpacking batch and moving to device
-            data, labels = _handle_data_to_device(self, batch)
-            data1, data2 = data
-
-            with self.context:
-                if self.model_type == 'cv':
-                    curr_emb, curr_logits = self._get_embeddings_and_logits(data1)
-                else:
-                    raise ValueError("Model type not supported")
-
-                with torch.no_grad():
-                    if self.model_type == 'cv':
-                        pt_emb = self.model_pt(data2, return_emb=True)
-                        pt_emb = pt_emb.logits if hasattr(pt_emb, 'logits') else pt_emb
-
-                        ft_emb = self.model_ft(data2, return_emb=True)
-                        ft_emb = ft_emb.logits if hasattr(ft_emb, 'logits') else ft_emb
-                    else:
-                        raise ValueError("Model type not supported")
-
-                # PrC Module
-                L_prc_sup = self.supervised_criterion(curr_emb, pt_emb, labels)
-                L_prc_unsup = self.unsupervised_criterion(curr_emb, pt_emb)
-                prc_loss = (L_prc_sup + L_prc_unsup) * self.lambda1
-
-                # FiC Module
-                L_fic_sup = self.supervised_criterion(curr_emb, ft_emb, labels)
-                L_fic_unsup = self.unsupervised_criterion(curr_emb, ft_emb)
-                fic_loss = (L_fic_sup + L_fic_unsup) * self.lambda2
-
-                # SnC Module
-                if len(self.snapshots) > 0:
-                    L_snc_sup = torch.tensor(0.0, device=self.device)
-                    L_snc_unsup = torch.tensor(0.0, device=self.device)
-                    for ss_model in self.snapshots:
-                        ss_model = ss_model.to(self.device)
-                        with torch.no_grad():
-                            ss_emb = ss_model(data2, return_emb=True)
-                            ss_emb = ss_emb.logits if hasattr(ss_emb, 'logits') else ss_emb
-
-                        L_snc_sup += self.supervised_criterion(curr_emb, ss_emb, labels)
-                        L_snc_unsup += self.unsupervised_criterion(curr_emb, ss_emb)
-
-                    snc_loss = ((L_snc_sup + L_snc_unsup) / len(self.snapshots)) * self.lambda3
-                else:
-                    snc_loss = torch.tensor(0.0, device=self.device)
-
-                # CE Module
-                ce_loss = nn.CrossEntropyLoss()(curr_logits, labels) * self.lambda4
-                preds = curr_logits.max(1)[1]
-                accuracy = ((preds == labels).sum() / labels.size(0)) * 100
-
-            loss = prc_loss + snc_loss + fic_loss + ce_loss
-            _handle_optimizer_and_pruning(self, loss, epoch, step)
-
-            total_loss += loss.item()
-            total_prc += prc_loss.item()
-            total_fic += fic_loss.item()
-            total_snc += snc_loss.item()
-            total_ce  += ce_loss.item()
-            total_acc += accuracy.item()
-
-            # Calculating running mean of loss components
-            metrics = {
-                "Total Loss": _to_float(total_loss / (step + 1)),
-                "PrC Loss": _to_float(total_prc / (step + 1)),
-                "SnC Loss": _to_float(total_snc / (step + 1)),
-                "FiC Loss": _to_float(total_fic / (step + 1)),
-                "CE Loss": _to_float(total_ce / (step + 1)),
-                "Training Accuracy": _to_float(total_acc / (step + 1)),
-                "lambdas":[
-                    _to_float(self.lambda1),
-                    _to_float(self.lambda2),
-                    _to_float(self.lambda3),
-                    _to_float(self.lambda4),
-                    ],
-            }
-            _handle_tqdm_logs(self, batchloader, metrics)
-
-        # if self.dyrelu_phasing_en:
-        #     step_dyrelu_adapter(self.model)
-
-        return metrics
-
+    
     def finetune(self, run=None):
-        # Model with weights and cls/encoder head exists
-        # If DyReLU phasing is enabled, ill need to gradually remove them in the finetuning phase
-        # So phase: epochs + (recovery_epochs * epochs) + (0.25 * finetuning_epochs) -> should phase until 20% of the way through the finetuning phase
-        # t_end = args.epochs + (args.recovery_epochs * args.epochs) + (0.25 * args.ft_epochs)
-
-        # Initializing cache directory for datasets
-        # args.cache_dir = '/dbfs/cache' if args.databricks_env else './cache'
         if self.enable_finetune == False:
             return
 
-        del self.trainloader
-        del self.testloader        
         torch.cuda.empty_cache()
 
         # Disabling pruning. Only the sparse masked is applied
         self.is_bacp = False
         self.criterion = nn.CrossEntropyLoss()
         self.prune = False
+        self.recover = True
         self.pruner = self.get_pruner()
         self.current_sparsity = check_model_sparsity(self.model)
 
-        self.save_path_pt = self.save_path
+        self.trained_weights = self.save_path
+        self.model.train()
+        load_weights(self.model, self.trained_weights)
+
         self.save_path = self.save_path.replace('.pt', '_finetune.pt')
         print(f"[TRAINER] Saving model to {self.save_path}")
 
-        self.model.train()
+        model_sparsity = check_model_sparsity(self.model)
+        if model_sparsity > self.target_sparsity:
+            print(f"[TRAINER] Model sparsity is {model_sparsity}. Target sparsity is {self.target_sparsity}. Skipping finetuning.")
+            return
 
         # Creating new dataloaders
         data = load_cv_dataloaders(
@@ -332,15 +238,15 @@ class BaCPTrainer:
         self.ft_testloader = data.get("testloader")
 
         optimizer_args = {
-            "optimizer_type":   self.ft_optimizer_type,
-            "learning_rate":    self.ft_learning_rate,
+            "optimizer_type":   self.optimizer_type_ft,
+            "learning_rate":    self.learning_rate_ft,
             "model":            self.model
         }
         _initialize_optimizer(SimpleNamespace(**optimizer_args))
 
-        for epoch in range(self.ft_epochs):
+        for epoch in range(self.epochs_ft):
             # Training phase
-            curr_ft_epoch_str = f"Fine-tuning Epoch [{epoch+1}/{self.ft_epochs}]"
+            curr_ft_epoch_str = f"Fine-tuning Epoch [{epoch+1}/{self.epochs_ft}]"
 
             # Recovery training
             desc = f"Training {curr_ft_epoch_str}"
@@ -365,6 +271,7 @@ class BaCPTrainer:
             if v is None:
                 continue
             print(f"{k}: {v:.5f}")
+
 
     def evaluate(self, weights=None, run=None):
         """Evaluate model performnace on the testing dataset"""
@@ -393,6 +300,123 @@ class BaCPTrainer:
         _log_metrics(self, 'Final', final_metrics, run) 
 
         return final_metrics
+
+
+    def _retrain(self, run=None):
+        """Recover model performance by running additional training epochs."""
+        self.recover = True
+        
+        for epoch in range(self.recovery_epochs):
+            curr_rec_epoch_str = f"Recovery Epoch [{epoch+1}/{self.recovery_epochs}]"
+
+            # Recovery training
+            desc = f"Training {curr_rec_epoch_str}"
+            metrics = self._run_train_epoch(epoch, desc)
+
+            # Appends training loss and validation accuracy to lists
+            self._update_metric_lists(metrics)      
+
+            # Logs these metrics to the logger or to W&B
+            _log_metrics(self, curr_rec_epoch_str, metrics, run)     
+
+            # Saving model 
+            self._handle_save(epoch) 
+
+        self.recover = False
+
+
+    def _run_train_epoch(self, epoch, desc=""):
+        """Run a training epoch."""
+        _handle_wanda_hooks(self)
+
+        if len(self.snapshots) > len(self.ss_models_on_device):
+            for i in range(len(self.ss_models_on_device), len(self.snapshots)):
+                self.ss_models_on_device.append(self.snapshots[i].to(self.device))
+
+        total_loss, total_prc, total_snc, total_fic, total_ce, total_acc = 0, 0, 0, 0, 0, 0
+        batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
+
+        for step, batch in enumerate(batchloader):
+            # Unpacking batch and moving to device
+            data, labels = _handle_data_to_device(self, batch)
+            data1, data2 = data
+
+            with self.context:
+                if self.model_type == 'cv':
+                    curr_emb, curr_logits = self._get_embeddings_and_logits(data1)
+                else:
+                    raise ValueError("Model type not supported")
+
+                with torch.no_grad():
+                    if self.model_type == 'cv':
+                        pt_emb = self.model_pt(data2, return_emb=True)
+                        pt_emb = pt_emb.logits if hasattr(pt_emb, 'logits') else pt_emb
+
+                        ft_emb = self.model_ft(data2, return_emb=True)
+                        ft_emb = ft_emb.logits if hasattr(ft_emb, 'logits') else ft_emb
+                    else:
+                        raise ValueError("Model type not supported")
+
+                # PrC Module
+                L_prc_raw = self._calculate_contrastive_loss(curr_emb, pt_emb, labels)
+                
+                # FiC Module
+                L_fic_raw = self._calculate_contrastive_loss(curr_emb, ft_emb, labels)
+
+                # SnC Module
+                L_snc_raw = torch.tensor(0.0, device=self.device)
+                if len(self.ss_models_on_device) > 0:
+                    for ss_model in self.ss_models_on_device:
+                        with torch.no_grad():
+                            ss_emb = ss_model(data2, return_emb=True)
+                            ss_emb = ss_emb.logits if hasattr(ss_emb, 'logits') else ss_emb
+
+                        L_snc_raw += self._calculate_contrastive_loss(curr_emb, ss_emb, labels)
+                    L_snc_raw /= len(self.ss_models_on_device)
+
+                # CE Module
+                L_ce_raw = nn.CrossEntropyLoss()(curr_logits, labels)
+
+                # Applying lambdas and combining losses
+                loss, prc_loss, snc_loss, fic_loss, ce_loss = self._combine_losses(
+                    L_prc_raw, L_snc_raw, L_fic_raw, L_ce_raw
+                )
+
+                # Accuracy
+                preds = curr_logits.max(1)[1]
+                accuracy = ((preds == labels).sum() / labels.size(0)) * 100
+
+            _handle_optimizer_and_pruning(self, loss, epoch, step)
+
+            total_loss += loss.item()
+            total_prc += prc_loss.item()
+            total_fic += fic_loss.item()
+            total_snc += snc_loss.item()
+            total_ce  += ce_loss.item()
+            total_acc += accuracy.item()
+
+            # Calculating running mean of loss components
+            metrics = {
+                "Total Loss": _to_float(total_loss / (step + 1)),
+                "PrC Loss": _to_float(total_prc / (step + 1)),
+                "SnC Loss": _to_float(total_snc / (step + 1)),
+                "FiC Loss": _to_float(total_fic / (step + 1)),
+                "CE Loss": _to_float(total_ce / (step + 1)),
+                "Training Accuracy": _to_float(total_acc / (step + 1)),
+                "lambdas":[
+                    _to_float(self.lambda1),
+                    _to_float(self.lambda2),
+                    _to_float(self.lambda3),
+                    _to_float(self.lambda4),
+                    ],
+            }
+            _handle_tqdm_logs(self, batchloader, metrics)
+
+        if self.dyrelu_phasing_en:
+            step_dyrelu_adapter(self.model)
+
+        return metrics
+    
 
     def _run_finetune_epoch(self, epoch, desc=""):
         self.model.train()
@@ -425,6 +449,7 @@ class BaCPTrainer:
         avg_loss = ft_total_loss / len(batchloader)    
         return avg_loss
     
+
     def _run_finetune_validation_epoch(self, desc="", mode="val"):
         """Run a validation epoch."""
         self.model.eval()
@@ -456,7 +481,46 @@ class BaCPTrainer:
             'Finetuning Accuracy': avg_accuracy if avg_accuracy > 0.0 else None,
             'Finetuning Perplexity': avg_perplexity if avg_perplexity > 1.0 else None
         }
+
+
+    def _get_embeddings_and_logits(self, data):
+        """
+        Perform a single forward pass on the main model to extract 
+        features, logits (classification), and embeddings (contrastive).
+        """
+        if self.model_type == 'cv':
+            features = self.model(data, return_feat=True)
+            features = features.logits if hasattr(features, 'logits') else features
+            logits = self.model.cls_head(features)   
+            embeddings = self.model.get_embeddings(features)
+        else:
+            raise ValueError("Model type not supported")
+        return embeddings, logits
+
+
+    def _calculate_contrastive_loss(self, current_emb, target_emb, labels):
+        """
+        Calculates the combined Supervised and Unsupervised Contrastive Loss 
+        (L_sup + L_unsup). Used for PrC, FiC, and SnC modules.
+        """
+        L_sup = self.supervised_criterion(current_emb, target_emb, labels)
+        L_unsup = self.unsupervised_criterion(current_emb, target_emb)
+        return L_sup + L_unsup
     
+    
+    def _combine_losses(self, prc_raw, snc_raw, fic_raw, ce_raw):
+        """
+        Applies the lambda weights to the four loss components and sums them.
+        """
+        prc_loss = prc_raw * self.lambda1
+        fic_loss = fic_raw * self.lambda2
+        snc_loss = snc_raw * self.lambda3
+        ce_loss = ce_raw * self.lambda4
+        
+        total_loss = prc_loss + snc_loss + fic_loss + ce_loss
+        return total_loss, prc_loss, snc_loss, fic_loss, ce_loss
+
+
     def _handle_metrics(self, outputs, labels):
         current_correct = 0
         current_samples = 0
@@ -492,7 +556,35 @@ class BaCPTrainer:
             'FT Batch Accuracy': avg_accuracy,
             'FT Batch Perplexity': avg_perplexity,
         }
+                
     
+    def _handle_snapshot_creation(self):
+        """
+        Creates a snapshot of the current model and stores it on the CPU (to save GPU memory).
+        The model is deepcopied to CPU here.
+        """
+        if len(self.snapshots) < self.epochs - 1:
+            # Keep on CPU to save GPU memory. The transfer will happen once per epoch.
+            ss_model = deepcopy(self.model).to('cpu').eval() 
+            self.snapshots.append(ss_model)
+
+
+    def get_pruner(self):
+        # Loading sparse weights
+        load_weights(self.model, self.save_path)
+
+        # Creating pruning module
+        pruning_module = PRUNING_REGISTRY[self.pruning_type](
+            self.model, self.epochs, self.target_sparsity, self.sparsity_scheduler
+        )
+
+        # Setting sparse mask
+        zero_masks = {name: (param != 0).float() for name, param in self.model.named_parameters()}
+
+        pruning_module.masks = zero_masks
+        return pruning_module
+        
+
     def _update_metric_lists(self, metrics=None, ft_metrics=None):
         sparsity_key = _get_sparsity_key(self)
 
@@ -514,11 +606,13 @@ class BaCPTrainer:
             self.finetuning_loss.setdefault(sparsity_key, []).append(ft_metrics.get('Finetuning Loss'))
             self.finetuning_acc.setdefault(sparsity_key, []).append(ft_metrics.get('Finetuning Accuracy'))
 
+
     def _handle_save(self, epoch):
         """Saves the model or stops training if no improvements are seen."""
         if self._save_model(epoch):
             print(f"[TRAINER] weights saved!")
     
+
     def _save_model(self, epoch):
         """Save the model based on the total loss."""
         if self.save_path:
@@ -548,47 +642,6 @@ class BaCPTrainer:
                     torch.save(self.model.state_dict(), self.save_path)
                     return True
             return False
-            
-    def _get_embeddings_and_logits(self, data):
-        features = self._extract_features(data)
-        logits = self._extract_logits(features)       
-        embeddings = self._extract_embeddings(features) 
-        return embeddings, logits
-    
-    def _extract_features(self, data):
-        if self.model_type == 'cv':
-            features = self.model(data, return_feat=True)
-            features = features.logits if hasattr(features, 'logits') else features
-            return features
-        else:
-            raise ValueError("Model type not supported")
-
-    def _extract_logits(self, features):
-        if self.model_type == 'cv':
-            return self.model.cls_head(features)
-        else:
-            raise ValueError("Model type not supported")
- 
-    def _extract_embeddings(self, features):
-        if self.model_type == 'cv':
-            return self.model.get_embeddings(features)
-        else:
-            raise ValueError("Model type not supported")
-
-    def get_pruner(self):
-        # Loading sparse weights
-        load_weights(self.model, self.save_path)
-
-        # Creating pruning module
-        pruning_module = PRUNER_DICT[self.pruning_type](
-            self.model, self.epochs, self.target_sparsity, self.sparsity_scheduler
-        )
-
-        # Setting sparse mask
-        zero_masks = {name: (param != 0).float() for name, param in self.model.named_parameters()}
-
-        pruning_module.masks = zero_masks
-        return pruning_module
         
         
 def _to_float(x):

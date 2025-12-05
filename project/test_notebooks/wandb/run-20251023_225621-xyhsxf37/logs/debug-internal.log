@@ -1,0 +1,8 @@
+{"time":"2025-10-23T22:56:22.896893947Z","level":"INFO","msg":"stream: starting","core version":"0.22.2"}
+{"time":"2025-10-23T22:56:23.409857312Z","level":"INFO","msg":"stream: created new stream","id":"xyhsxf37"}
+{"time":"2025-10-23T22:56:23.41011272Z","level":"INFO","msg":"handler: started","stream_id":"xyhsxf37"}
+{"time":"2025-10-23T22:56:23.412144538Z","level":"INFO","msg":"stream: started","id":"xyhsxf37"}
+{"time":"2025-10-23T22:56:23.412194472Z","level":"INFO","msg":"writer: started","stream_id":"xyhsxf37"}
+{"time":"2025-10-23T22:56:23.412203764Z","level":"INFO","msg":"sender: started","stream_id":"xyhsxf37"}
+{"time":"2025-10-23T22:57:03.874119577Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"updating run metadata","runtime_seconds":0.143956892}],"total_operations":1}}
+{"time":"2025-10-23T22:57:04.025435768Z","level":"INFO","msg":"stream: closing","id":"xyhsxf37"}

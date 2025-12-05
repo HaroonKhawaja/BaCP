@@ -1,0 +1,54 @@
+{
+  "os": "Linux-5.15.0-1096-azure-x86_64-with-glibc2.39",
+  "python": "CPython 3.12.3",
+  "startedAt": "2025-10-25T06:55:49.042273Z",
+  "args": [
+    "--model_name",
+    "resnet34",
+    "--model_type",
+    "cv",
+    "--dataset_name",
+    "cifar10",
+    "--num_classes",
+    "10",
+    "--pruning_type",
+    "rigl_pruning",
+    "--target_sparsity",
+    "0.99",
+    "--sparsity_scheduler",
+    "f_decay",
+    "--recovery_epochs",
+    "0",
+    "--trained_weights",
+    "/dbfs/research/bacp/resnet34/cifar10/resnet34_cifar10_baseline.pt"
+  ],
+  "program": "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/../scripts/bacp_script.py",
+  "email": "mhmdharoon.khawaja@gmail.com",
+  "root": "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks",
+  "host": "0923-124454-hug4xinc-10-139-64-10",
+  "executable": "/local_disk0/.ephemeral_nfs/envs/pythonEnv-0398c5b7-caad-4a56-a6d7-e1dc1726d523/bin/python",
+  "cpu_count": 24,
+  "cpu_count_logical": 24,
+  "gpu": "NVIDIA A100 80GB PCIe",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "269427478528",
+      "used": "35184058368"
+    }
+  },
+  "memory": {
+    "total": "224103759872"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA A100 80GB PCIe",
+      "memoryTotal": "85899345920",
+      "cudaCores": 6912,
+      "architecture": "Ampere",
+      "uuid": "GPU-d09ef575-d560-33fc-01e9-1eab7ca47b84"
+    }
+  ],
+  "cudaVersion": "12.2",
+  "writerId": "35swkn8lq4ny0jaiu3mn0evxolnpb1sx"
+}

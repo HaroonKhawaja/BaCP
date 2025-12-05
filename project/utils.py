@@ -54,14 +54,14 @@ def load_weights(model, path):
         state_dict = torch.load(path, map_location=get_device())
         filtered_state_dict = {
             k: v for k, v in state_dict.items() 
-            if not any(head_key in k for head_key in ['fc', 'classifier', 'head', 'vocab_projector'])
+            if not any(head_key in k for head_key in ['encoder_head', 'fc', 'classifier', 'head', 'vocab_projector'])
             }
         try:
             missing, unexpected = model.load_state_dict(filtered_state_dict, strict=False)
             print(f"[SUCCESS] Partial load successful!")
             return True
-        except:
-            raise Exception(f"[FAIL] Error loading weights: {path}")
+        except Exception as e:
+            raise Exception(f"[FAIL] Error loading weights: {e}")
     return False
               
 def graph_losses_n_accs(losses, train_accs, test_accs):

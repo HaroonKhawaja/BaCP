@@ -1,0 +1,87 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+[Pruner] Model sparity increased to 0.4831.
+Epoch [1/5] - accuracy: 86.4683 - loss: 0.0851 - sparsity: 0.4831
+[TRAINER] weights saved!
+Recovery Epoch [1/10] - accuracy: 87.8005 - loss: 0.1148 - sparsity: 0.4831
+[TRAINER] weights saved!
+Recovery Epoch [2/10] - accuracy: 88.0709 - loss: 0.1058 - sparsity: 0.4831
+[TRAINER] weights saved!
+Recovery Epoch [3/10] - accuracy: 87.8005 - loss: 0.1039 - sparsity: 0.4831
+Recovery Epoch [4/10] - accuracy: 89.7937 - loss: 0.1044 - sparsity: 0.4831
+[TRAINER] weights saved!
+Recovery Epoch [5/10] - accuracy: 88.8822 - loss: 0.0916 - sparsity: 0.4831
+Recovery Epoch [6/10] - accuracy: 89.2027 - loss: 0.0819 - sparsity: 0.4831
+Recovery Epoch [7/10] - accuracy: 89.3830 - loss: 0.0885 - sparsity: 0.4831
+Recovery Epoch [8/10] - accuracy: 89.4331 - loss: 0.0853 - sparsity: 0.4831
+Recovery Epoch [9/10] - accuracy: 88.5617 - loss: 0.0909 - sparsity: 0.4831
+Recovery Epoch [10/10] - accuracy: 88.7821 - loss: 0.0943 - sparsity: 0.4831
+[Pruner] Model sparity increased to 0.7762.
+Epoch [2/5] - accuracy: 89.2428 - loss: 0.0828 - sparsity: 0.7762
+[TRAINER] weights saved!
+Recovery Epoch [1/10] - accuracy: 88.4615 - loss: 0.0883 - sparsity: 0.7762
+Recovery Epoch [2/10] - accuracy: 88.7320 - loss: 0.0905 - sparsity: 0.7762
+Recovery Epoch [3/10] - accuracy: 89.8538 - loss: 0.0769 - sparsity: 0.7762
+[TRAINER] weights saved!
+Recovery Epoch [4/10] - accuracy: 88.4816 - loss: 0.0887 - sparsity: 0.7762
+Recovery Epoch [5/10] - accuracy: 89.6034 - loss: 0.0750 - sparsity: 0.7762
+Recovery Epoch [6/10] - accuracy: 89.3830 - loss: 0.0713 - sparsity: 0.7762
+Recovery Epoch [7/10] - accuracy: 90.2444 - loss: 0.0800 - sparsity: 0.7762
+[TRAINER] weights saved!
+Recovery Epoch [8/10] - accuracy: 90.2744 - loss: 0.0659 - sparsity: 0.7762
+[TRAINER] weights saved!
+Recovery Epoch [9/10] - accuracy: 89.2628 - loss: 0.0732 - sparsity: 0.7762
+Recovery Epoch [10/10] - accuracy: 88.8922 - loss: 0.0685 - sparsity: 0.7762
+[Pruner] Model sparity increased to 0.9266.
+Epoch [3/5] - accuracy: 88.4115 - loss: 0.1598 - sparsity: 0.9266
+[TRAINER] weights saved!
+Recovery Epoch [1/10] - accuracy: 87.7604 - loss: 0.1387 - sparsity: 0.9266
+Recovery Epoch [2/10] - accuracy: 89.1727 - loss: 0.1161 - sparsity: 0.9266
+[TRAINER] weights saved!
+Recovery Epoch [3/10] - accuracy: 89.2929 - loss: 0.1050 - sparsity: 0.9266
+[TRAINER] weights saved!
+Recovery Epoch [4/10] - accuracy: 87.2196 - loss: 0.1048 - sparsity: 0.9266
+Recovery Epoch [5/10] - accuracy: 89.1526 - loss: 0.1008 - sparsity: 0.9266
+Recovery Epoch [6/10] - accuracy: 90.0240 - loss: 0.0935 - sparsity: 0.9266
+[TRAINER] weights saved!
+Recovery Epoch [7/10] - accuracy: 89.0325 - loss: 0.0966 - sparsity: 0.9266
+Recovery Epoch [8/10] - accuracy: 89.9038 - loss: 0.0908 - sparsity: 0.9266
+Recovery Epoch [9/10] - accuracy: 89.1627 - loss: 0.0851 - sparsity: 0.9266
+Recovery Epoch [10/10] - accuracy: 88.9623 - loss: 0.0857 - sparsity: 0.9266
+[Pruner] Model sparity increased to 0.9821.
+Epoch [4/5] - accuracy: 85.2264 - loss: 0.3783 - sparsity: 0.9821
+[TRAINER] weights saved!
+Recovery Epoch [1/10] - accuracy: 86.4283 - loss: 0.2781 - sparsity: 0.9821
+[TRAINER] weights saved!
+Recovery Epoch [2/10] - accuracy: 87.3097 - loss: 0.2458 - sparsity: 0.9821
+[TRAINER] weights saved!
+Recovery Epoch [3/10] - accuracy: 88.2212 - loss: 0.2291 - sparsity: 0.9821
+[TRAINER] weights saved!
+Recovery Epoch [4/10] - accuracy: 86.2981 - loss: 0.2103 - sparsity: 0.9821
+Recovery Epoch [5/10] - accuracy: 87.3798 - loss: 0.1977 - sparsity: 0.9821
+Recovery Epoch [6/10] - accuracy: 86.5986 - loss: 0.1918 - sparsity: 0.9821
+Recovery Epoch [7/10] - accuracy: 87.1194 - loss: 0.1807 - sparsity: 0.9821
+Recovery Epoch [8/10] - accuracy: 88.5817 - loss: 0.1762 - sparsity: 0.9821
+[TRAINER] weights saved!
+Recovery Epoch [9/10] - accuracy: 88.7420 - loss: 0.1719 - sparsity: 0.9821
+[TRAINER] weights saved!
+Recovery Epoch [10/10] - accuracy: 88.1611 - loss: 0.1694 - sparsity: 0.9821
+[Pruner] Model sparity increased to 0.9900.
+Epoch [5/5] - accuracy: 85.5769 - loss: 0.2737 - sparsity: 0.9900
+[TRAINER] weights saved!
+Recovery Epoch [1/10] - accuracy: 87.1895 - loss: 0.2374 - sparsity: 0.9900
+[TRAINER] weights saved!
+Recovery Epoch [2/10] - accuracy: 88.3413 - loss: 0.2192 - sparsity: 0.9900
+[TRAINER] weights saved!
+Recovery Epoch [3/10] - accuracy: 87.5000 - loss: 0.2129 - sparsity: 0.9900
+Recovery Epoch [4/10] - accuracy: 87.0693 - loss: 0.2101 - sparsity: 0.9900
+Recovery Epoch [5/10] - accuracy: 87.5200 - loss: 0.1900 - sparsity: 0.9900
+Recovery Epoch [6/10] - accuracy: 87.8005 - loss: 0.1888 - sparsity: 0.9900
+Recovery Epoch [7/10] - accuracy: 88.2312 - loss: 0.1922 - sparsity: 0.9900
+Recovery Epoch [8/10] - accuracy: 86.9892 - loss: 0.1870 - sparsity: 0.9900
+Recovery Epoch [9/10] - accuracy: 87.5701 - loss: 0.1848 - sparsity: 0.9900
+Recovery Epoch [10/10] - accuracy: 88.5817 - loss: 0.1765 - sparsity: 0.9900
+[TRAINER] weights saved!
+[TRAINER] Weights loaded successfully
+Final - accuracy: 88.2812 - sparsity: 0.9900

@@ -1,0 +1,139 @@
+_wandb:
+    value:
+        cli_version: 0.22.2
+        e:
+            eejyppi4mvku9jk5k0nktstg8ac7mx2n:
+                args:
+                    - --model_name
+                    - resnet34
+                    - --model_type
+                    - cv
+                    - --dataset_name
+                    - cifar10
+                    - --num_classes
+                    - "10"
+                cpu_count: 24
+                cpu_count_logical: 24
+                cudaVersion: "12.2"
+                disk:
+                    /:
+                        total: "269427478528"
+                        used: "35207385088"
+                email: mhmdharoon.khawaja@gmail.com
+                executable: /local_disk0/.ephemeral_nfs/envs/pythonEnv-5d030d97-2965-4b15-8999-53cf96467ef4/bin/python
+                gpu: NVIDIA A100 80GB PCIe
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "85899345920"
+                      name: NVIDIA A100 80GB PCIe
+                      uuid: GPU-41fce0dd-96f1-9ac6-3ab7-138454dba306
+                host: 0923-124454-hug4xinc-10-139-64-10
+                memory:
+                    total: "224103759872"
+                os: Linux-5.15.0-1096-azure-x86_64-with-glibc2.39
+                program: /Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/../scripts/baseline_script.py
+                python: CPython 3.12.3
+                root: /Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks
+                startedAt: "2025-10-18T16:36:05.835603Z"
+                writerId: eejyppi4mvku9jk5k0nktstg8ac7mx2n
+        m: []
+        python_version: 3.12.3
+        t:
+            "1":
+                - 1
+                - 2
+                - 3
+                - 5
+                - 11
+                - 41
+                - 49
+                - 51
+                - 53
+                - 71
+                - 105
+            "2":
+                - 1
+                - 2
+                - 3
+                - 5
+                - 11
+                - 41
+                - 49
+                - 51
+                - 53
+                - 71
+                - 105
+            "3":
+                - 2
+                - 13
+                - 15
+                - 16
+            "4": 3.12.3
+            "5": 0.22.2
+            "6": 4.51.3
+            "12": 0.22.2
+            "13": linux-x86_64
+base_path:
+    value: /dbfs/research/bacp/resnet34/cifar10
+batch_size:
+    value: 512
+cache_dir:
+    value: /dbfs/cache
+databricks_env:
+    value: true
+dataset_name:
+    value: cifar10
+device:
+    value: cuda
+dyrelu_en:
+    value: false
+dyrelu_phasing_en:
+    value: false
+embedded_dim:
+    value: 512
+enable_mixed_precision:
+    value: true
+enable_tqdm:
+    value: false
+epochs:
+    value: 100
+experiment_type:
+    value: baseline
+image_size:
+    value: 32
+initial_sparsity:
+    value: 0
+is_bacp:
+    value: false
+learning_rate:
+    value: 0.1
+log_epochs:
+    value: false
+model_name:
+    value: resnet34
+model_type:
+    value: cv
+n_views:
+    value: 1
+num_classes:
+    value: 10
+num_workers:
+    value: 24
+optimizer_type:
+    value: sgd
+patience:
+    value: 20
+prune:
+    value: false
+retrain:
+    value: false
+save_path:
+    value: /dbfs/research/bacp/resnet34/cifar10/resnet34_cifar10_baseline.pt
+scheduler_type:
+    value: linear_with_warmup
+total_steps:
+    value: 7800
+warmup_steps:
+    value: 780

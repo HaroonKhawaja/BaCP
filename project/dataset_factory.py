@@ -71,6 +71,7 @@ DATASET_STATS = {
     "imagenet": ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     } 
 
+
 class AugmentData(object):
     def __init__(self, base_transform, n_views=2):
         self.base_transform = base_transform
@@ -81,6 +82,7 @@ class AugmentData(object):
             return self.base_transform(x)
         else:
             return [self.base_transform(x) for _ in range(self.n_views)]
+
 
 def normalize_data(dataset_name):
     mean, std = DATASET_STATS[dataset_name]
@@ -96,6 +98,7 @@ def normalize_data(dataset_name):
             T.Normalize(mean, std)
         ]
     
+
 def get_train_transform(dataset_name: str, t_type: str, size: int):
     kernel_size = int(0.1 * size)
     if kernel_size % 2 == 0:
@@ -139,7 +142,8 @@ def get_train_transform(dataset_name: str, t_type: str, size: int):
     # Mean and STD normalization
     transform.extend(normalize_data(dataset_name))
     return T.Compose(transform)
-    
+
+
 def get_test_transform(dataset_name: str, size: int):
     if dataset_name == 'imagenet':
         # ImageNet standard eval: resize shorter side to 256 then center crop to size
@@ -151,6 +155,7 @@ def get_test_transform(dataset_name: str, size: int):
         transform = [T.Resize((size, size))]
     transform.extend(normalize_data(dataset_name))
     return T.Compose(transform)
+
 
 def get_dataset_train_fn(
     dataset_class:type,
@@ -202,6 +207,7 @@ def get_dataset_test_fn(
 
     return lambda: dataset_class(**dataset_args)
 
+
 def get_dataset_fn(
     dataset_name: str, 
     t_type:       str, 
@@ -226,6 +232,7 @@ def get_dataset_fn(
         )
 
     return train_dataset_fn, test_dataset_fn
+
 
 def load_cv_datasets(
     dataset_name:   str,
@@ -261,6 +268,7 @@ def load_cv_datasets(
         'validation': valset,
         'test': testset,
     }
+
 
 def load_cv_dataloaders(
     dataset_name:   str,
@@ -299,6 +307,7 @@ def load_cv_dataloaders(
     except Exception as e:
         print(f"Error loading CV dataset {dataset_name}: {str(e)}")
         raise e
+
 
 def get_dataloaders(args):
     """Returns Dataloaders"""

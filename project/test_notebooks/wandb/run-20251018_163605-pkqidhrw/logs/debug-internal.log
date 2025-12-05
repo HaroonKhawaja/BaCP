@@ -1,0 +1,12 @@
+{"time":"2025-10-18T16:36:07.04409051Z","level":"INFO","msg":"stream: starting","core version":"0.22.2"}
+{"time":"2025-10-18T16:36:07.543747822Z","level":"INFO","msg":"stream: created new stream","id":"pkqidhrw"}
+{"time":"2025-10-18T16:36:07.543991842Z","level":"INFO","msg":"handler: started","stream_id":"pkqidhrw"}
+{"time":"2025-10-18T16:36:07.546130156Z","level":"INFO","msg":"stream: started","id":"pkqidhrw"}
+{"time":"2025-10-18T16:36:07.546197988Z","level":"INFO","msg":"writer: started","stream_id":"pkqidhrw"}
+{"time":"2025-10-18T16:36:07.546197948Z","level":"INFO","msg":"sender: started","stream_id":"pkqidhrw"}
+{"time":"2025-10-18T16:40:24.101644182Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"uploading artifact resnet34-baseline-cifar10-251018163605","runtime_seconds":0.355318406},{"desc":"updating run metadata","runtime_seconds":0.003459559}],"total_operations":2}}
+{"time":"2025-10-18T16:40:29.441236905Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-10-18T16:40:29.633931226Z","level":"INFO","msg":"stream: closing","id":"pkqidhrw"}
+{"time":"2025-10-18T16:40:29.634050508Z","level":"INFO","msg":"handler: closed","stream_id":"pkqidhrw"}
+{"time":"2025-10-18T16:40:29.634574925Z","level":"INFO","msg":"sender: closed","stream_id":"pkqidhrw"}
+{"time":"2025-10-18T16:40:29.634725345Z","level":"INFO","msg":"stream: closed","id":"pkqidhrw"}

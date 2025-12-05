@@ -1,0 +1,9 @@
+{"time":"2025-10-23T22:53:56.31231652Z","level":"INFO","msg":"stream: starting","core version":"0.22.2"}
+{"time":"2025-10-23T22:53:56.781767834Z","level":"INFO","msg":"stream: created new stream","id":"dbsb7dqm"}
+{"time":"2025-10-23T22:53:56.781963235Z","level":"INFO","msg":"handler: started","stream_id":"dbsb7dqm"}
+{"time":"2025-10-23T22:53:56.78394741Z","level":"INFO","msg":"stream: started","id":"dbsb7dqm"}
+{"time":"2025-10-23T22:53:56.784017406Z","level":"INFO","msg":"sender: started","stream_id":"dbsb7dqm"}
+{"time":"2025-10-23T22:53:56.784004362Z","level":"INFO","msg":"writer: started","stream_id":"dbsb7dqm"}
+{"time":"2025-10-23T22:54:21.351572568Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"updating run metadata","runtime_seconds":0.001590303}],"total_operations":1}}
+{"time":"2025-10-23T22:54:21.624422411Z","level":"INFO","msg":"stream: closing","id":"dbsb7dqm"}
+{"time":"2025-10-23T22:54:21.757601885Z","level":"ERROR","msg":"sender: sendSummary called after exit"}

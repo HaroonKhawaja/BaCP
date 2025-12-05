@@ -40,7 +40,7 @@ class TrainingArguments:
     image_size:             int = 32        # Image size for resizing
     epochs:                 int = 5         # Number of epochs to train
     scheduler_type:         str = None      # Scheduler type, e.g., "linear_with_warmup"
-    patience:               int = 20        # Number of epochs to wait before early stopping
+    patience:               int = None      # Number of epochs to wait before early stopping
     trained_weights:        str = None      # Path to pretrained weights
     experiment_type:        str = ""        # Type of experiment, e.g., "baseline" or "pruning"
     log_epochs:             bool = False    # Whether to log epochs in directory
@@ -53,17 +53,17 @@ class TrainingArguments:
     pruning_type:           str = None      # Pruning type, e.g., "magnitude_pruning"
     target_sparsity:        float = None    # Target sparsity for pruning
     sparsity_scheduler:     str = None      # Sparsity scheduler, e.g., "cubic"
-    recovery_epochs:        int = None      # Number of epochs to recover after pruning
-    retrain:                bool = False    # Whether to retrain after pruning
+    recovery_epochs:        int = 0         # Number of epochs to recover after pruning
     pruning_module:         object = None   # Pruning module
 
     # DyReLU Phasing
-    dyrelu_en:   bool = False
-    dyrelu_phasing_en:   bool = False
+    dyrelu_en:              bool = False
+    dyrelu_phasing_en:      bool = False
 
     def __post_init__(self):
         self.scaler = GradScaler() if self.enable_mixed_precision else None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.retrain = True if self.recovery_epochs > 0 else False
         self.is_bacp = False
 
         _initialize_models(self)
@@ -199,11 +199,6 @@ class Trainer:
             running_loss = total_loss / (step + 1)
             _handle_tqdm_logs(self, batchloader, {'loss': running_loss})
 
-        # if self.dyrelu_phase_enabled:
-        #     self.dyrelu_adapter.step()
-        #     beta = self.dyrelu_adapter.get_beta()
-        #     print(f'[DyReLU PHASE] beta value is now {beta}')
-
         if self.dyrelu_phasing_en:
             step_dyrelu_adapter(self.model)
 
@@ -293,9 +288,12 @@ class Trainer:
             self.unchanged = 0
         else:
             self.unchanged += 1
-            if self.unchanged >= self.patience:
-                print(f"[TRAINER] Training stopped. No improvements for {self.unchanged} epochs.")
-                return False
+            if self.patience is not None:
+                if self.unchanged >= self.patience:
+                    print(f"[TRAINER] Training stopped. No improvements for {self.unchanged} epochs.")
+                    return False
+            else:
+                pass
         return True
 
     def _save_model(self, epoch):

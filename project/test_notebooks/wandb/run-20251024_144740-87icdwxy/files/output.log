@@ -1,0 +1,90 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+Epoch [1/250] - accuracy: 10.5068 - loss: 2.0322 - sparsity: 0.9900
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29997314.
+[Pruner] Fraction of weights to prune/regrow is 0.29997314.
+[Pruner] Fraction of weights to prune/regrow is 0.29997314.
+[Pruner] Fraction of weights to prune/regrow is 0.29997314.
+Epoch [2/250] - accuracy: 10.1362 - loss: 1.9666 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.29989257.
+[Pruner] Fraction of weights to prune/regrow is 0.29989257.
+[Pruner] Fraction of weights to prune/regrow is 0.29989257.
+[Pruner] Fraction of weights to prune/regrow is 0.29989257.
+Epoch [3/250] - accuracy: 10.0461 - loss: 1.9533 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+Epoch [4/250] - accuracy: 10.5268 - loss: 1.9439 - sparsity: 0.9900
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29957042.
+[Pruner] Fraction of weights to prune/regrow is 0.29957042.
+[Pruner] Fraction of weights to prune/regrow is 0.29957042.
+[Pruner] Fraction of weights to prune/regrow is 0.29957042.
+Epoch [5/250] - accuracy: 10.5268 - loss: 1.9259 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.29932895.
+[Pruner] Fraction of weights to prune/regrow is 0.29932895.
+[Pruner] Fraction of weights to prune/regrow is 0.29932895.
+[Pruner] Fraction of weights to prune/regrow is 0.29932895.
+Epoch [6/250] - accuracy: 12.0994 - loss: 1.9083 - sparsity: 0.9900
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+Epoch [7/250] - accuracy: 10.1362 - loss: 1.9503 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.29868566.
+[Pruner] Fraction of weights to prune/regrow is 0.29868566.
+[Pruner] Fraction of weights to prune/regrow is 0.29868566.
+[Pruner] Fraction of weights to prune/regrow is 0.29868566.
+Epoch [8/250] - accuracy: 9.6354 - loss: 1.9402 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.29828408.
+[Pruner] Fraction of weights to prune/regrow is 0.29828408.
+[Pruner] Fraction of weights to prune/regrow is 0.29828408.
+[Pruner] Fraction of weights to prune/regrow is 0.29828408.
+Epoch [9/250] - accuracy: 43.2091 - loss: 1.7446 - sparsity: 0.9900
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+Epoch [10/250] - accuracy: 50.1903 - loss: 1.4339 - sparsity: 0.9900
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29732176.
+[Pruner] Fraction of weights to prune/regrow is 0.29732176.
+[Pruner] Fraction of weights to prune/regrow is 0.29732176.
+[Pruner] Fraction of weights to prune/regrow is 0.29732176.
+Epoch [11/250] - accuracy: 51.9732 - loss: 1.2825 - sparsity: 0.9900
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29676136.
+[Pruner] Fraction of weights to prune/regrow is 0.29676136.
+[Pruner] Fraction of weights to prune/regrow is 0.29676136.
+[Pruner] Fraction of weights to prune/regrow is 0.29676136.
+Epoch [12/250] - accuracy: 49.2087 - loss: 1.1722 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+Traceback (most recent call last):
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/../scripts/pruning_script.py", line 42, in run_training
+    trainer.train(run)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 101, in train
+    loss = self._run_train_epoch(epoch, desc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 197, in _run_train_epoch
+    _handle_optimizer_and_pruning(self, loss, epoch, step)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/training_utils.py", line 234, in _handle_optimizer_and_pruning
+    scaler.scale(loss).backward()
+  File "/databricks/python/lib/python3.12/site-packages/torch/_tensor.py", line 648, in backward
+    torch.autograd.backward(
+  File "/databricks/python/lib/python3.12/site-packages/torch/autograd/__init__.py", line 353, in backward
+    _engine_run_backward(
+  File "/databricks/python/lib/python3.12/site-packages/torch/autograd/graph.py", line 824, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

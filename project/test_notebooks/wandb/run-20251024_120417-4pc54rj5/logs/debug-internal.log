@@ -1,0 +1,12 @@
+{"time":"2025-10-24T12:04:19.674939772Z","level":"INFO","msg":"stream: starting","core version":"0.22.2"}
+{"time":"2025-10-24T12:04:20.217417977Z","level":"INFO","msg":"stream: created new stream","id":"4pc54rj5"}
+{"time":"2025-10-24T12:04:20.217650328Z","level":"INFO","msg":"handler: started","stream_id":"4pc54rj5"}
+{"time":"2025-10-24T12:04:20.220033678Z","level":"INFO","msg":"stream: started","id":"4pc54rj5"}
+{"time":"2025-10-24T12:04:20.220064236Z","level":"INFO","msg":"writer: started","stream_id":"4pc54rj5"}
+{"time":"2025-10-24T12:04:20.22007741Z","level":"INFO","msg":"sender: started","stream_id":"4pc54rj5"}
+{"time":"2025-10-24T12:27:37.525107685Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"uploading artifact resnet34-pruning-cifar10-251024120417","runtime_seconds":0.550148246},{"desc":"updating run metadata","runtime_seconds":0.168506788}],"total_operations":2}}
+{"time":"2025-10-24T12:27:42.978460282Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-10-24T12:27:43.22230941Z","level":"INFO","msg":"stream: closing","id":"4pc54rj5"}
+{"time":"2025-10-24T12:27:43.222426758Z","level":"INFO","msg":"handler: closed","stream_id":"4pc54rj5"}
+{"time":"2025-10-24T12:27:43.223013534Z","level":"INFO","msg":"sender: closed","stream_id":"4pc54rj5"}
+{"time":"2025-10-24T12:27:43.223153174Z","level":"INFO","msg":"stream: closed","id":"4pc54rj5"}

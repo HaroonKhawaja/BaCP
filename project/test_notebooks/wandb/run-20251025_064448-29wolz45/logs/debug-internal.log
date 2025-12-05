@@ -1,0 +1,10 @@
+{"time":"2025-10-25T06:44:50.460745306Z","level":"INFO","msg":"stream: starting","core version":"0.22.2"}
+{"time":"2025-10-25T06:44:51.017421702Z","level":"INFO","msg":"stream: created new stream","id":"29wolz45"}
+{"time":"2025-10-25T06:44:51.017671909Z","level":"INFO","msg":"handler: started","stream_id":"29wolz45"}
+{"time":"2025-10-25T06:44:51.019899921Z","level":"INFO","msg":"stream: started","id":"29wolz45"}
+{"time":"2025-10-25T06:44:51.019933463Z","level":"INFO","msg":"writer: started","stream_id":"29wolz45"}
+{"time":"2025-10-25T06:44:51.019932732Z","level":"INFO","msg":"sender: started","stream_id":"29wolz45"}
+{"time":"2025-10-25T06:55:06.886812566Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"updating run metadata","runtime_seconds":0.001418618}],"total_operations":1}}
+{"time":"2025-10-25T06:55:06.999351195Z","level":"INFO","msg":"stream: closing","id":"29wolz45"}
+{"time":"2025-10-25T06:55:06.999509471Z","level":"ERROR","msg":"sender: sendSummary called after exit"}
+{"time":"2025-10-25T06:55:07.417740503Z","level":"WARN","msg":"sender: received Exit record more than once, ignoring"}

@@ -1,0 +1,88 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+Epoch [1/50] - Total Loss: 8.2215 - PrC Loss: 3.8938 - SnC Loss: 0.0000 - FiC Loss: 3.7659 - CE Loss: 0.5619 - Training Accuracy: 16.6106 - sparsity: 0.9900
+[TRAINER] weights saved!
+Epoch [2/50] - Total Loss: 10.5630 - PrC Loss: 3.7583 - SnC Loss: 2.7170 - FiC Loss: 3.5804 - CE Loss: 0.5072 - Training Accuracy: 25.1763 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.29728931.
+Epoch [3/50] - Total Loss: 10.5113 - PrC Loss: 3.7222 - SnC Loss: 2.7412 - FiC Loss: 3.5387 - CE Loss: 0.5091 - Training Accuracy: 24.2588 - sparsity: 0.9900
+Epoch [4/50] - Total Loss: 10.4174 - PrC Loss: 3.6999 - SnC Loss: 2.7267 - FiC Loss: 3.4989 - CE Loss: 0.4919 - Training Accuracy: 26.6406 - sparsity: 0.9900
+Epoch [5/50] - Total Loss: 10.2774 - PrC Loss: 3.6587 - SnC Loss: 2.7109 - FiC Loss: 3.4401 - CE Loss: 0.4677 - Training Accuracy: 31.2300 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.28332531.
+Epoch [6/50] - Total Loss: 10.4636 - PrC Loss: 3.7033 - SnC Loss: 2.7255 - FiC Loss: 3.5278 - CE Loss: 0.5070 - Training Accuracy: 24.0044 - sparsity: 0.9900
+Epoch [7/50] - Total Loss: 10.2389 - PrC Loss: 3.6454 - SnC Loss: 2.6901 - FiC Loss: 3.4325 - CE Loss: 0.4709 - Training Accuracy: 30.8794 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.26790796.
+Epoch [8/50] - Total Loss: 10.3742 - PrC Loss: 3.6850 - SnC Loss: 2.7170 - FiC Loss: 3.4866 - CE Loss: 0.4857 - Training Accuracy: 28.1410 - sparsity: 0.9900
+Epoch [9/50] - Total Loss: 10.4822 - PrC Loss: 3.7152 - SnC Loss: 2.7231 - FiC Loss: 3.5342 - CE Loss: 0.5097 - Training Accuracy: 23.6819 - sparsity: 0.9900
+Epoch [10/50] - Total Loss: 10.2897 - PrC Loss: 3.6533 - SnC Loss: 2.7022 - FiC Loss: 3.4521 - CE Loss: 0.4821 - Training Accuracy: 28.5837 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.23700854.
+Epoch [11/50] - Total Loss: 10.4881 - PrC Loss: 3.7075 - SnC Loss: 2.7359 - FiC Loss: 3.5329 - CE Loss: 0.5119 - Training Accuracy: 23.3333 - sparsity: 0.9900
+Epoch [12/50] - Total Loss: 10.3045 - PrC Loss: 3.6496 - SnC Loss: 2.7120 - FiC Loss: 3.4568 - CE Loss: 0.4860 - Training Accuracy: 28.4175 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.21231226.
+Epoch [13/50] - Total Loss: 10.2960 - PrC Loss: 3.6459 - SnC Loss: 2.7154 - FiC Loss: 3.4506 - CE Loss: 0.4840 - Training Accuracy: 28.7119 - sparsity: 0.9900
+Epoch [14/50] - Total Loss: 10.3612 - PrC Loss: 3.6569 - SnC Loss: 2.7223 - FiC Loss: 3.4782 - CE Loss: 0.5037 - Training Accuracy: 25.4307 - sparsity: 0.9900
+Epoch [15/50] - Total Loss: 10.1908 - PrC Loss: 3.6120 - SnC Loss: 2.7015 - FiC Loss: 3.4081 - CE Loss: 0.4692 - Training Accuracy: 31.1398 - sparsity: 0.9900
+[Pruner] Fraction of weights to prune/regrow is 0.17134724.
+Epoch [16/50] - Total Loss: 10.4158 - PrC Loss: 3.6774 - SnC Loss: 2.7365 - FiC Loss: 3.4972 - CE Loss: 0.5046 - Training Accuracy: 24.7837 - sparsity: 0.9900
+Epoch [17/50] - Total Loss: 10.2696 - PrC Loss: 3.6295 - SnC Loss: 2.7099 - FiC Loss: 3.4426 - CE Loss: 0.4876 - Training Accuracy: 28.5136 - sparsity: 0.9900
+Traceback (most recent call last):
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/../scripts/bacp_script.py", line 41, in run_training
+    bacp_trainer.train(run)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/bacp.py", line 156, in train
+    metrics = self._run_train_epoch(epoch, desc)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/bacp.py", line 244, in _run_train_epoch
+    ss_emb = ss_model(data2, return_emb=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/model_factory.py", line 179, in forward
+    x = self.model(x)
+        ^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/models/resnet.py", line 255, in forward
+    return self._forward_impl(x)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/models/resnet.py", line 246, in _forward_impl
+    x = self.layer4(x)
+        ^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/container.py", line 240, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/models/resnet.py", line 49, in forward
+    out = self.conv1(x)
+          ^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/conv.py", line 554, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/conv.py", line 549, in _conv_forward
+    return F.conv2d(
+           ^^^^^^^^^
+KeyboardInterrupt

@@ -1,0 +1,1 @@
+{"SnC Loss":2.438237539315835,"PrC Loss":3.4898947281715196,"_runtime":3861,"sparsity":0.99,"CE Loss":0.31172348853105153,"lambdas":[0.25,0.25,0.25,0.25],"FiC Loss":3.180479913491469,"Training Accuracy":56.57251602564103,"_timestamp":1.7617305950861518e+09,"Total Loss":9.420335625379513,"_step":49,"_wandb":{"runtime":3861}}

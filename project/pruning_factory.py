@@ -10,21 +10,17 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import math
 
 def layer_check(name, param):
     if param is None:
         return False
-    
     if param.dim() <= 1 or not param.requires_grad:
         return False
     
     exclusion_keywords = [
-        'hyperfucntion', 'relu',
+        'hyperfunction', 'relu',
         'encoder_head'
-
-
-
-        # 'cls_head',
         # 'encoder_head',
         # 'hyperfunction',
         # 'fc',   # ResNet
@@ -38,10 +34,10 @@ def layer_check(name, param):
         # 'class_token', 'pos_embedding', 'vocab_transform', 'lm_head',
         # 'projection_head'
         ]
-    
     if any(keyword in name.lower() for keyword in exclusion_keywords):
         return False
     return True
+
 
 def check_model_sparsity(model):
     sum_zero, total_count = 0, 0
@@ -49,8 +45,8 @@ def check_model_sparsity(model):
         if layer_check(name, param):
             sum_zero += torch.sum(param == 0).item()
             total_count += param.numel()
+    return (sum_zero / total_count) if total_count > 0 else 0.0
 
-    return sum_zero / total_count
 
 def check_sparsity_distribution(model, verbose=True):
     names = []
@@ -107,75 +103,15 @@ def check_sparsity_distribution(model, verbose=True):
     plt.show()
 
 
-def erk_initialization(model: torch.nn.Module,target_sparsity: float,erk_power_scale: float = 1.0,) -> Dict[str, torch.Tensor]:
-    # target_sparsity is fraction of weights to zero out (0.0 - 1.0)
-    if not (0.0 <= target_sparsity <= 1.0):
-        raise ValueError("target_sparsity must be between 0 and 1")
-
-    prunable_params = {}
-    for name, param in model.named_parameters():
-        if param.requires_grad and param.dim() >= 2 and "weight" in name:
-            prunable_params[name] = param
-    erk_scores = {}
-    for name, param in prunable_params.items():
-        if param.dim() == 2:  # Linear: (out, in)
-            n_out, n_in = param.shape
-        elif param.dim() == 4:  # Conv2d: (out, in, k_h, k_w)
-            n_out, n_in, k_h, k_w = param.shape
-            n_in = n_in * k_h * k_w
-        else:
-            # treat remaining dims by flattening input side
-            shape = param.shape
-            n_out = shape[0]
-            n_in = int(torch.prod(torch.tensor(shape[1:])).item())
-        # ERK score proportional to (n_in + n_out) / (n_in * n_out)
-        erk_scores[name] = (n_in + n_out) / (n_in * n_out)
-    if not erk_scores:
-        return {}
-
-    # normalize
-    total_score = sum(erk_scores.values())
-    normalized = {k: (v / total_score) ** erk_power_scale for k, v in erk_scores.items()}
-
-    total_params = float(sum(p.numel() for p in prunable_params.values()))
-    target_remaining = total_params * (1.0 - target_sparsity)
-    expected_remaining_per_layer = {k: normalized[k] * p.numel() for k, p in prunable_params.items() if k in normalized}
-    sum_expected = sum(expected_remaining_per_layer.values())
-    if sum_expected == 0:
-        raise RuntimeError("Sum of expected remaining parameters is zero; check model shapes and erk scores.")
-    scale = float(target_remaining) / float(sum_expected)
-    masks: Dict[str, torch.Tensor] = {}
-    for name, param in prunable_params.items():
-        if name in normalized:
-            layer_density = normalized[name] * scale  # fraction kept
-        else:
-            layer_density = 1.0 - target_sparsity
-        layer_density = float(max(0.0, min(1.0, layer_density)))  # clamp to [0,1]
-        keep_prob = layer_density
-        mask = (torch.rand_like(param) < keep_prob).to(dtype=param.dtype)
-        masks[name] = mask
-    return masks
-
-
-def apply_erk_initialization(model: torch.nn.Module,target_sparsity: float,erk_power_scale: float = 1.0):
-    masks = erk_initialization(model, target_sparsity, erk_power_scale)
-    with torch.no_grad():
-        for name, param in model.named_parameters():
-            if name in masks:
-                param.mul_(masks[name])
-    return masks
-
-
 class Pruner(ABC):
-    def __init__(self, model, epochs, target_sparsity, sparsity_scheduler="cubic"):
+    def __init__(self, model, epochs, s_end, sparsity_scheduler):
         self.epochs = epochs
-        self.target_ratio = target_sparsity
-        self.ratio = 0.0
-        self.masks = {}
-
-        assert sparsity_scheduler in ["linear", "cubic"], "Invalid sparsity scheduler"
+        self.s_end = s_end
+        self.s_curr = check_model_sparsity(model)
         self.sparsity_scheduler = sparsity_scheduler
+        self.s_target = 0
 
+        self.masks = {}
         for name, param in model.named_parameters():
             if layer_check(name, param):
                 self.masks[name] = torch.ones_like(param)
@@ -187,97 +123,117 @@ class Pruner(ABC):
     @torch.no_grad()  
     def apply_mask(self, model):
         for name, param in model.named_parameters():
-            if name not in self.masks:
-                continue
-            
-            # Zero-ing out the weights
-            param.data.mul_(self.masks[name])
+            if name in self.masks:
+                param.data.mul_(self.masks[name])
 
-    def ratio_step(self, epoch, epochs, initial_sparsity, target_sparsity):
+    def ratio_step(self, t, T, s_init=None, s_end=None):
         if self.sparsity_scheduler == 'linear':
-            self.linear_scheduler(epoch, epochs, initial_sparsity, target_sparsity)
+            self.linear_scheduler(t, T, s_init, s_end)
+
         elif self.sparsity_scheduler == 'cubic':
-            self.cubic_scheduler(epoch, epochs, initial_sparsity, target_sparsity)
-            
-    def linear_scheduler(self, epoch, total_epochs, initial_sparsity, final_sparsity):
-        t = epoch + 1
-        sparsity = (final_sparsity / total_epochs) * t
-        self.ratio = min(sparsity, self.target_ratio)
-        print(f"\n[Pruner] Linear sparsity ratio increased to {self.ratio:.3f}.\n")
+            self.cubic_scheduler(t, T, s_init, s_end)
 
-    def cubic_scheduler(self, epoch, total_epochs, initial_sparsity, final_sparsity):
-        t = epoch + 1
-        sparsity = final_sparsity + (initial_sparsity - final_sparsity) * ((1 - t / total_epochs) ** 3)
-        self.ratio = min(sparsity, self.target_ratio)
-        print(f"\n[Pruner] Cubic Sparsity ratio increased to {self.ratio:.3f}.\n")
+        elif self.sparsity_scheduler == 'f_decay':
+            alpha = 0.3
+            self.f_decay_scheduler(t, T, alpha)   
 
-    def reset(self):
-        self.ratio = self.target_ratio / self.epochs
-        print(f"[Pruner] Sparsity ratio reset to initial value: {self.ratio:.3f}.\n")
+        elif self.sparsity_scheduler == 'cyclic':
+            if s_init is None or s_end is None:
+                raise ValueError("cyclic needs s_init (s_min) and s_end (s_max)")
+            self.cyclic_scheduler(t, T, s_init, s_end)  
+
+        else:
+            raise ValueError(f"Unknown sparsity scheduler: {self.sparsity_scheduler}")
     
+    # Monotonic schedulers
+    def linear_scheduler(self, t, T, s_init, s_end):
+        t += 1
+        if s_init is None or s_end is None:
+            raise ValueError("linear scheduler needs s_init and s_end")
+        sparsity = (s_end / T) * t
+        self.s_curr = min(sparsity, self.s_end)
+        print(f"[Pruner] Model sparity increased to {self.s_curr:.4f}.")
+
+    def cubic_scheduler(self, t, T, s_init, s_end):
+        t += 1
+        if s_init is None or s_end is None:
+            raise ValueError("cubic scheduler needs s_init and s_end")
+        sparsity = s_end + (s_init - s_end) * ((1 - t / T) ** 3)
+        self.s_curr = min(sparsity, self.s_end)
+        print(f"[Pruner] Model sparity increased to {self.s_curr:.4f}.")
+    
+    # Non-monotonic schedulers
+    def f_decay_scheduler(self, t, T, alpha):
+        t = torch.tensor(t, dtype=torch.float)
+        self.s_target = 0.5 * alpha * (1 + torch.cos(math.pi * t / T)).item()
+        print(f"[Pruner] Fraction of weights to prune/regrow is {self.s_target:.8f}.")
+
+    def cyclic_scheduler(self, t, Tc, s_min, s_max):
+        cosine = torch.cos(2*torch.tensor(np.pi) * t  / Tc)
+        self.s_target = s_min + ((s_max - s_min) / 2) * (1 - cosine)
+        print(f"[Pruner] Fraction of weights to prune/regrow is {self.s_target:.8f}.")
+
     def set_mask(self, masks):
         self.masks = masks
+
 
 class MagnitudePrune(Pruner):
     def prune(self, model):
         all_importances = []
         importance_cache = {}
         for name, param in model.named_parameters():
-            if layer_check(name, param):
-                # Calculating importance
-                importance = torch.abs(self.masks[name] * param)
+            if name in self.masks:
+                mask = self.masks[name]
+                importance = torch.abs(param) * mask
                 importance_cache[name] = importance
                 all_importances.append(importance.view(-1))
 
         # Calculating global importance and threshold
         global_importances = torch.cat(all_importances)
         total_weights = global_importances.numel()
-        num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-        threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
-        
+
+        k = max(0, min(total_weights, int(total_weights * self.s_curr)))
+        threshold = torch.kthvalue(global_importances, k).values.item()
+
         # Updating masks
         for name, importance in importance_cache.items():
             self.masks[name] = torch.gt(importance, threshold).float()
+
 
 class SNIPIterativePrune(Pruner):
     def prune(self, model):
-        all_importances = []
-        importance_cache = {}
+        all_scores = []
+        scores_cache = {}
         for name, param in model.named_parameters():
             if layer_check(name, param):
-                # Calculating importance
-                importance = torch.abs(self.masks[name] * param * param.grad.detach())
-                importance_cache[name] = importance
-                all_importances.append(importance.view(-1))
+                mask = self.masks[name]
+                score = torch.abs(param * param.grad.detach()) * mask
+                scores_cache[name] = score
+                all_scores.append(score.view(-1))
 
-        # Calculating global importance and threshold
-        global_importances = torch.cat(all_importances)
-        total_weights = global_importances.numel()
-        num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-        threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
+        # Calculating global scores and threshold
+        global_scores = torch.cat(all_scores)
+        norm_factor = torch.sum(global_scores)
+        global_scores = global_scores / norm_factor
+
+        k = int(len(global_scores) * (1 - self.s_curr))
+        keep_values, _ = torch.topk(global_scores, k, sorted=True)
+        threshold = keep_values[-1]
         
         # Updating masks
-        for name, importance in importance_cache.items():
-            self.masks[name] = torch.gt(importance, threshold).float()
+        for name, score in scores_cache.items():
+            self.masks[name] = torch.ge((score / norm_factor), threshold).float()
+
 
 class WandaPrune(Pruner):
-    def __init__(self, model, target_sparsity, epochs, sparsity_scheduler):
-        super().__init__(model, target_sparsity, epochs, sparsity_scheduler)
+    def __init__(self, model, epochs, s_end, sparsity_scheduler):
+        super().__init__(model, epochs, s_end, sparsity_scheduler)
         self.main_layers = {}
         self.wrapped_layers = {}
         self.current_epoch = 0
         self.hooks = []
         self.is_wanda = True
         self.device = next(model.parameters()).device
-
-        if hasattr(model.model, 'distilbert') and hasattr(model.model.distilbert, 'transformer') and hasattr(model.model.distilbert.transformer, 'layer'):
-            self.prefix = "distilbert.transformer.layer"
-        elif hasattr(model.model, 'roberta') and hasattr(model.model.roberta, 'encoder') and hasattr(model.model.roberta.encoder, 'layer'):
-            self.prefix = "roberta.encoder.layer"
-        elif hasattr(model.model, 'encoder') and hasattr(model.model.encoder, 'layers'):
-            self.prefix = "encoder.layers"
-        elif hasattr(model.model, 'vit') and hasattr(model.model.vit, 'encoder') and hasattr(model.model.vit.encoder, 'layer'):
-            self.prefix = "vit.encoder.layer"
 
         self.init_layers(model)
     
@@ -288,14 +244,6 @@ class WandaPrune(Pruner):
                 self.main_layers[name] = module.to(self.device)
                 self.wrapped_layers[name] = self.WrappedLayer(module.to(self.device), name)
 
-        # for name, module in model.named_modules():
-        #     for child_name, child in module.named_children():
-        #       if isinstance(child, torch.nn.Linear) and self.prefix in name:                
-        #             full_name = f"{name}.{child_name}"
-        #             print(full_name)
-        #             self.main_layers[full_name] = child.to(self.device)
-        #             self.wrapped_layers[full_name] = self.WrappedLayer(child.to(self.device), full_name)
-            
     def register_hooks(self, model):
         print("[Pruner] Adding hooks")
         for name in self.wrapped_layers:
@@ -369,8 +317,9 @@ class WandaPrune(Pruner):
         # Calculating global importance and threshold
         global_importances = torch.cat(all_importances)
         total_weights = global_importances.numel()
-        num_to_zero = max(1, min(total_weights, round(total_weights * self.ratio)))
-        threshold = torch.kthvalue(global_importances, num_to_zero).values.item()
+
+        k = max(0, min(total_weights, int(total_weights * self.s_curr)))
+        threshold = torch.kthvalue(global_importances, k).values.item()
 
         # Updating masks
         for name, importance in importance_cache.items():
@@ -411,10 +360,158 @@ class WandaPrune(Pruner):
             activation_norm = torch.norm(activation_tensor, dim=0, p=2) ** 2    # Shape: [C]
             self.scaler_row += activation_norm / total_activations
 
-PRUNER_DICT = {
+
+class RigLPruner(Pruner):
+    def __init__(
+        self, 
+        model, 
+        epochs, 
+        s_end, 
+        sparsity_scheduler
+        ):
+        super().__init__(model, epochs, s_end, sparsity_scheduler)
+        self.model = model
+        self.device = next(model.parameters()).device
+        self.prunable_params = {}
+        self.init_layers(model)
+        self.apply_erk_to_model(model)
+
+
+    def init_layers(self, model):
+        for name, param in model.named_parameters():
+            if layer_check(name, param):
+                self.prunable_params[name] = param
+
+
+    def apply_erk_to_model(self, model, erk_power_scale=1.0):
+        masks = self._erk_init(model, erk_power_scale)
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if name in masks:
+                    param.mul_(masks[name])
+        self.masks = masks
+        self.s_curr = self.s_end
+
+
+    def _erk_init(self, model, erk_power_scale):
+        erk_scores = {}
+        for name, param in self.prunable_params.items():
+            if param.dim() == 2:  # Linear: (out, in)
+                n_out, n_in = param.shape
+            elif param.dim() == 4:  # Conv2d: (out, in, k_h, k_w)
+                n_out, n_in, k_h, k_w = param.shape
+                n_in = n_in * k_h * k_w
+            else:
+                # treat remaining dims by flattening input side
+                shape = param.shape
+                n_out = shape[0]
+                n_in = int(torch.prod(torch.tensor(shape[1:])).item())
+
+            # ERK score proportional to (n_in + n_out) / (n_in * n_out)
+            erk_scores[name] = (n_in + n_out) / (n_in * n_out)
+
+        # normalizing and applying power scale
+        total_score = sum(erk_scores.values())
+        normalized = {k: (v / total_score) ** erk_power_scale for k, v in erk_scores.items()}
+
+        total_params = float(sum(p.numel() for p in self.prunable_params.values()))
+        target_remaining = total_params * (1.0 - self.s_end)
+
+        # Expected remaining per layer
+        expected = {k: normalized[k] * self.prunable_params[k].numel() for k in normalized}
+        sum_expected = sum(expected.values())
+        if sum_expected == 0:
+            raise RuntimeError("ERK failed: sum expected is zero")
+
+        scale = float(target_remaining) / float(sum_expected)
+
+        masks = {}
+        rng = torch.Generator(device=self.device)
+        for name, param in self.prunable_params.items():
+            if name in normalized:
+                layer_density = normalized[name] * scale  # fraction kept
+            else:
+                layer_density = 1.0 - self.s_end
+            layer_density = float(max(0.0, min(1.0, layer_density)))  # clamp to [0,1]
+            keep_prob = layer_density
+
+            # mask = (torch.rand_like(param, device=self.device, generator=rng) < keep_prob).to(dtype=param.dtype)
+            mask = (torch.rand_like(param, device=self.device) < keep_prob).to(dtype=param.dtype)
+            masks[name] = mask
+        return masks
+
+
+    def prune(self, model):
+        prune_imps, prune_cache = [], {}
+        regrow_imps, regrow_cache = [], {}
+
+        total_weights = 0
+        for name, param in model.named_parameters():
+            if name in self.masks:
+                mask = self.masks[name]
+
+                # Active weight importance
+                prune_imp = torch.abs(param) * mask
+                prune_cache[name] = prune_imp
+                prune_imps.append(prune_imp.view(-1))
+
+                # Inactive gradient importance
+                grad = param.grad
+                if grad is None:
+                    regrow_imp = torch.zeros_like(prune_imp)
+                else:
+                    regrow_imp = torch.abs(grad.data) * (1.0 - mask)
+                regrow_cache[name] = regrow_imp
+                regrow_imps.append(regrow_imp.view(-1))
+
+                total_weights += mask.numel()
+
+
+        global_prune_imps = torch.cat(prune_imps)
+        global_regrow_imps = torch.cat(regrow_imps)
+
+        total_prune_weights = (global_prune_imps > 0).sum().item()
+        total_regrow_weights = (global_regrow_imps > 0).sum().item()
+        total_weights = global_prune_imps.numel()
+
+        k = int(total_weights * self.s_target)
+        k = min(k, total_prune_weights, total_regrow_weights)
+        if k == 0:
+            return
+
+        # Removing pruned weights to focus only on active/inactive weights
+        active_prune_imps = global_prune_imps[global_prune_imps > 0]
+        regrow_prune_imps = global_regrow_imps[global_regrow_imps > 0]
+
+        prune_values, prune_indices = torch.topk(active_prune_imps, k, largest=False)
+        regrow_values, regrow_indices = torch.topk(regrow_prune_imps, k, largest=True)
+
+        prune_thresh = prune_values.max().item()
+        regrow_thresh = regrow_values.min().item()
+
+        for name, param in model.named_parameters():
+            if name in self.masks:
+                old_mask = self.masks[name]
+                numel = old_mask.numel()
+
+                prune_imp = prune_cache[name]
+                prune_mask = torch.gt(prune_imp, prune_thresh).float()
+
+                regrow_imp = regrow_cache[name]
+                regrow_mask = torch.ge(regrow_imp, regrow_thresh).float()
+                param.data *= (1 - regrow_mask)
+
+                new_mask = prune_mask + regrow_mask
+                new_mask = torch.clamp(new_mask, 0, 1)
+
+                self.masks[name] = new_mask
+
+
+PRUNING_REGISTRY = {
     "magnitude_pruning": MagnitudePrune,
-    "snip_pruning": SNIPIterativePrune,
-    "wanda_pruning": WandaPrune
+    "snip_pruning":      SNIPIterativePrune,
+    "wanda_pruning":     WandaPrune,
+    "rigl_pruning":      RigLPruner,
 }
 
 

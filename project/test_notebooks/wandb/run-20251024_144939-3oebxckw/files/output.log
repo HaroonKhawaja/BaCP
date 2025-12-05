@@ -1,0 +1,198 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+[Pruner] Fraction of weights to prune/regrow is 0.30000000.
+Epoch [1/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9999
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29997314.
+[Pruner] Fraction of weights to prune/regrow is 0.29997314.
+[Pruner] Fraction of weights to prune/regrow is 0.29997314.
+[Pruner] Fraction of weights to prune/regrow is 0.29997314.
+Epoch [2/250] - accuracy: 9.6855 - loss: 2.3042 - sparsity: 0.9999
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29989257.
+[Pruner] Fraction of weights to prune/regrow is 0.29989257.
+[Pruner] Fraction of weights to prune/regrow is 0.29989257.
+[Pruner] Fraction of weights to prune/regrow is 0.29989257.
+Epoch [3/250] - accuracy: 9.6855 - loss: 2.3043 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+Epoch [4/250] - accuracy: 9.6855 - loss: 2.3046 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29957042.
+[Pruner] Fraction of weights to prune/regrow is 0.29957042.
+[Pruner] Fraction of weights to prune/regrow is 0.29957042.
+[Pruner] Fraction of weights to prune/regrow is 0.29957042.
+Epoch [5/250] - accuracy: 10.5268 - loss: 2.3042 - sparsity: 0.9999
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29932895.
+[Pruner] Fraction of weights to prune/regrow is 0.29932895.
+[Pruner] Fraction of weights to prune/regrow is 0.29932895.
+[Pruner] Fraction of weights to prune/regrow is 0.29932895.
+Epoch [6/250] - accuracy: 10.2464 - loss: 2.3042 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+Epoch [7/250] - accuracy: 9.6354 - loss: 2.3048 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29868566.
+[Pruner] Fraction of weights to prune/regrow is 0.29868566.
+[Pruner] Fraction of weights to prune/regrow is 0.29868566.
+[Pruner] Fraction of weights to prune/regrow is 0.29868566.
+Epoch [8/250] - accuracy: 10.1362 - loss: 2.3046 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29828408.
+[Pruner] Fraction of weights to prune/regrow is 0.29828408.
+[Pruner] Fraction of weights to prune/regrow is 0.29828408.
+[Pruner] Fraction of weights to prune/regrow is 0.29828408.
+Epoch [9/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+Epoch [10/250] - accuracy: 9.7857 - loss: 2.3044 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29732176.
+[Pruner] Fraction of weights to prune/regrow is 0.29732176.
+[Pruner] Fraction of weights to prune/regrow is 0.29732176.
+[Pruner] Fraction of weights to prune/regrow is 0.29732176.
+Epoch [11/250] - accuracy: 9.8357 - loss: 2.3045 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29676136.
+[Pruner] Fraction of weights to prune/regrow is 0.29676136.
+[Pruner] Fraction of weights to prune/regrow is 0.29676136.
+[Pruner] Fraction of weights to prune/regrow is 0.29676136.
+Epoch [12/250] - accuracy: 10.5268 - loss: 2.3044 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+Epoch [13/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29548311.
+[Pruner] Fraction of weights to prune/regrow is 0.29548311.
+[Pruner] Fraction of weights to prune/regrow is 0.29548311.
+[Pruner] Fraction of weights to prune/regrow is 0.29548311.
+Epoch [14/250] - accuracy: 9.8357 - loss: 2.3044 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29476569.
+[Pruner] Fraction of weights to prune/regrow is 0.29476569.
+[Pruner] Fraction of weights to prune/regrow is 0.29476569.
+[Pruner] Fraction of weights to prune/regrow is 0.29476569.
+Epoch [15/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29399643.
+[Pruner] Fraction of weights to prune/regrow is 0.29399643.
+[Pruner] Fraction of weights to prune/regrow is 0.29399643.
+[Pruner] Fraction of weights to prune/regrow is 0.29399643.
+Epoch [16/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29317560.
+[Pruner] Fraction of weights to prune/regrow is 0.29317560.
+[Pruner] Fraction of weights to prune/regrow is 0.29317560.
+[Pruner] Fraction of weights to prune/regrow is 0.29317560.
+Epoch [17/250] - accuracy: 10.2464 - loss: 2.3045 - sparsity: 0.9999
+[Pruner] Fraction of weights to prune/regrow is 0.29230349.
+[Pruner] Fraction of weights to prune/regrow is 0.29230349.
+[Pruner] Fraction of weights to prune/regrow is 0.29230349.
+[Pruner] Fraction of weights to prune/regrow is 0.29230349.
+Epoch [18/250] - accuracy: 9.7857 - loss: 2.3043 - sparsity: 0.9998
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29138042.
+[Pruner] Fraction of weights to prune/regrow is 0.29138042.
+[Pruner] Fraction of weights to prune/regrow is 0.29138042.
+[Pruner] Fraction of weights to prune/regrow is 0.29138042.
+Epoch [19/250] - accuracy: 9.9659 - loss: 2.3044 - sparsity: 0.9998
+[TRAINER] weights saved!
+[Pruner] Fraction of weights to prune/regrow is 0.29040670.
+[Pruner] Fraction of weights to prune/regrow is 0.29040670.
+[Pruner] Fraction of weights to prune/regrow is 0.29040670.
+[Pruner] Fraction of weights to prune/regrow is 0.29040670.
+Epoch [20/250] - accuracy: 9.6855 - loss: 2.3042 - sparsity: 0.9998
+[Pruner] Fraction of weights to prune/regrow is 0.28938271.
+[Pruner] Fraction of weights to prune/regrow is 0.28938271.
+[Pruner] Fraction of weights to prune/regrow is 0.28938271.
+[Pruner] Fraction of weights to prune/regrow is 0.28938271.
+Epoch [21/250] - accuracy: 9.9659 - loss: 2.3047 - sparsity: 0.9998
+[Pruner] Fraction of weights to prune/regrow is 0.28830879.
+[Pruner] Fraction of weights to prune/regrow is 0.28830879.
+[Pruner] Fraction of weights to prune/regrow is 0.28830879.
+[Pruner] Fraction of weights to prune/regrow is 0.28830879.
+Epoch [22/250] - accuracy: 9.7857 - loss: 2.3045 - sparsity: 0.9998
+[Pruner] Fraction of weights to prune/regrow is 0.28718534.
+[Pruner] Fraction of weights to prune/regrow is 0.28718534.
+[Pruner] Fraction of weights to prune/regrow is 0.28718534.
+[Pruner] Fraction of weights to prune/regrow is 0.28718534.
+Epoch [23/250] - accuracy: 9.6855 - loss: 2.3040 - sparsity: 0.9998
+[Pruner] Fraction of weights to prune/regrow is 0.28601274.
+[Pruner] Fraction of weights to prune/regrow is 0.28601274.
+[Pruner] Fraction of weights to prune/regrow is 0.28601274.
+[Pruner] Fraction of weights to prune/regrow is 0.28601274.
+Epoch [24/250] - accuracy: 9.7857 - loss: 2.3051 - sparsity: 0.9998
+[Pruner] Fraction of weights to prune/regrow is 0.28479145.
+[Pruner] Fraction of weights to prune/regrow is 0.28479145.
+[Pruner] Fraction of weights to prune/regrow is 0.28479145.
+[Pruner] Fraction of weights to prune/regrow is 0.28479145.
+Epoch [25/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9998
+[Pruner] Fraction of weights to prune/regrow is 0.28352187.
+[Pruner] Fraction of weights to prune/regrow is 0.28352187.
+[Pruner] Fraction of weights to prune/regrow is 0.28352187.
+[Pruner] Fraction of weights to prune/regrow is 0.28352187.
+Epoch [26/250] - accuracy: 9.7857 - loss: 2.3048 - sparsity: 0.9998
+[Pruner] Fraction of weights to prune/regrow is 0.28220446.
+[Pruner] Fraction of weights to prune/regrow is 0.28220446.
+Traceback (most recent call last):
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/../scripts/pruning_script.py", line 42, in run_training
+    trainer.train(run)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 101, in train
+    loss = self._run_train_epoch(epoch, desc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 187, in _run_train_epoch
+    outputs = self.model(data)
+              ^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/model_factory.py", line 179, in forward
+    x = self.model(x)
+        ^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/models/resnet.py", line 255, in forward
+    return self._forward_impl(x)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/models/resnet.py", line 244, in _forward_impl
+    x = self.layer2(x)
+        ^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/container.py", line 240, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/models/resnet.py", line 50, in forward
+    out = self.bn1(out)
+          ^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1751, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1762, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/nn/modules/batchnorm.py", line 173, in forward
+    self.num_batches_tracked.add_(1)  # type: ignore[has-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

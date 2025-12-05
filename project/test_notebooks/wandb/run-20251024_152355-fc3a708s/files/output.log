@@ -1,0 +1,94 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+[Pruner] Model sparity increased to 0.4636.
+Epoch [1/5] - accuracy: 86.9992 - loss: 0.0840 - sparsity: 0.4636
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.4636.
+Recovery Epoch [1/10] - accuracy: 87.4599 - loss: 0.1405 - sparsity: 0.0000
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.7448.
+Recovery Epoch [2/10] - accuracy: 88.7320 - loss: 0.1170 - sparsity: 0.7448
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.8892.
+Recovery Epoch [3/10] - accuracy: 88.1210 - loss: 0.1553 - sparsity: 0.8892
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9424.
+Recovery Epoch [4/10] - accuracy: 87.9307 - loss: 0.2080 - sparsity: 0.9424
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [5/10] - accuracy: 88.8822 - loss: 0.1861 - sparsity: 0.9500
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [6/10] - accuracy: 85.5469 - loss: 0.3730 - sparsity: 0.1341
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [7/10] - accuracy: 86.6286 - loss: 0.2332 - sparsity: 0.9500
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [8/10] - accuracy: 85.0361 - loss: 0.3747 - sparsity: 0.2199
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [9/10] - accuracy: 87.3498 - loss: 0.2431 - sparsity: 0.9500
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [10/10] - accuracy: 85.7572 - loss: 0.3502 - sparsity: 0.2447
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.7448.
+Epoch [2/5] - accuracy: 86.6186 - loss: 0.2717 - sparsity: 0.7448
+[Pruner] Model sparity increased to 0.4636.
+Recovery Epoch [1/10] - accuracy: 86.7288 - loss: 0.2469 - sparsity: 0.3546
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.7448.
+Recovery Epoch [2/10] - accuracy: 88.3013 - loss: 0.2205 - sparsity: 0.7448
+[Pruner] Model sparity increased to 0.8892.
+Recovery Epoch [3/10] - accuracy: 88.5617 - loss: 0.1899 - sparsity: 0.8892
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9424.
+Recovery Epoch [4/10] - accuracy: 88.5317 - loss: 0.1760 - sparsity: 0.9424
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [5/10] - accuracy: 89.1126 - loss: 0.1664 - sparsity: 0.9500
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [6/10] - accuracy: 88.1110 - loss: 0.2626 - sparsity: 0.4644
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [7/10] - accuracy: 88.5817 - loss: 0.1874 - sparsity: 0.9500
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [8/10] - accuracy: 86.9091 - loss: 0.2697 - sparsity: 0.5199
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [9/10] - accuracy: 87.7905 - loss: 0.1989 - sparsity: 0.9500
+[Pruner] Model sparity increased to 0.9500.
+Recovery Epoch [10/10] - accuracy: 86.9591 - loss: 0.2689 - sparsity: 0.5362
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.8892.
+Epoch [3/5] - accuracy: 86.5385 - loss: 0.2180 - sparsity: 0.8892
+[Pruner] Model sparity increased to 0.4636.
+Recovery Epoch [1/10] - accuracy: 87.0292 - loss: 0.2239 - sparsity: 0.5714
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.7448.
+Recovery Epoch [2/10] - accuracy: 87.0292 - loss: 0.2001 - sparsity: 0.7448
+[Pruner] Model sparity increased to 0.8892.
+Recovery Epoch [3/10] - accuracy: 89.3129 - loss: 0.1785 - sparsity: 0.8892
+[TRAINER] weights saved!
+[Pruner] Model sparity increased to 0.9424.
+Traceback (most recent call last):
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/../scripts/pruning_script.py", line 42, in run_training
+    trainer.train(run)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 120, in train
+    self._retrain(run)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 157, in _retrain
+    loss = self._run_train_epoch(epoch, desc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/trainer.py", line 197, in _run_train_epoch
+    _handle_optimizer_and_pruning(self, loss, epoch, step)
+  File "/Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/training_utils.py", line 243, in _handle_optimizer_and_pruning
+    scaler.step(args.optimizer)
+  File "/databricks/python/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 455, in step
+    self.unscale_(optimizer)
+  File "/databricks/python/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 342, in unscale_
+    optimizer_state["found_inf_per_device"] = self._unscale_grads_(
+                                              ^^^^^^^^^^^^^^^^^^^^^
+  File "/databricks/python/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 283, in _unscale_grads_
+    torch._amp_foreach_non_finite_check_and_unscale_(
+KeyboardInterrupt

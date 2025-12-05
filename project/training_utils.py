@@ -17,66 +17,26 @@ from dataset_utils_old import get_data
 
 from model_factory import ClassificationAndEncoderNetwork
 from dataset_factory import get_dataloaders
-from pruning_factory import check_model_sparsity, PRUNER_DICT
+from pruning_factory import (
+    check_model_sparsity, PRUNING_REGISTRY, 
+    MagnitudePrune, SNIPIterativePrune, WandaPrune, 
+    RigLPruner
+)
 from dyrelu_adapter import set_t_for_dyrelu_adapter
-from pruning_factory import apply_erk_initialization
 
 
-def _initialize_models(args):
-    if getattr(args, 'is_bacp', False):
-        models = create_models_for_bacp(args)
+# ----------------------------------------------------------------------
+# Model Initialization Helpers
+# ----------------------------------------------------------------------
 
-        args.model = models["curr_model"]
-        args.model_pt = models["model_pt"]
-        args.model_ft = models["model_ft"]
-        args.embedded_dim = args.model.embedded_dim
-        print('[TRAINER] Initialized BaCP models')
+def _create_base_model(args, is_main_model=False):
+    """Factory function for creating a single model instance."""
+    adapt = args.image_size <= 64
 
-    else:
-        adapt = True if args.image_size and args.image_size <= 64 else False
-        args.model = ClassificationAndEncoderNetwork(
-            model_name=args.model_name,
-            num_classes=args.num_classes,
-            num_out_features=args.num_out_features,
-            device=args.device,
-            adapt=adapt,
-            pretrained=True,
-            freeze=False,
-            dyrelu_en=args.dyrelu_en,
-            dyrelu_phasing_en=args.dyrelu_phasing_en,
-        )
-        args.embedded_dim = args.model.embedded_dim
+    # DyReLU arguments only apply to the main (current) model
+    dyrelu_en = args.dyrelu_en if is_main_model else False
+    dyrelu_phasing_en = args.dyrelu_phasing_en if is_main_model else False
 
-        if args.trained_weights:
-            loaded = load_weights(args.model, args.trained_weights)
-            if loaded:
-                print("[TRAINER] Weights loaded")
-            else: 
-                raise ValueError("[TRAINER] Failed to load weights")
-
-    if args.dyrelu_phasing_en:
-        if args.recovery_epochs and args.ft_epochs:
-            # t_end = args.epochs + (args.recovery_epochs * args.epochs) + (0.25 * args.ft_epochs)
-            t_end = int(0.75 * args.ft_epochs)
-        else:
-            t_end = args.epochs
-
-        set_t_for_dyrelu_adapter(args.model, 0, t_end)
-
-
-def create_models_for_bacp(args):
-    adapt = True if args.image_size and args.image_size <= 64 else False
-    model_pt = ClassificationAndEncoderNetwork(
-        model_name=args.model_name,
-        num_classes=args.num_classes,
-        num_out_features=args.num_out_features,
-        device=args.device,
-        adapt=adapt,
-        pretrained=True,
-        freeze=False,
-    )
-    
-    # Current projection model
     model = ClassificationAndEncoderNetwork(
         model_name=args.model_name,
         num_classes=args.num_classes,
@@ -85,31 +45,37 @@ def create_models_for_bacp(args):
         adapt=adapt,
         pretrained=True,
         freeze=False,
-        dyrelu_en=args.dyrelu_en,
-        dyrelu_phasing_en=args.dyrelu_phasing_en,
+        dyrelu_en=dyrelu_en,
+        dyrelu_phasing_en=dyrelu_phasing_en,
     )
-    if args.encoder_trained_weights:
-        load = load_weights(model, args.encoder_trained_weights)
-        if load:
-            print("[TRAINER] Trained encoder weights loaded successfully")
-        else:
-            raise ValueError("[TRAINER] Failed to load enocoder weights")
+    return model
 
-    # Fine-tuned projection model
-    model_ft = deepcopy(model_pt).to(args.device)
-    if args.trained_weights:
-        load = load_weights(model_ft, args.trained_weights)
-        if load:
-            print("[TRAINER] Weights loaded successfully")
-        else:
-            raise ValueError("[TRAINER] Failed to load weights")
 
-    return {
-        "model_pt": model_pt, 
-        "curr_model": model, 
-        "model_ft": model_ft
-        }
+def _initialize_models(args):
+    if getattr(args, 'is_bacp', False):
+        model_pt = _create_base_model(args, is_main_model=False)
+        curr_model = _create_base_model(args, is_main_model=True)
 
+        # Fine-tuned model is a deepcopy of the PT model
+        model_ft = deepcopy(model_pt).to(args.device)
+        load_weights(model_ft, args.trained_weights)
+
+        args.model = curr_model
+        args.model_pt = model_pt
+        args.model_ft = model_ft
+        args.embedded_dim = args.model.embedded_dim
+        print('[TRAINER] Initialized BaCP models')
+
+    else:
+        args.model = _create_base_model(args, is_main_model=True)
+        load_weights(args.model, args.trained_weights)
+        args.embedded_dim = args.model.embedded_dim
+        print('[TRAINER] Initialized standard model')
+
+
+# ----------------------------------------------------------------------
+# Data and Optimizer Initialization
+# ----------------------------------------------------------------------
 
 def _initialize_data_loaders(args):
     # Initializing cache directory for datasets
@@ -128,7 +94,6 @@ def _initialize_data_loaders(args):
 
 
 def _initialize_optimizer(args):
-
     opt_type = getattr(args, 'optimizer_type', None)
     lr = getattr(args, 'learning_rate', None)
 
@@ -165,83 +130,139 @@ def _initialize_scheduler(args):
         print("[TRAINER] No scheduler initialized")
 
 
+# ----------------------------------------------------------------------
+# Path, Logger, and Pruning Initialization
+# ----------------------------------------------------------------------
+
 def _initialize_pruner(args):
     args.initial_sparsity = check_model_sparsity(args.model)
-    args.prune = True if (args.pruning_type and args.target_sparsity and args.pruning_module is None) else False
-
+    args.prune = (args.pruning_type and args.target_sparsity and args.pruning_module is None)
+    
     if args.prune:
-        args.pruner = PRUNER_DICT[args.pruning_type](
+        total_scheduled_epochs = args.epochs + args.recovery_epochs
+
+        args.pruner = PRUNING_REGISTRY[args.pruning_type](
             model=args.model,
-            epochs=args.epochs,
-            target_sparsity=args.target_sparsity, 
+            epochs=total_scheduled_epochs,
+            s_end=args.target_sparsity, 
             sparsity_scheduler=args.sparsity_scheduler
         )
-        print('[TRAINER] Pruning initialized')
-        print('[TRAINER] Pruning type:', args.pruning_type)
-        print('[TRAINER] Target sparsity:', args.target_sparsity)
-        print('[TRAINER] Sparsity scheduler:', args.sparsity_scheduler)
-        print(f'[TRAINER] Current sparsity: {args.initial_sparsity:.4f}')
+        print('[TRAINER] Pruning module initialized')
+        print(f'[TRAINER] {args.pruning_type=}, {args.target_sparsity=}, {args.sparsity_scheduler=}, {args.initial_sparsity=}')
     else:
         args.pruner = args.pruning_module
 
-        # args.pruner = None
-        # if args.apply_mask_only:
-        #     print('[TRAINER] Finetuning initialized')
-        #     print('[TRAINER] Pruning type:', args.pruning_type)
-        #     print(f'[TRAINER] Current sparsity: {args.initial_sparsity:.4f}')
-        # else:
-        #     print('[TRAINER] Pruning not initialized')
+    if isinstance(args.pruner, RigLPruner):
+        # RigL-specific parameters (Tc is the epoch where pruning stops)
+        args.Tc = int(args.epochs) 
+        args.delta_t = 100
+        args.global_step = 0
 
 
 def _initialize_paths_and_logger(args):
-    base_dir = '/dbfs' if args.databricks_env else '.'
-    args.base_path = os.path.join(base_dir, 'research/bacp', args.model_name, args.dataset_name)
+    now = datetime.now()
+    args.datestamp = now.strftime('%Y%m%d_%H%M%S') # e.g., '20251205_142200'
+    date_dir = now.strftime('%Y%m%d')
 
-    if args.prune or args.pruning_module is not None:
-        weights_path = f'{args.model_name}_{args.dataset_name}_{args.pruning_type}_{args.target_sparsity}_{args.experiment_type}.pt'
-        logger_path = os.path.join(args.dataset_name, args.experiment_type, args.pruning_type or "", str(args.target_sparsity))
-    else:
-        weights_path = f"{args.model_name}_{args.dataset_name}_{args.experiment_type}.pt"
-        logger_path = os.path.join(args.dataset_name, args.experiment_type)
+    base_dir = '/dbfs' if args.databricks_env else '.'
+    
+    # Base path now includes the unique datestamp directory
+    # Structure: .../bacp/model_name/dataset_name/DATETIME/
+    args.base_path = os.path.join(
+        base_dir, 'research', 'bacp', 
+        args.model_name, args.dataset_name, 
+        date_dir
+    )
+
+    is_pruning = args.prune or args.pruning_module is not None
+    prune_type = args.pruning_type or ""
+    sparsity = str(args.target_sparsity) if is_pruning and args.target_sparsity else ""
+    
+    # Build weights path (filename)
+    weights_parts = [args.model_name, args.dataset_name]
+    if is_pruning:
+        weights_parts.extend([prune_type, sparsity])
+    weights_parts.append(args.experiment_type)
+    weights_parts.append(args.datestamp)
+    weights_path = '_'.join(filter(None, weights_parts)) + '.pt'
+
+    # Build logger path: /dataset_name/experiment_type/[pruning_type/sparsity]/datestamp
+    logger_parts = [args.dataset_name, args.experiment_type]
+    if is_pruning:
+        logger_parts.extend([prune_type, sparsity])
+    
+    logger_parts.append(args.datestamp) 
+        
+    logger_path = os.path.join(*filter(None, logger_parts))
 
     args.save_path = os.path.join(args.base_path, weights_path)
     args.logger = Logger(args.model_name, logger_path) if args.log_epochs else None
     print(f'[TRAINER] Saving model to: {args.save_path}')
 
 
+# ----------------------------------------------------------------------
+# Optimization and Pruning Step Handlers
+# ----------------------------------------------------------------------
+
 def _apply_pruning(args, epoch, step):
+    """
+    Applies the pruning mask or scheduling update based on the pruner type 
+    and current training state (epoch/step).
+    """
     if not args.prune or args.recover:
+        # Skip pruning if it's disabled or if we are in a recovery phase
         return
-    if step == 1:
-        args.pruner.ratio_step(epoch, args.epochs, args.initial_sparsity, args.target_sparsity)
-        args.pruner.prune(args.model)
+    
+    if isinstance(args.pruner, (MagnitudePrune, SNIPIterativePrune, WandaPrune)):
+        # Prune once per epoch (at step 1)
+        if step == 1:
+            args.pruner.ratio_step(epoch, args.epochs, args.initial_sparsity, args.target_sparsity)
+            args.pruner.prune(args.model)
+
+    elif isinstance(args.pruner, RigLPruner):
+        args.global_step += 1
+        # Pruning stops after args.Tc epochs
+        if epoch < args.Tc:
+            # Prune every delta_t steps
+            if args.global_step % args.delta_t == 0:
+                s = args.initial_sparsity
+                args.pruner.ratio_step(epoch, args.Tc, s, s)
+                args.pruner.prune(args.model)
 
 
 def _handle_optimizer_and_pruning(args, loss, epoch, step):
     """Handle backpropagation, pruning, and weight update in a single step."""
+    scaler = getattr(args, "scaler", None)
+
     args.optimizer.zero_grad()
 
-    scaler = getattr(args, "scaler", None)
+    # Back-propagation (w/ scaling if enabled)
     if scaler is None:
         loss.backward()
     else:
         scaler.scale(loss).backward()
 
-    _apply_pruning(args, epoch, step)
-
+    # Pruning the model
+    if args.pruner is not None:
+        _apply_pruning(args, epoch, step)
+    
+    # Optimizer step (w/ scaling if enabled)
     if scaler is None:
         args.optimizer.step()
     else:
         scaler.step(args.optimizer)
         scaler.update()
     
+    # Scheduler step
     if args.scheduler:
         args.scheduler.step()
 
+    # Applying mask and updating sparsity
     if args.pruner is not None:
         args.pruner.apply_mask(args.model)
-        
-        if step == 1 and args.prune and not args.recover:
+
+        # Update model sparsity once per epoch if pruning is active
+        if args.prune and step == 1:
             args.current_sparsity = check_model_sparsity(args.model)
 
 
@@ -260,7 +281,11 @@ def _initialize_log_parameters(args):
         k: v for k, v in vars(args).items()
         if isinstance(v, allowed_types) and v is not None
     }
-    
+
+
+# ----------------------------------------------------------------------
+# Data and Logging Helpers
+# ----------------------------------------------------------------------
 
 def _handle_data_to_device(args, batch_data):
     if isinstance(batch_data, (list, tuple)) and len(batch_data) == 2:

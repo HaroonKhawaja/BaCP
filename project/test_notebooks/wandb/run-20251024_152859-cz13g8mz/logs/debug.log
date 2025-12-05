@@ -1,0 +1,26 @@
+2025-10-24 15:29:00,829 INFO    MainThread:12545 [wandb_setup.py:_flush():81] Current SDK version is 0.22.2
+2025-10-24 15:29:00,829 INFO    MainThread:12545 [wandb_setup.py:_flush():81] Configure stats pid to 12545
+2025-10-24 15:29:00,829 INFO    MainThread:12545 [wandb_setup.py:_flush():81] Loading settings from /root/.config/wandb/settings
+2025-10-24 15:29:00,829 INFO    MainThread:12545 [wandb_setup.py:_flush():81] Loading settings from /Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/wandb/settings
+2025-10-24 15:29:00,829 INFO    MainThread:12545 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2025-10-24 15:29:00,830 INFO    MainThread:12545 [wandb_init.py:setup_run_log_directory():705] Logging user logs to /Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/wandb/run-20251024_152859-cz13g8mz/logs/debug.log
+2025-10-24 15:29:00,831 INFO    MainThread:12545 [wandb_init.py:setup_run_log_directory():706] Logging internal logs to /Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/wandb/run-20251024_152859-cz13g8mz/logs/debug-internal.log
+2025-10-24 15:29:00,831 INFO    MainThread:12545 [wandb_init.py:init():832] calling init triggers
+2025-10-24 15:29:00,831 INFO    MainThread:12545 [wandb_init.py:init():837] wandb.init called with sweep_config: {}
+config: {'model_name': 'resnet34', 'model_type': 'cv', 'dataset_name': 'cifar10', 'num_classes': 10, 'batch_size': 128, 'optimizer_type': 'sgd', 'learning_rate': 0.01, 'image_size': 32, 'epochs': 5, 'trained_weights': '/dbfs/research/bacp/resnet34/cifar10/resnet34_cifar10_baseline.pt', 'experiment_type': 'pruning', 'log_epochs': False, 'enable_tqdm': False, 'enable_mixed_precision': True, 'databricks_env': True, 'num_workers': 24, 'pruning_type': 'snip_pruning', 'target_sparsity': 0.99, 'sparsity_scheduler': 'cubic', 'recovery_epochs': 10, 'dyrelu_en': False, 'dyrelu_phasing_en': False, 'device': 'cuda', 'retrain': True, 'is_bacp': False, 'embedded_dim': 512, 'cache_dir': '/dbfs/cache', 'n_views': 1, 'initial_sparsity': 0.0, 'prune': True, 'base_path': '/dbfs/research/bacp/resnet34/cifar10', 'save_path': '/dbfs/research/bacp/resnet34/cifar10/resnet34_cifar10_snip_pruning_0.99_pruning.pt', '_wandb': {}}
+2025-10-24 15:29:00,831 INFO    MainThread:12545 [wandb_init.py:init():880] starting backend
+2025-10-24 15:29:01,037 INFO    MainThread:12545 [wandb_init.py:init():883] sending inform_init request
+2025-10-24 15:29:01,048 INFO    MainThread:12545 [wandb_init.py:init():891] backend started and connected
+2025-10-24 15:29:01,073 INFO    MainThread:12545 [wandb_init.py:init():961] updated telemetry
+2025-10-24 15:29:01,088 INFO    MainThread:12545 [wandb_init.py:init():985] communicating run to backend with 90.0 second timeout
+2025-10-24 15:29:02,101 INFO    MainThread:12545 [wandb_init.py:init():1036] starting run threads in backend
+2025-10-24 15:29:02,377 INFO    MainThread:12545 [wandb_run.py:_console_start():2509] atexit reg
+2025-10-24 15:29:02,378 INFO    MainThread:12545 [wandb_run.py:_redirect():2357] redirect: wrap_raw
+2025-10-24 15:29:02,380 INFO    MainThread:12545 [wandb_run.py:_redirect():2426] Wrapping output streams.
+2025-10-24 15:29:02,380 INFO    MainThread:12545 [wandb_run.py:_redirect():2449] Redirects installed.
+2025-10-24 15:29:02,409 INFO    MainThread:12545 [wandb_init.py:init():1076] run started, returning control to user process
+2025-10-24 15:34:22,222 INFO    MainThread:12545 [wandb_run.py:_finish():2275] finishing run haroooon123-lums/Backbone-Contrastive-Pruning/cz13g8mz
+2025-10-24 15:34:22,223 INFO    MainThread:12545 [wandb_run.py:_atexit_cleanup():2474] got exitcode: 0
+2025-10-24 15:34:22,225 INFO    MainThread:12545 [wandb_run.py:_restore():2456] restore
+2025-10-24 15:34:22,225 INFO    MainThread:12545 [wandb_run.py:_restore():2462] restore done
+2025-10-24 15:34:27,828 INFO    MainThread:12545 [wandb_run.py:_footer_sync_info():3872] logging synced files

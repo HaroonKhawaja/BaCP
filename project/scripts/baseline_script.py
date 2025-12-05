@@ -55,7 +55,6 @@ def run_training(args):
         print(f"{k}: {v}")
 
 def main():
-    """Main training pipeline for command-line usage."""
     args = baseline_parse_args()
     run_training(args)
 

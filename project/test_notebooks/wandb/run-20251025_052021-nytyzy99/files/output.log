@@ -1,0 +1,310 @@
+[34m[1mwandb[0m: Detected [huggingface_hub.inference] in use.
+[34m[1mwandb[0m: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+[34m[1mwandb[0m: For more information, check out the docs at: https://weave-docs.wandb.ai/
+Epoch [1/250] - accuracy: 9.6354 - loss: 2.3043 - sparsity: 0.9995
+[TRAINER] weights saved!
+Epoch [2/250] - accuracy: 9.6855 - loss: 2.3042 - sparsity: 0.9995
+[TRAINER] weights saved!
+Epoch [3/250] - accuracy: 9.6855 - loss: 2.3043 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29975832.
+Epoch [4/250] - accuracy: 9.6855 - loss: 2.3048 - sparsity: 0.9995
+Epoch [5/250] - accuracy: 10.5268 - loss: 2.3042 - sparsity: 0.9995
+[TRAINER] weights saved!
+Epoch [6/250] - accuracy: 10.2464 - loss: 2.3042 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29903399.
+Epoch [7/250] - accuracy: 9.6354 - loss: 2.3048 - sparsity: 0.9995
+Epoch [8/250] - accuracy: 10.1362 - loss: 2.3046 - sparsity: 0.9995
+Epoch [9/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29782941.
+Epoch [10/250] - accuracy: 9.7857 - loss: 2.3044 - sparsity: 0.9995
+Epoch [11/250] - accuracy: 9.8357 - loss: 2.3045 - sparsity: 0.9995
+Epoch [12/250] - accuracy: 10.5268 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29614842.
+Epoch [13/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [14/250] - accuracy: 9.8357 - loss: 2.3044 - sparsity: 0.9995
+Epoch [15/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9995
+Epoch [16/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29317560.
+Epoch [17/250] - accuracy: 10.2464 - loss: 2.3045 - sparsity: 0.9995
+Epoch [18/250] - accuracy: 9.7857 - loss: 2.3043 - sparsity: 0.9995
+Epoch [19/250] - accuracy: 9.9659 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.29040670.
+Epoch [20/250] - accuracy: 9.6855 - loss: 2.3042 - sparsity: 0.9995
+Epoch [21/250] - accuracy: 9.9659 - loss: 2.3047 - sparsity: 0.9995
+Epoch [22/250] - accuracy: 9.7857 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.28718534.
+Epoch [23/250] - accuracy: 9.6855 - loss: 2.3040 - sparsity: 0.9995
+Epoch [24/250] - accuracy: 9.7857 - loss: 2.3051 - sparsity: 0.9995
+Epoch [25/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.28352187.
+Epoch [26/250] - accuracy: 9.7857 - loss: 2.3048 - sparsity: 0.9995
+Epoch [27/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+Epoch [28/250] - accuracy: 9.6354 - loss: 2.3043 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.27942810.
+Epoch [29/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+Epoch [30/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [31/250] - accuracy: 9.9659 - loss: 2.3046 - sparsity: 0.9995
+Epoch [32/250] - accuracy: 10.5268 - loss: 2.3046 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.27332339.
+Epoch [33/250] - accuracy: 9.8357 - loss: 2.3045 - sparsity: 0.9995
+Epoch [34/250] - accuracy: 9.7857 - loss: 2.3046 - sparsity: 0.9995
+Epoch [35/250] - accuracy: 10.5268 - loss: 2.3049 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.26827923.
+Epoch [36/250] - accuracy: 10.0461 - loss: 2.3043 - sparsity: 0.9995
+Epoch [37/250] - accuracy: 9.6855 - loss: 2.3040 - sparsity: 0.9995
+Epoch [38/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.26285393.
+Epoch [39/250] - accuracy: 9.8357 - loss: 2.3041 - sparsity: 0.9995
+Epoch [40/250] - accuracy: 9.6855 - loss: 2.3046 - sparsity: 0.9995
+Epoch [41/250] - accuracy: 9.8357 - loss: 2.3048 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.25706491.
+Epoch [42/250] - accuracy: 10.2464 - loss: 2.3043 - sparsity: 0.9995
+Epoch [43/250] - accuracy: 9.9659 - loss: 2.3045 - sparsity: 0.9995
+Epoch [44/250] - accuracy: 10.5268 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.25093088.
+Epoch [45/250] - accuracy: 9.7857 - loss: 2.3047 - sparsity: 0.9995
+Epoch [46/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9995
+Epoch [47/250] - accuracy: 10.0461 - loss: 2.3045 - sparsity: 0.9995
+Epoch [48/250] - accuracy: 10.1362 - loss: 2.3043 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.24224977.
+Epoch [49/250] - accuracy: 9.6855 - loss: 2.3048 - sparsity: 0.9995
+Epoch [50/250] - accuracy: 10.2464 - loss: 2.3043 - sparsity: 0.9995
+Epoch [51/250] - accuracy: 10.5268 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.23538932.
+Epoch [52/250] - accuracy: 10.0461 - loss: 2.3045 - sparsity: 0.9995
+Epoch [53/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+Epoch [54/250] - accuracy: 9.8357 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.22825372.
+Epoch [55/250] - accuracy: 10.5268 - loss: 2.3043 - sparsity: 0.9995
+Epoch [56/250] - accuracy: 10.2464 - loss: 2.3046 - sparsity: 0.9995
+Epoch [57/250] - accuracy: 9.6354 - loss: 2.3042 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.22086593.
+Epoch [58/250] - accuracy: 10.5268 - loss: 2.3043 - sparsity: 0.9995
+Epoch [59/250] - accuracy: 9.6855 - loss: 2.3041 - sparsity: 0.9995
+Epoch [60/250] - accuracy: 9.6354 - loss: 2.3043 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.21324976.
+Epoch [61/250] - accuracy: 10.5268 - loss: 2.3043 - sparsity: 0.9995
+Epoch [62/250] - accuracy: 9.9659 - loss: 2.3043 - sparsity: 0.9995
+Epoch [63/250] - accuracy: 10.1362 - loss: 2.3039 - sparsity: 0.9995
+Epoch [64/250] - accuracy: 9.7857 - loss: 2.3046 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.20278215.
+Epoch [65/250] - accuracy: 9.6855 - loss: 2.3046 - sparsity: 0.9995
+Epoch [66/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [67/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.19472968.
+Epoch [68/250] - accuracy: 9.6855 - loss: 2.3045 - sparsity: 0.9995
+Epoch [69/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+Epoch [70/250] - accuracy: 10.5268 - loss: 2.3041 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.18653306.
+Epoch [71/250] - accuracy: 10.2464 - loss: 2.3045 - sparsity: 0.9995
+Epoch [72/250] - accuracy: 9.8357 - loss: 2.3045 - sparsity: 0.9995
+Epoch [73/250] - accuracy: 9.6354 - loss: 2.3041 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.17821873.
+Epoch [74/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+Epoch [75/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [76/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.16981344.
+Epoch [77/250] - accuracy: 9.7857 - loss: 2.3047 - sparsity: 0.9995
+Epoch [78/250] - accuracy: 9.8357 - loss: 2.3044 - sparsity: 0.9995
+Epoch [79/250] - accuracy: 9.9659 - loss: 2.3042 - sparsity: 0.9995
+Epoch [80/250] - accuracy: 9.7857 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.15851179.
+Epoch [81/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+Epoch [82/250] - accuracy: 9.8357 - loss: 2.3047 - sparsity: 0.9995
+Epoch [83/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.14999999.
+Epoch [84/250] - accuracy: 10.2464 - loss: 2.3048 - sparsity: 0.9995
+Epoch [85/250] - accuracy: 9.8357 - loss: 2.3040 - sparsity: 0.9995
+Epoch [86/250] - accuracy: 10.5268 - loss: 2.3043 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.14148822.
+Epoch [87/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+Epoch [88/250] - accuracy: 9.8357 - loss: 2.3044 - sparsity: 0.9995
+Epoch [89/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.13300385.
+Epoch [90/250] - accuracy: 10.0461 - loss: 2.3047 - sparsity: 0.9995
+Epoch [91/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+Epoch [92/250] - accuracy: 9.8357 - loss: 2.3042 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.12457427.
+Epoch [93/250] - accuracy: 10.1362 - loss: 2.3047 - sparsity: 0.9995
+Epoch [94/250] - accuracy: 10.1362 - loss: 2.3043 - sparsity: 0.9995
+Epoch [95/250] - accuracy: 9.9659 - loss: 2.3046 - sparsity: 0.9995
+Epoch [96/250] - accuracy: 10.2464 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.11346693.
+Epoch [97/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9995
+Epoch [98/250] - accuracy: 9.6855 - loss: 2.3043 - sparsity: 0.9995
+Epoch [99/250] - accuracy: 9.6855 - loss: 2.3039 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.10527032.
+Epoch [100/250] - accuracy: 9.7857 - loss: 2.3043 - sparsity: 0.9995
+Epoch [101/250] - accuracy: 10.5268 - loss: 2.3047 - sparsity: 0.9995
+Epoch [102/250] - accuracy: 9.8357 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.09721782.
+Epoch [103/250] - accuracy: 9.9659 - loss: 2.3041 - sparsity: 0.9995
+Epoch [104/250] - accuracy: 9.6354 - loss: 2.3046 - sparsity: 0.9995
+Epoch [105/250] - accuracy: 9.6354 - loss: 2.3046 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.08933546.
+Epoch [106/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+Epoch [107/250] - accuracy: 10.2464 - loss: 2.3045 - sparsity: 0.9995
+Epoch [108/250] - accuracy: 10.0461 - loss: 2.3048 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.08164859.
+Epoch [109/250] - accuracy: 10.2464 - loss: 2.3046 - sparsity: 0.9995
+Epoch [110/250] - accuracy: 9.7857 - loss: 2.3046 - sparsity: 0.9995
+Epoch [111/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [112/250] - accuracy: 9.8357 - loss: 2.3042 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.07174626.
+Epoch [113/250] - accuracy: 9.6855 - loss: 2.3046 - sparsity: 0.9995
+Epoch [114/250] - accuracy: 10.2464 - loss: 2.3045 - sparsity: 0.9995
+Epoch [115/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.06461064.
+Epoch [116/250] - accuracy: 9.8357 - loss: 2.3042 - sparsity: 0.9995
+Epoch [117/250] - accuracy: 10.1362 - loss: 2.3042 - sparsity: 0.9995
+Epoch [118/250] - accuracy: 9.9659 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.05775024.
+Epoch [119/250] - accuracy: 9.9659 - loss: 2.3044 - sparsity: 0.9995
+Epoch [120/250] - accuracy: 9.8357 - loss: 2.3045 - sparsity: 0.9995
+Epoch [121/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.05118709.
+Epoch [122/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+Epoch [123/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [124/250] - accuracy: 9.6354 - loss: 2.3047 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.04494238.
+Epoch [125/250] - accuracy: 9.9659 - loss: 2.3045 - sparsity: 0.9995
+Epoch [126/250] - accuracy: 9.8357 - loss: 2.3040 - sparsity: 0.9995
+Epoch [127/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [128/250] - accuracy: 9.6855 - loss: 2.3043 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.03714607.
+Epoch [129/250] - accuracy: 10.0461 - loss: 2.3048 - sparsity: 0.9995
+Epoch [130/250] - accuracy: 10.1362 - loss: 2.3043 - sparsity: 0.9995
+Epoch [131/250] - accuracy: 10.0461 - loss: 2.3041 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.03172075.
+Epoch [132/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [133/250] - accuracy: 10.2464 - loss: 2.3046 - sparsity: 0.9995
+Epoch [134/250] - accuracy: 9.7857 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.02667659.
+Epoch [135/250] - accuracy: 9.6855 - loss: 2.3043 - sparsity: 0.9995
+Epoch [136/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [137/250] - accuracy: 9.7857 - loss: 2.3042 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.02202988.
+Epoch [138/250] - accuracy: 9.6855 - loss: 2.3042 - sparsity: 0.9995
+Epoch [139/250] - accuracy: 10.0461 - loss: 2.3047 - sparsity: 0.9995
+Epoch [140/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+Epoch [141/250] - accuracy: 9.6354 - loss: 2.3040 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.01647813.
+Epoch [142/250] - accuracy: 10.1362 - loss: 2.3042 - sparsity: 0.9995
+Epoch [143/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [144/250] - accuracy: 9.7857 - loss: 2.3051 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.01281467.
+Epoch [145/250] - accuracy: 9.6354 - loss: 2.3040 - sparsity: 0.9995
+Epoch [146/250] - accuracy: 9.6855 - loss: 2.3048 - sparsity: 0.9995
+Epoch [147/250] - accuracy: 9.8357 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.00959328.
+Epoch [148/250] - accuracy: 9.7857 - loss: 2.3041 - sparsity: 0.9995
+Epoch [149/250] - accuracy: 10.5268 - loss: 2.3045 - sparsity: 0.9995
+Epoch [150/250] - accuracy: 10.0461 - loss: 2.3045 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.00682438.
+Epoch [151/250] - accuracy: 10.1362 - loss: 2.3041 - sparsity: 0.9995
+Epoch [152/250] - accuracy: 9.6354 - loss: 2.3043 - sparsity: 0.9995
+Epoch [153/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.00451689.
+Epoch [154/250] - accuracy: 9.6354 - loss: 2.3046 - sparsity: 0.9995
+Epoch [155/250] - accuracy: 9.6855 - loss: 2.3038 - sparsity: 0.9995
+Epoch [156/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9995
+Epoch [157/250] - accuracy: 10.0461 - loss: 2.3042 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.00217060.
+Epoch [158/250] - accuracy: 9.6354 - loss: 2.3048 - sparsity: 0.9995
+Epoch [159/250] - accuracy: 10.1362 - loss: 2.3043 - sparsity: 0.9995
+Epoch [160/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.00096601.
+Epoch [161/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [162/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9995
+Epoch [163/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.00024170.
+Epoch [164/250] - accuracy: 9.9659 - loss: 2.3044 - sparsity: 0.9995
+Epoch [165/250] - accuracy: 9.6855 - loss: 2.3045 - sparsity: 0.9995
+Epoch [166/250] - accuracy: 10.2464 - loss: 2.3047 - sparsity: 0.9995
+[Pruner] Fraction of weights to prune/regrow is 0.00000000.
+Epoch [167/250] - accuracy: 10.1362 - loss: 2.3041 - sparsity: 0.9995
+Epoch [168/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+Epoch [169/250] - accuracy: 9.6855 - loss: 2.3047 - sparsity: 0.9995
+Epoch [170/250] - accuracy: 10.1362 - loss: 2.3040 - sparsity: 0.9995
+Epoch [171/250] - accuracy: 10.2464 - loss: 2.3045 - sparsity: 0.9995
+Epoch [172/250] - accuracy: 9.6855 - loss: 2.3043 - sparsity: 0.9995
+Epoch [173/250] - accuracy: 9.6354 - loss: 2.3042 - sparsity: 0.9995
+Epoch [174/250] - accuracy: 9.9659 - loss: 2.3045 - sparsity: 0.9995
+Epoch [175/250] - accuracy: 10.5268 - loss: 2.3041 - sparsity: 0.9995
+Epoch [176/250] - accuracy: 9.8357 - loss: 2.3048 - sparsity: 0.9995
+Epoch [177/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9995
+Epoch [178/250] - accuracy: 9.6354 - loss: 2.3046 - sparsity: 0.9995
+Epoch [179/250] - accuracy: 9.8357 - loss: 2.3044 - sparsity: 0.9995
+Epoch [180/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9995
+Epoch [181/250] - accuracy: 9.9659 - loss: 2.3045 - sparsity: 0.9995
+Epoch [182/250] - accuracy: 9.8357 - loss: 2.3046 - sparsity: 0.9995
+Epoch [183/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+Epoch [184/250] - accuracy: 10.1362 - loss: 2.3047 - sparsity: 0.9995
+Epoch [185/250] - accuracy: 9.8357 - loss: 2.3046 - sparsity: 0.9995
+Epoch [186/250] - accuracy: 9.7857 - loss: 2.3043 - sparsity: 0.9995
+Epoch [187/250] - accuracy: 9.8357 - loss: 2.3044 - sparsity: 0.9995
+Epoch [188/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [189/250] - accuracy: 9.9659 - loss: 2.3044 - sparsity: 0.9995
+Epoch [190/250] - accuracy: 9.9659 - loss: 2.3043 - sparsity: 0.9995
+Epoch [191/250] - accuracy: 9.7857 - loss: 2.3044 - sparsity: 0.9995
+Epoch [192/250] - accuracy: 10.1362 - loss: 2.3046 - sparsity: 0.9995
+Epoch [193/250] - accuracy: 10.0461 - loss: 2.3045 - sparsity: 0.9995
+Epoch [194/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+Epoch [195/250] - accuracy: 10.1362 - loss: 2.3043 - sparsity: 0.9995
+Epoch [196/250] - accuracy: 10.5268 - loss: 2.3047 - sparsity: 0.9995
+Epoch [197/250] - accuracy: 9.7857 - loss: 2.3043 - sparsity: 0.9995
+Epoch [198/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [199/250] - accuracy: 10.2464 - loss: 2.3044 - sparsity: 0.9995
+Epoch [200/250] - accuracy: 10.5268 - loss: 2.3046 - sparsity: 0.9995
+Epoch [201/250] - accuracy: 10.0461 - loss: 2.3045 - sparsity: 0.9995
+Epoch [202/250] - accuracy: 10.2464 - loss: 2.3045 - sparsity: 0.9995
+Epoch [203/250] - accuracy: 9.9659 - loss: 2.3043 - sparsity: 0.9995
+Epoch [204/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+Epoch [205/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [206/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9995
+Epoch [207/250] - accuracy: 10.5268 - loss: 2.3042 - sparsity: 0.9995
+Epoch [208/250] - accuracy: 9.9659 - loss: 2.3046 - sparsity: 0.9995
+Epoch [209/250] - accuracy: 9.6855 - loss: 2.3045 - sparsity: 0.9995
+Epoch [210/250] - accuracy: 9.7857 - loss: 2.3040 - sparsity: 0.9995
+Epoch [211/250] - accuracy: 9.6855 - loss: 2.3040 - sparsity: 0.9995
+Epoch [212/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [213/250] - accuracy: 9.6855 - loss: 2.3041 - sparsity: 0.9995
+Epoch [214/250] - accuracy: 10.5268 - loss: 2.3045 - sparsity: 0.9995
+Epoch [215/250] - accuracy: 10.0461 - loss: 2.3045 - sparsity: 0.9995
+Epoch [216/250] - accuracy: 9.6855 - loss: 2.3047 - sparsity: 0.9995
+Epoch [217/250] - accuracy: 10.2464 - loss: 2.3044 - sparsity: 0.9995
+Epoch [218/250] - accuracy: 9.7857 - loss: 2.3044 - sparsity: 0.9995
+Epoch [219/250] - accuracy: 10.5268 - loss: 2.3042 - sparsity: 0.9995
+Epoch [220/250] - accuracy: 9.6354 - loss: 2.3043 - sparsity: 0.9995
+Epoch [221/250] - accuracy: 9.6855 - loss: 2.3043 - sparsity: 0.9995
+Epoch [222/250] - accuracy: 9.9659 - loss: 2.3046 - sparsity: 0.9995
+Epoch [223/250] - accuracy: 9.8357 - loss: 2.3043 - sparsity: 0.9995
+Epoch [224/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+Epoch [225/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [226/250] - accuracy: 10.0461 - loss: 2.3044 - sparsity: 0.9995
+Epoch [227/250] - accuracy: 10.0461 - loss: 2.3043 - sparsity: 0.9995
+Epoch [228/250] - accuracy: 10.1362 - loss: 2.3044 - sparsity: 0.9995
+Epoch [229/250] - accuracy: 9.8357 - loss: 2.3045 - sparsity: 0.9995
+Epoch [230/250] - accuracy: 10.1362 - loss: 2.3045 - sparsity: 0.9995
+Epoch [231/250] - accuracy: 9.6354 - loss: 2.3043 - sparsity: 0.9995
+Epoch [232/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+Epoch [233/250] - accuracy: 9.6354 - loss: 2.3046 - sparsity: 0.9995
+Epoch [234/250] - accuracy: 10.2464 - loss: 2.3046 - sparsity: 0.9995
+Epoch [235/250] - accuracy: 10.5268 - loss: 2.3041 - sparsity: 0.9995
+Epoch [236/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+Epoch [237/250] - accuracy: 9.6855 - loss: 2.3044 - sparsity: 0.9995
+Epoch [238/250] - accuracy: 9.6855 - loss: 2.3047 - sparsity: 0.9995
+Epoch [239/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9995
+Epoch [240/250] - accuracy: 10.1362 - loss: 2.3046 - sparsity: 0.9995
+Epoch [241/250] - accuracy: 10.1362 - loss: 2.3046 - sparsity: 0.9995
+Epoch [242/250] - accuracy: 9.6354 - loss: 2.3045 - sparsity: 0.9995
+Epoch [243/250] - accuracy: 9.9659 - loss: 2.3043 - sparsity: 0.9995
+Epoch [244/250] - accuracy: 9.7857 - loss: 2.3045 - sparsity: 0.9995
+Epoch [245/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+Epoch [246/250] - accuracy: 10.0461 - loss: 2.3046 - sparsity: 0.9995
+Epoch [247/250] - accuracy: 9.8357 - loss: 2.3041 - sparsity: 0.9995
+Epoch [248/250] - accuracy: 9.9659 - loss: 2.3045 - sparsity: 0.9995
+Epoch [249/250] - accuracy: 9.9659 - loss: 2.3039 - sparsity: 0.9995
+Epoch [250/250] - accuracy: 9.6354 - loss: 2.3044 - sparsity: 0.9995
+[TRAINER] Weights loaded successfully
+Final - accuracy: 9.9860 - sparsity: 0.9995
