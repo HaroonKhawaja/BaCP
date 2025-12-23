@@ -188,7 +188,7 @@ class ResNet(nn.Module):
 
         if zero_init_residual:
             for m in self.modules():
-                if isinstance(m, DyReLUBottleneck) and m.bn3.weight is not None:
+                if isinstance(m, Bottleneck) and m.bn3.weight is not None:
                     nn.init.constant_(m.bn3.weight, 0)
 
     def _make_layer(
@@ -287,9 +287,6 @@ def resnet101(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwar
         dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en, 
         **kwargs
         )
-
-
-
 
 
 

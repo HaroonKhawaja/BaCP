@@ -20,7 +20,8 @@ from training_utils import (
     _handle_tqdm_logs,
     _log_metrics,
     _get_sparsity_key,
-    _initialize_logs
+    _initialize_logs,
+    _initialize_dyrelu_phasing
 )
 from dyrelu_adapter import step_dyrelu_adapter
 from pruning_factory import *
@@ -73,6 +74,7 @@ class TrainingArguments:
         _initialize_pruner(self)
         _initialize_paths_and_logger(self)
         _initialize_log_parameters(self)
+        _initialize_dyrelu_phasing(self)
 
 class Trainer:
     """Unified trainer class for training, fine-tuning, and pruning both CV and LLM models."""

@@ -20,20 +20,9 @@ def layer_check(name, param):
     
     exclusion_keywords = [
         'hyperfunction', 'relu',
-        'encoder_head'
-        # 'encoder_head',
-        # 'hyperfunction',
-        # 'fc',   # ResNet
-        # 'classifier.6', # VGG
-        # 'embeddings', 'conv_proj', 'pos_embedding', 'heads', 'classifier.weight', # ViT        
-        # 'projection_head', # Encoder heads
-        # 'vocab_projector', 'vocab_transform', # DistilBERT
-        # 'classifier.dense', 'classifier.out_proj', 'lm_head', # RoBERTA
+        'encoder_head',
+    ]
 
-        # 'heads', 'conv_proj', 'fc', 'classifier', 'embeddings', 
-        # 'class_token', 'pos_embedding', 'vocab_transform', 'lm_head',
-        # 'projection_head'
-        ]
     if any(keyword in name.lower() for keyword in exclusion_keywords):
         return False
     return True
@@ -115,16 +104,19 @@ class Pruner(ABC):
         for name, param in model.named_parameters():
             if layer_check(name, param):
                 self.masks[name] = torch.ones_like(param)
-        
+
+
     @abstractmethod
     def prune(self, model):
         pass
-            
+
+
     @torch.no_grad()  
     def apply_mask(self, model):
         for name, param in model.named_parameters():
             if name in self.masks:
                 param.data.mul_(self.masks[name])
+
 
     def ratio_step(self, t, T, s_init=None, s_end=None):
         if self.sparsity_scheduler == 'linear':
@@ -402,43 +394,96 @@ class RigLPruner(Pruner):
                 n_out, n_in, k_h, k_w = param.shape
                 n_in = n_in * k_h * k_w
             else:
-                # treat remaining dims by flattening input side
                 shape = param.shape
                 n_out = shape[0]
                 n_in = int(torch.prod(torch.tensor(shape[1:])).item())
-
-            # ERK score proportional to (n_in + n_out) / (n_in * n_out)
+            
             erk_scores[name] = (n_in + n_out) / (n_in * n_out)
 
-        # normalizing and applying power scale
-        total_score = sum(erk_scores.values())
-        normalized = {k: (v / total_score) ** erk_power_scale for k, v in erk_scores.items()}
+        if erk_power_scale != 1.0:
+            erk_scores = {k: v ** erk_power_scale for k, v in erk_scores.items()}
 
-        total_params = float(sum(p.numel() for p in self.prunable_params.values()))
+        total_score = sum(erk_scores.values())
+        if total_score == 0:
+            raise RuntimeError("ERK failed: total score is zero")
+        normalized = {k: v / total_score for k, v in erk_scores.items()}
+
+        total_params = sum(p.numel() for p in self.prunable_params.values())
         target_remaining = total_params * (1.0 - self.s_end)
 
-        # Expected remaining per layer
-        expected = {k: normalized[k] * self.prunable_params[k].numel() for k in normalized}
-        sum_expected = sum(expected.values())
-        if sum_expected == 0:
-            raise RuntimeError("ERK failed: sum expected is zero")
+        # Distribute target remaining according to normalized scores
+        layer_params = {k: float(self.prunable_params[k].numel()) for k in normalized}
 
-        scale = float(target_remaining) / float(sum_expected)
+        raw_densities = {}
+        for name in normalized:
+            layer_budget = normalized[name] * target_remaining
+            raw_densities[name] = layer_budget / layer_params[name]
 
+        # Enforce minimum density to prevent dead layers (e.g., 0.0001 = 0.01%)
+        min_density = max(1e-4, (1.0 - self.s_end))  # At least 1% of target density
+    
         masks = {}
-        rng = torch.Generator(device=self.device)
         for name, param in self.prunable_params.items():
-            if name in normalized:
-                layer_density = normalized[name] * scale  # fraction kept
+            if name in raw_densities:
+                layer_density = raw_densities[name]
             else:
                 layer_density = 1.0 - self.s_end
-            layer_density = float(max(0.0, min(1.0, layer_density)))  # clamp to [0,1]
-            keep_prob = layer_density
-
-            # mask = (torch.rand_like(param, device=self.device, generator=rng) < keep_prob).to(dtype=param.dtype)
-            mask = (torch.rand_like(param, device=self.device) < keep_prob).to(dtype=param.dtype)
+            
+            # Clamp with minimum to prevent dead layers
+            layer_density = float(max(min_density, min(1.0, layer_density)))
+            
+            # Generate mask
+            mask = (torch.rand_like(param, device=self.device) < layer_density).to(dtype=param.dtype)
             masks[name] = mask
+        
         return masks
+        
+    # def _erk_init(self, model, erk_power_scale):
+    #     erk_scores = {}
+    #     for name, param in self.prunable_params.items():
+    #         if param.dim() == 2:  # Linear: (out, in)
+    #             n_out, n_in = param.shape
+    #         elif param.dim() == 4:  # Conv2d: (out, in, k_h, k_w)
+    #             n_out, n_in, k_h, k_w = param.shape
+    #             n_in = n_in * k_h * k_w
+    #         else:
+    #             # treat remaining dims by flattening input side
+    #             shape = param.shape
+    #             n_out = shape[0]
+    #             n_in = int(torch.prod(torch.tensor(shape[1:])).item())
+
+    #         # ERK score proportional to (n_in + n_out) / (n_in * n_out)
+    #         erk_scores[name] = (n_in + n_out) / (n_in * n_out)
+
+    #     # normalizing and applying power scale
+    #     total_score = sum(erk_scores.values())
+    #     normalized = {k: (v / total_score) ** erk_power_scale for k, v in erk_scores.items()}
+
+    #     total_params = float(sum(p.numel() for p in self.prunable_params.values()))
+    #     target_remaining = total_params * (1.0 - self.s_end)
+
+    #     # Expected remaining per layer
+    #     expected = {k: normalized[k] * self.prunable_params[k].numel() for k in normalized}
+    #     sum_expected = sum(expected.values())
+    #     if sum_expected == 0:
+    #         raise RuntimeError("ERK failed: sum expected is zero")
+
+    #     scale = float(target_remaining) / float(sum_expected)
+
+    #     masks = {}
+    #     rng = torch.Generator(device=self.device)
+    #     for name, param in self.prunable_params.items():
+    #         if name in normalized:
+    #             layer_density = normalized[name] * scale  # fraction kept
+    #         else:
+    #             layer_density = 1.0 - self.s_end
+    #         layer_density = float(max(0.0, min(1.0, layer_density)))  # clamp to [0,1]
+    #         keep_prob = layer_density
+
+    #         # mask = (torch.rand_like(param, device=self.device, generator=rng) < keep_prob).to(dtype=param.dtype)
+    #         mask = (torch.rand_like(param, device=self.device) < keep_prob).to(dtype=param.dtype)
+    #         masks[name] = mask
+    #     return masks
 
 
     def prune(self, model):

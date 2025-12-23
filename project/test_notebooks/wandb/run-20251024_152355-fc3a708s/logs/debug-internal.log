@@ -1,9 +1,0 @@
-{"time":"2025-10-24T15:23:57.587012784Z","level":"INFO","msg":"stream: starting","core version":"0.22.2"}
-{"time":"2025-10-24T15:23:58.085385294Z","level":"INFO","msg":"stream: created new stream","id":"fc3a708s"}
-{"time":"2025-10-24T15:23:58.085556865Z","level":"INFO","msg":"handler: started","stream_id":"fc3a708s"}
-{"time":"2025-10-24T15:23:58.087738765Z","level":"INFO","msg":"stream: started","id":"fc3a708s"}
-{"time":"2025-10-24T15:23:58.087754243Z","level":"INFO","msg":"writer: started","stream_id":"fc3a708s"}
-{"time":"2025-10-24T15:23:58.087763771Z","level":"INFO","msg":"sender: started","stream_id":"fc3a708s"}
-{"time":"2025-10-24T15:26:34.515750384Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"updating run metadata","runtime_seconds":0.209434948}],"total_operations":1}}
-{"time":"2025-10-24T15:26:34.619000575Z","level":"INFO","msg":"stream: closing","id":"fc3a708s"}
-{"time":"2025-10-24T15:26:34.696125022Z","level":"ERROR","msg":"sender: sendSummary called after exit"}

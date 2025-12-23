@@ -46,6 +46,7 @@ def load_weights(model, path):
     try:
         state_dict = torch.load(path, map_location=get_device())
         model.load_state_dict(state_dict)
+        print(f"[SUCCESS] Full load successful!: {path}")
         return True
     except:
         print(f"[ERROR] Could not load weights: {path}")

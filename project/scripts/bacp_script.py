@@ -11,7 +11,7 @@ from utils import set_seed, get_device
 from scripting_utils import (
     wandb_login,
     bacp_parse_args,
-    get_timestamp
+    # get_timestamp removed from imports
 )
 
 def run_training(args):
@@ -21,32 +21,49 @@ def run_training(args):
     # Setup training arguments
     args_dict = vars(args)
 
+    # Pop non-trainer arguments before creating BaCPTrainingArguments
     log_to_wandb = args_dict.pop('log_to_wandb')
     seed = args_dict.pop('seed')
     set_seed(seed)
     
+    # Initialize arguments and trainer
     bacp_training_args = BaCPTrainingArguments(**args_dict)
     bacp_trainer = BaCPTrainer(bacp_training_args)
+    
+    # Access the final, initialized arguments from the trainer
+    final_args = bacp_trainer    
+
     if log_to_wandb:
         wandb_login()
-        group = f'{args.model_name}-{args.experiment_type}'
-        name = f'{args.model_name}-{args.experiment_type}-{args.dataset_name}-{get_timestamp()}'
+        
+        datestamp = final_args.datestamp
+        group = f'{final_args.model_name}-{final_args.experiment_type}'
+        name = f'{final_args.model_name}-{final_args.experiment_type}-{final_args.dataset_name}-{datestamp}'
+        
+        tags = [
+            final_args.model_name, 
+            final_args.experiment_type, 
+            final_args.dataset_name, 
+            final_args.pruning_type, 
+            str(final_args.target_sparsity)
+        ]
+        
         with wandb.init(
             project='Backbone-Contrastive-Pruning',
             group=group,
             name=name,
-            tags=[args.model_name, args.experiment_type, args.dataset_name, args.pruning_type, str(args.target_sparsity)],
+            tags=[tag for tag in tags if tag], 
             config=bacp_trainer.logger_params
         ) as run:
-            # bacp_trainer.train(run)
-            bacp_trainer.finetune(run)
+            bacp_trainer.train(run)
 
             # Evaluate and log metrics
             metrics = bacp_trainer.evaluate(run)
             wandb.log(metrics)
 
+            # Use the save path already set in the trainer
             run.log_model(path=bacp_trainer.save_path, name=name)
-            run.finish()
+
     else:
         bacp_trainer.train() 
         metrics = bacp_trainer.evaluate()
@@ -62,40 +79,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

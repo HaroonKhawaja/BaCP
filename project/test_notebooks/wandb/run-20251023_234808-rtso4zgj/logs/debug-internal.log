@@ -1,9 +1,0 @@
-{"time":"2025-10-23T23:48:10.852128811Z","level":"INFO","msg":"stream: starting","core version":"0.22.2"}
-{"time":"2025-10-23T23:48:11.387868911Z","level":"INFO","msg":"stream: created new stream","id":"rtso4zgj"}
-{"time":"2025-10-23T23:48:11.388086822Z","level":"INFO","msg":"handler: started","stream_id":"rtso4zgj"}
-{"time":"2025-10-23T23:48:11.390327309Z","level":"INFO","msg":"stream: started","id":"rtso4zgj"}
-{"time":"2025-10-23T23:48:11.390356259Z","level":"INFO","msg":"writer: started","stream_id":"rtso4zgj"}
-{"time":"2025-10-23T23:48:11.390363417Z","level":"INFO","msg":"sender: started","stream_id":"rtso4zgj"}
-{"time":"2025-10-23T23:52:09.198288231Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"updating run metadata","runtime_seconds":0.001528991}],"total_operations":1}}
-{"time":"2025-10-23T23:52:09.405103353Z","level":"INFO","msg":"stream: closing","id":"rtso4zgj"}
-{"time":"2025-10-23T23:52:09.53661947Z","level":"ERROR","msg":"sender: failed to upload run config: open /Workspace/Users/haroon.khawaja@outlook.com/BaCP/project/test_notebooks/wandb/run-20251023_234808-rtso4zgj/files/config.yaml: operation not permitted"}

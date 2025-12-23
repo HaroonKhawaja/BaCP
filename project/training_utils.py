@@ -14,6 +14,7 @@ from datasets import get_dataset_config_names
 from logger import Logger
 from utils import get_device, load_weights, set_seed
 from dataset_utils_old import get_data
+from datetime import datetime
 
 from model_factory import ClassificationAndEncoderNetwork
 from dataset_factory import get_dataloaders
@@ -68,9 +69,40 @@ def _initialize_models(args):
 
     else:
         args.model = _create_base_model(args, is_main_model=True)
-        load_weights(args.model, args.trained_weights)
+        if args.trained_weights:
+            load_weights(args.model, args.trained_weights)
+        else:
+            print('[TRAINER] No custom weights provided')
+
         args.embedded_dim = args.model.embedded_dim
         print('[TRAINER] Initialized standard model')
+
+
+def _initialize_dyrelu_phasing(args):
+    """
+    Configures the DyReLU adapter to phase out over a specific number of EPOCHS.
+    """
+    if args.dyrelu_phasing_en:
+        # Starting phasing after a warmup
+        t_start_epoch = 10
+
+        if args.is_bacp == False:
+            total_epochs = args.epochs +  (args.epochs * args.recovery_epochs)
+            t_start_epoch = int(total_epochs * 0.1)
+            t_end_epoch = int(total_epochs * 0.85)
+            duration = t_end_epoch - t_start_epoch
+
+        else:
+            # Calculating total duration
+            duration = int(args.epochs + args.recovery_epochs + (0.25 * args.epochs_ft))
+            max_duration = int(args.epochs + args.recovery_epochs + args.epochs_ft)
+            t_end_epoch = min(t_start_epoch + duration, max_duration)
+
+        set_t_for_dyrelu_adapter(args.model, t_start_epoch, t_end_epoch)
+        print(f"[DyReLU Phasing] Schedule Configured (Epoch-based):")
+        print(f"  > Start Epoch: {t_start_epoch}")
+        print(f"  > End Epoch:   {t_end_epoch}")
+        print(f"  > Duration:    {int(duration)} epochs")
 
 
 # ----------------------------------------------------------------------

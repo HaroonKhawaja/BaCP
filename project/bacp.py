@@ -21,7 +21,8 @@ from training_utils import (
     _handle_tqdm_logs,
     _log_metrics,
     _get_sparsity_key,
-    _initialize_logs
+    _initialize_logs,
+    _initialize_dyrelu_phasing
 )
 from dataset_factory import load_cv_dataloaders
 from dyrelu_adapter import step_dyrelu_adapter, set_t_for_dyrelu_adapter
@@ -89,6 +90,7 @@ class BaCPTrainingArguments:
         _initialize_pruner(self)
         _initialize_paths_and_logger(self)
         _initialize_log_parameters(self)
+        _initialize_dyrelu_phasing(self)
 
 class BaCPTrainer:
     def __init__(self, bacp_training_args):
@@ -112,25 +114,6 @@ class BaCPTrainer:
         self.model.train()
         self.model_pt.eval()
         self.model_ft.eval()
-
-
-    def _initialize_dyrelu_phasing(self):
-        """
-        Calculates the total number of steps for the DyReLU phase-out 
-        and sets the schedule on the model.
-        The DyReLU is phased out linearly from t_start (100% DyReLU) 
-        to t_end (100% standard ReLU).
-        """
-        if self.dyrelu_phasing_en:
-            t_start = 0
-
-            # Phasing runs through pre-training (self.epochs), recovery (self.recovery_epochs), 
-            # and a fraction of the fine-tuning phase (0.25 * self.epochs_ft).
-            t_end = self.epochs = self.recovery_epochs + (0.25 * self.epochs_ft)
-            t_end = int(t_end)
-
-            set_t_for_dyrelu(self.model, t_start, t_end)
-            print(f"[DyReLU Phasing] Schedule set: t_start={t_start}, t_end={t_end}")
 
 
     def _initialize_lambdas(self):
@@ -192,8 +175,7 @@ class BaCPTrainer:
             torch.save(self.model.state_dict(), self.save_path)
         
         if self.enable_finetune:
-            # self.finetune(run)
-            pass
+            self.finetune(run)
 
     
     def finetune(self, run=None):
@@ -218,6 +200,8 @@ class BaCPTrainer:
         print(f"[TRAINER] Saving model to {self.save_path}")
 
         model_sparsity = check_model_sparsity(self.model)
+        print(f"[CHECK] SPARSITY : {model_sparsity}")
+
         if model_sparsity > self.target_sparsity:
             print(f"[TRAINER] Model sparsity is {model_sparsity}. Target sparsity is {self.target_sparsity}. Skipping finetuning.")
             return
@@ -251,6 +235,9 @@ class BaCPTrainer:
             # Recovery training
             desc = f"Training {curr_ft_epoch_str}"
             ft_loss = self._run_finetune_epoch(epoch, desc)
+
+            model_sparsity = check_model_sparsity(self.model)
+            print(f"[CHECK] SPARSITY : {model_sparsity}")
 
             # Recovery validation
             desc = f"Validation {curr_ft_epoch_str}"
@@ -570,13 +557,13 @@ class BaCPTrainer:
 
 
     def get_pruner(self):
-        # Loading sparse weights
-        load_weights(self.model, self.save_path)
-
         # Creating pruning module
         pruning_module = PRUNING_REGISTRY[self.pruning_type](
             self.model, self.epochs, self.target_sparsity, self.sparsity_scheduler
         )
+
+        # Loading sparse weights
+        load_weights(self.model, self.save_path)
 
         # Setting sparse mask
         zero_masks = {name: (param != 0).float() for name, param in self.model.named_parameters()}
