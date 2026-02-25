@@ -7,11 +7,15 @@ from torchvision.utils import make_grid
 import pickle
 
 def set_seed(seed=42):
+    random.seed(seed)
     np.random.seed(seed)
+    
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    print(f"[SEEDING] Global seed set to {seed}")
 
 def get_device():
     return 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -40,17 +44,19 @@ def freeze_weights(model):
         param.requires_grad = False
         
 def load_weights(model, path):
+    print(f"[LOADING] Loading weights: {path}")
     if not os.path.exists(path):
-        print(f"[ERROR] Could not load weights. Path does not exist: {path}")
-        raise Exception(f"Error loading weights: {path}")
+        print(f"> Could not load weights. Path does not exist: {path}")
+        # raise Exception(f"Error loading weights: {path}")
+        return False
     try:
+        print(f"> Full load successful!: {path}")
         state_dict = torch.load(path, map_location=get_device())
         model.load_state_dict(state_dict)
-        print(f"[SUCCESS] Full load successful!: {path}")
         return True
     except:
-        print(f"[ERROR] Could not load weights: {path}")
-        print(f"Attempting partial load")
+        print(f"> Could not load weights: {path}")
+        print(f"> Attempting partial load")
     
         state_dict = torch.load(path, map_location=get_device())
         filtered_state_dict = {
@@ -59,10 +65,10 @@ def load_weights(model, path):
             }
         try:
             missing, unexpected = model.load_state_dict(filtered_state_dict, strict=False)
-            print(f"[SUCCESS] Partial load successful!")
+            print(f"> Partial load successful! Number of keys missing: {len(missing)}")
             return True
         except Exception as e:
-            raise Exception(f"[FAIL] Error loading weights: {e}")
+            raise Exception(f"> Error loading weights: {e}")
     return False
               
 def graph_losses_n_accs(losses, train_accs, test_accs):

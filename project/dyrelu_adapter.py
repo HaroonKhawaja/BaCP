@@ -76,7 +76,7 @@ class DyReLUAdapter(nn.Module):
 
         if beta == 0.0:
             return self.relu(x)
-        if beta == 1.9:
+        if beta == 1.0:
             return self.dyrelu(x)
         
         return beta * self.dyrelu(x) + (1 - beta) * self.relu(x)

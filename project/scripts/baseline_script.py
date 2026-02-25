@@ -54,6 +54,9 @@ def run_training(args):
     for k, v in metrics.items():
         print(f"{k}: {v}")
 
+    print('  > Model saved at:', trainer.save_path)
+    print('  > Training finished')
+
 def main():
     args = baseline_parse_args()
     run_training(args)

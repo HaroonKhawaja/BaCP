@@ -52,7 +52,12 @@ def run_training(args):
 
     print("\nRun finished. Metrics:")
     for k, v in metrics.items():
+        if k == "accuracy":
+            v = round(v, 2)
         print(f"{k}: {v}")
+
+    print('  > Model saved at:', trainer.save_path)
+    print('  > Training finished')
 
 
 def main():

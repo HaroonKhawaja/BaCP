@@ -50,6 +50,9 @@ def baseline_parse_args():
     parser.add_argument('--dyrelu_en',         action='store_true')
     parser.add_argument('--dyrelu_phasing_en', action='store_true')
 
+    # Weight Sharing
+    parser.add_argument('--weight_sharing_en', action='store_true')
+
     # Non-trainer args
     parser.add_argument('--log_to_wandb',        action='store_true', help="Log results to Weights & Biases (WANDB).")
     parser.add_argument('--seed',                type=int,       default=42)
@@ -71,16 +74,16 @@ def pruning_parse_args():
     parser.add_argument('--pruning_type',       type=str,                       required=True)
     parser.add_argument('--target_sparsity',    type=float,                     required=True)
     parser.add_argument('--sparsity_scheduler', type=str,                       required=True)
-    
 
     # Optional arguments with defaults
     parser.add_argument('--batch_size',      type=int,      default=512)
     parser.add_argument('--optimizer_type',  type=str,      default='sgd')
     parser.add_argument('--learning_rate',   type=float,    default=0.1)
     parser.add_argument('--image_size',      type=int,      default=32)
+    parser.add_argument('--delta_T',         type=int,      default=100)
 
-    parser.add_argument('--epochs',          type=int,      default=5)
-    parser.add_argument('--recovery_epochs', type=int,      default=10)
+    parser.add_argument('--epochs',          type=int,      default=50)
+    parser.add_argument('--recovery_epochs', type=int,      default=0)
     parser.add_argument('--scheduler_type',  type=str,      default=None)
     parser.add_argument('--patience',        type=int,      default=None)
     parser.add_argument('--experiment_type', type=str,      default='pruning')
@@ -92,6 +95,9 @@ def pruning_parse_args():
     # DyReLU phasing
     parser.add_argument('--dyrelu_en',         action='store_true')
     parser.add_argument('--dyrelu_phasing_en', action='store_true')
+
+    # Weight Sharing
+    parser.add_argument('--weight_sharing_en', action='store_true')
 
     # Non-trainer args
     parser.add_argument('--log_to_wandb',        action='store_true', help="Log results to Weights & Biases (WANDB).")

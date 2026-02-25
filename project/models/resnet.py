@@ -269,6 +269,15 @@ def resnet34(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwarg
         dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en, 
         **kwargs
         )
+    
+def resnet34_wide(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwargs):
+    """Wide ResNet-34"""
+    kwargs["width_per_group"] = 64 * 2
+    return ResNet(
+        BasicBlock, [3, 4, 6, 3], num_classes=num_classes,
+        dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en, 
+        **kwargs
+        )
 
 
 def resnet50(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwargs):
