@@ -298,13 +298,122 @@ def resnet101(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwar
         )
 
 
+# ---------------------------------------------------------------------------
+# Wide ResNet-22 (WRRN-22) — official architecture (pre-activation blocks)
+# ---------------------------------------------------------------------------
+
+def _wrrn22_conv(in_channels, out_channels, kernel_size=3, stride=1):
+    """Conv helper with same-padding for WRN-22."""
+    return nn.Conv2d(in_channels, out_channels, kernel_size, stride, kernel_size // 2)
 
 
+def _wrrn22_bn_relu_conv(in_channels, out_channels,
+                         dyrelu_en=False, dyrelu_phasing_en=False):
+    """BN → ReLU → Conv sub-block used inside WRNBlock."""
+    if dyrelu_en:
+        relu = DyReLUB(in_channels)
+    elif dyrelu_phasing_en:
+        relu = DyReLUAdapter(in_channels)
+    else:
+        relu = nn.ReLU(inplace=True)
+
+    return nn.Sequential(
+        nn.BatchNorm2d(in_channels),
+        relu,
+        _wrrn22_conv(in_channels, out_channels),
+    )
 
 
+class WRNBlock(nn.Module):
+    """Pre-activation residual block for WideResNet-22."""
+
+    def __init__(self, input_channels, output_channels, stride=1,
+                 dyrelu_en=False, dyrelu_phasing_en=False):
+        super().__init__()
+
+        if dyrelu_en:
+            relu = DyReLUB(input_channels)
+        elif dyrelu_phasing_en:
+            relu = DyReLUAdapter(input_channels)
+        else:
+            relu = nn.ReLU(inplace=True)
+
+        self.bn_relu = nn.Sequential(nn.BatchNorm2d(input_channels), relu)
+        self.conv1 = _wrrn22_conv(input_channels, output_channels, stride=stride)
+        self.conv2 = _wrrn22_bn_relu_conv(output_channels, output_channels,
+                                          dyrelu_en, dyrelu_phasing_en)
+
+        self.shortcut = nn.Identity()
+        if input_channels != output_channels or stride != 1:
+            self.shortcut = _wrrn22_conv(input_channels, output_channels,
+                                         stride=stride, kernel_size=1)
+
+    def forward(self, x):
+        out = self.bn_relu(x)
+        residual = self.shortcut(out)
+        out = self.conv1(out)
+        out = self.conv2(out)
+        return out.add_(residual)
 
 
+def _wrrn22_make_group(in_ch, out_ch, n_blocks, stride,
+                       dyrelu_en=False, dyrelu_phasing_en=False):
+    """Construct one group of WRN residual blocks."""
+    layers = [WRNBlock(in_ch, out_ch, stride, dyrelu_en, dyrelu_phasing_en)]
+    for _ in range(1, n_blocks):
+        layers.append(WRNBlock(out_ch, out_ch, 1, dyrelu_en, dyrelu_phasing_en))
+    return layers
 
 
+class WideResNet22(nn.Module):
+    """Wide ResNet-22 — 3 groups × 3 blocks, channels [16, 96, 192, 384]."""
+
+    def __init__(self, n_groups=3, num_classes=1000, channel_start=16,
+                 dyrelu_en=False, dyrelu_phasing_en=False):
+        super().__init__()
+        n_channels = [channel_start, 96, 192, 384]
+
+        layers = [_wrrn22_conv(3, channel_start)]
+
+        for g in range(n_groups):
+            stride = 2 if g > 0 else 1
+            layers += _wrrn22_make_group(
+                n_channels[g], n_channels[g + 1], n_groups, stride,
+                dyrelu_en, dyrelu_phasing_en,
+            )
+
+        if dyrelu_en:
+            final_relu = DyReLUB(n_channels[-1])
+        elif dyrelu_phasing_en:
+            final_relu = DyReLUAdapter(n_channels[-1])
+        else:
+            final_relu = nn.ReLU(inplace=True)
+
+        layers += [
+            nn.BatchNorm2d(n_channels[-1]),
+            final_relu,
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(n_channels[-1], num_classes),
+        ]
+
+        self.layers = nn.Sequential(*layers)
+
+        # Weight initialisation (same scheme as ResNet above)
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        return self.layers(x)
 
 
+def wrrn22(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False, **kwargs):
+    """Wide ResNet-22 (WRRN-22)"""
+    return WideResNet22(
+        n_groups=3, num_classes=num_classes,
+        dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en,
+    )
