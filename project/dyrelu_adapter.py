@@ -20,8 +20,12 @@ class DyReLUB(nn.Module):
 
 
     def get_relu_coefs(self, x):
-        B, C, H, W = x.shape
-        theta = x.mean(dim=(2, 3))          # (B, C)
+        if x.dim() == 4:
+            B, C, H, W = x.shape
+            theta = x.mean(dim=(2, 3))          # (B, C)
+        else:
+            B, C = x.shape
+            thera = x
 
         theta = self.hyperfunction(theta)   # (B, 2*K*C)
         theta = theta * 2 - 1               # Normalize to [-1, 1]
@@ -38,9 +42,13 @@ class DyReLUB(nn.Module):
         a = theta_a * self.lambdas[0] + self.a_init
         b = theta_b * self.lambdas[1] + self.b_init
 
-        a = a.view(theta.shape[0], self.channels, self.K, 1, 1)
-        b = b.view(theta.shape[0], self.channels, self.K, 1, 1)
-
+        if x.dim() == 4:
+            a = a.view(theta.shape[0], self.channels, self.K, 1, 1)
+            b = b.view(theta.shape[0], self.channels, self.K, 1, 1)
+        else:
+            a = a.view(theta.shape[0], self.channels, self.K)
+            b = b.view(theta.shape[0], self.channels, self.K)
+            
         x_expanded = x.unsqueeze(2)         # (B, C, 1, H, W)
         out = a * x_expanded + b            # (B, C, K, H, W)
         
