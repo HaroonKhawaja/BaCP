@@ -24,8 +24,11 @@ class DyReLUB(nn.Module):
             B, C, H, W = x.shape
             theta = x.mean(dim=(2, 3))          # (B, C)
         else:
+            # Was `thera = x` -- a typo that left `theta` unbound on this branch,
+            # so DyReLUB raised UnboundLocalError for any non-4D input. That is
+            # the VGG classifier path, where DyReLUB(4096) receives [B, 4096].
             B, C = x.shape
-            thera = x
+            theta = x
 
         theta = self.hyperfunction(theta)   # (B, 2*K*C)
         theta = theta * 2 - 1               # Normalize to [-1, 1]
@@ -70,14 +73,21 @@ class DyReLUAdapter(nn.Module):
 
     def get_beta(self):
         if self.t_start is None or self.t_end is None:
-            raise Exception("Please set t_start and t_end")
-        
+            raise RuntimeError(
+                "DyReLU phasing window is unset. Call set_t_for_dyrelu_adapter("
+                "model, t_start, t_end) before training."
+            )
+
         if self.t < self.t_start:
             return 1.0
-        elif self.t_start <= self.t <= self.t_end:
-            return 1.0 - ((self.t - self.t_start) / (self.t_end - self.t_start))
-        else:
+        if self.t >= self.t_end:
             return 0.0
+
+        # A zero-length window (t_start == t_end) is a valid request for an
+        # instant switch, and previously divided by zero. The two guards above
+        # already cover it -- t >= t_end returns 0.0 -- so the denominator here
+        # is strictly positive.
+        return 1.0 - ((self.t - self.t_start) / (self.t_end - self.t_start))
         
     def forward(self, x):
         beta = self.get_beta()
@@ -106,8 +116,14 @@ def step_dyrelu_adapter(model):
     for m in model.modules():
         if isinstance(m, DyReLUAdapter):
             m.step()
-            beta = m.get_beta()
-            beta_val = beta
+            beta_val = m.get_beta()
+
+    # A model with no DyReLUAdapter modules leaves beta_val as None, and the
+    # f-string format spec then raised TypeError. Reachable whenever
+    # dyrelu_phasing_en is True but the model was built with dyrelu_en as well:
+    # the if/elif in BasicBlock picks DyReLUB, so no adapters exist to step.
+    if beta_val is None:
+        return
     print(f'[DyReLU ADAPTER] Updated Beta: {beta_val:.4f}')
 
 

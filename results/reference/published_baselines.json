@@ -1,0 +1,186 @@
+{
+  "_comment": [
+    "Sparse baselines the ladder is measured against. Transcribed from EAST",
+    "arXiv:2411.13545v4 (TMLR 2025) Table 1 and independently re-verified.",
+    "CITE v4: v1/v3 report DIFFERENT figures with no standard deviations, and",
+    "the 99.99% cell moved from 70.57 to 62.12 between them.",
+    "The +/- is over THREE runs."
+  ],
+  "source": "Li, Durrant, Markovic, Huang, Kundu, Chen, Yin, Leontidis, \"Pushing the Limits of Sparsity: A Bag of Tricks for Extreme Pruning\", TMLR 2025 (arXiv:2411.13545v4)",
+  "url": "https://arxiv.org/abs/2411.13545",
+  "n_runs": 3,
+  "protocol": {
+    "epochs": 250,
+    "batch_size": 128,
+    "optimizer": "SGD momentum 0.9",
+    "learning_rate": 0.1,
+    "weight_decay": 0.0001,
+    "lr_schedule": "CONTRADICTORY IN SOURCE: appendix Table B.1 says 10x[75,150]; main text says 10x at 1/2 and 3/4 of training (=125, 187)",
+    "layerwise": "ERK",
+    "delta_T": {
+      "rigl": 4000,
+      "set": 1500
+    },
+    "init": "UNSTATED in the paper; the CIFAR DST literature trains from scratch",
+    "prunes_classifier": "UNSUPPORTED by the paper text -- \"classifier\", \"last layer\", \"final layer\" and \"output layer\" have zero occurrences. Must be read off the ES2/ITOP code."
+  },
+  "resnet34/cifar10": {
+    "0.99": {
+      "rigl": [
+        92.92,
+        0.18
+      ],
+      "east": [
+        93.51,
+        0.13
+      ],
+      "set": [
+        93.09,
+        0.15
+      ],
+      "synflow": [
+        86.03,
+        0.71
+      ]
+    },
+    "0.999": {
+      "rigl": [
+        85.71,
+        0.23
+      ],
+      "east": [
+        86.99,
+        0.32
+      ],
+      "set": [
+        82.7,
+        0.91
+      ],
+      "synflow": [
+        61.61,
+        10.76
+      ]
+    },
+    "0.9995": {
+      "rigl": [
+        81.47,
+        0.32
+      ],
+      "east": [
+        83.83,
+        0.02
+      ],
+      "set": [
+        70.84,
+        1.51
+      ],
+      "synflow": [
+        56.33,
+        3.44
+      ]
+    },
+    "0.9999": {
+      "rigl": [
+        10.03,
+        0.19
+      ],
+      "east": [
+        62.12,
+        0.9
+      ],
+      "set": [
+        10.0,
+        0.0
+      ],
+      "synflow": [
+        10.0,
+        0.0
+      ]
+    }
+  },
+  "resnet34/cifar100": {
+    "0.99": {
+      "rigl": [
+        70.72,
+        0.25
+      ],
+      "east": [
+        71.14,
+        0.51
+      ]
+    },
+    "0.999": {
+      "rigl": [
+        50.26,
+        0.16
+      ],
+      "east": [
+        56.32,
+        0.31
+      ]
+    },
+    "0.9995": {
+      "rigl": [
+        38.44,
+        0.95
+      ],
+      "east": [
+        45.81,
+        0.6
+      ]
+    },
+    "0.9999": {
+      "rigl": [
+        1.14,
+        null
+      ],
+      "east": [
+        18.84,
+        null
+      ]
+    }
+  },
+  "resnet50/cifar10": {
+    "0.99": {
+      "rigl": [
+        92.75,
+        0.25
+      ],
+      "east": [
+        93.48,
+        0.13
+      ]
+    },
+    "0.999": {
+      "rigl": [
+        58.41,
+        42.03
+      ],
+      "east": [
+        86.16,
+        0.12
+      ]
+    },
+    "0.9995": {
+      "rigl": [
+        30.14,
+        10.85
+      ],
+      "east": [
+        81.18,
+        0.59
+      ]
+    },
+    "0.9999": {
+      "rigl": [
+        10.0,
+        null
+      ],
+      "east": [
+        49.55,
+        null
+      ]
+    }
+  },
+  "_anchor_note": "The ladder anchors at resnet34/cifar10 @ 0.999, where RigL is 85.71+/-0.23 and EAST 86.99+/-0.32. That pair is CONFIRMED and it is indeed the 99.9% level. Note RigL collapses to random at 99.99% (10.03) while EAST holds 62.12, so the 99.99% column is a mixture and must not be summarised with a mean +/- std -- see the plan on median/IQR/collapse-rate reporting."
+}

@@ -3,7 +3,6 @@ import os
 sys.path.append(os.path.abspath('..'))
 
 import torch
-import wandb
 from pathlib import Path
 
 from trainer import Trainer, TrainingArguments
@@ -22,12 +21,16 @@ def run_training(args):
     args_dict = vars(args)
 
     log_to_wandb = args_dict.pop('log_to_wandb')
-    seed = args_dict.pop('seed')
-    set_seed(seed)
+    # seed stays IN args_dict so it reaches the dataclass and gets recorded.
+    # __post_init__ re-seeds; this call covers anything before construction.
+    set_seed(args_dict['seed'])
 
     training_args = TrainingArguments(**args_dict)
     trainer = Trainer(training_args)
     if log_to_wandb:
+        # Imported here, not at module scope: wandb is optional, and a
+        # top-level import made even `--help` fail without it installed.
+        import wandb
         wandb_login()
         group = f'{args.model_name}-{args.experiment_type}'
         name = f'{args.model_name}-{args.experiment_type}-{args.dataset_name}-{get_timestamp()}'
@@ -41,7 +44,8 @@ def run_training(args):
             trainer.train(run)
 
             # Evaluate and log metrics
-            metrics = trainer.evaluate(run)
+            metrics = trainer.evaluate(run=run)  # keyword: evaluate(self, load=True, run=None),
+            # so a positional Run bound to `load` and never reached wandb
             wandb.log(metrics)
 
             run.log_model(path=trainer.save_path, name=name)

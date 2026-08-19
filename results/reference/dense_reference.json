@@ -1,0 +1,52 @@
+{
+  "_comment": [
+    "Published DENSE top-1, for the parity gate in 02_dense_baselines.",
+    "Transcribed from the sources named below and independently re-verified;",
+    "no value here was reconstructed from memory. A dense baseline below",
+    "these figures makes every \"matches or exceeds dense\" claim read as",
+    "\"exceeds our undertrained dense\", which is attack A1 in the plan.",
+    "tolerance is in absolute top-1 points."
+  ],
+  "resnet50/cifar10": {
+    "top1": 94.75,
+    "std": 0.01,
+    "tolerance": 1.0,
+    "source": "GraNet, Liu et al., NeurIPS 2021, arXiv:2106.10404, Table 1",
+    "url": "https://arxiv.org/abs/2106.10404",
+    "protocol": "160 epochs, batch 128, SGD(0.9) lr 0.1, x10 drop at [80,120], wd 5e-4",
+    "note": "Printed identically in GraNet Tables 1, 2, 6 and 9 -- four-way internal agreement."
+  },
+  "resnet50/cifar100": {
+    "top1": 78.23,
+    "std": 0.18,
+    "tolerance": 1.0,
+    "source": "GraNet, Liu et al., NeurIPS 2021, arXiv:2106.10404, Table 1",
+    "url": "https://arxiv.org/abs/2106.10404",
+    "protocol": "160 epochs, batch 128, SGD(0.9) lr 0.1, x10 drop at [80,120], wd 5e-4"
+  },
+  "vgg19/cifar10": {
+    "top1": 93.85,
+    "std": 0.05,
+    "tolerance": 1.0,
+    "source": "GraNet, Liu et al., NeurIPS 2021, arXiv:2106.10404, Table 1",
+    "url": "https://arxiv.org/abs/2106.10404",
+    "protocol": "160 epochs, batch 128, SGD(0.9) lr 0.1, x10 drop at [80,120], wd 5e-4",
+    "note": "GraSP (arXiv:2002.07376) reports 94.23 for VGG19/CIFAR-10 with no std. The two differ; GraNet is preferred here because it reports a std and because its sparse numbers are the ones being compared against."
+  },
+  "vgg19/cifar100": {
+    "top1": 73.43,
+    "std": 0.08,
+    "tolerance": 1.0,
+    "source": "GraNet, Liu et al., NeurIPS 2021, arXiv:2106.10404, Table 1",
+    "url": "https://arxiv.org/abs/2106.10404",
+    "protocol": "160 epochs, batch 128, SGD(0.9) lr 0.1, x10 drop at [80,120], wd 5e-4",
+    "note": "GraSP reports 74.16, again with no std."
+  },
+  "resnet34/cifar10": {
+    "top1": null,
+    "std": null,
+    "tolerance": null,
+    "source": "NOT FOUND",
+    "note": "NO published dense ResNet-34/CIFAR-10 baseline was located. GraNet covers ResNet-20/ResNet-50/VGG-19 only, and EAST reports no dense row. This is the ladder ANCHOR cell, so its dense parity cannot be checked against the literature -- state that as a limitation rather than borrowing a figure from a different architecture."
+  }
+}

@@ -1,0 +1,32 @@
+rung         n     mean    +-sd      delta             95% CI     change
+------------------------------------------------------------------------
+-- stage A ------------------------------------------------------------
+A0           1    10.94      --                                   no pruning at all
+A1           1     9.38      --      -1.56                        uniform layer-wise budget; classifier in the prunable scope
+A2           1     9.38      --       0.00                        classifier removed from the prunable scope
+A3           1     9.38      --       0.00                        layer-wise budget switched from uniform to ERK
+A4           1     9.38      --       0.00                        both, to close the 2x2
+A5           1     9.38      --       0.00                        static ERK mask replaced by dynamic topology
+A6           1     9.38      --       0.00                        RigL's schedule replaced by EAST's cyclic one
+-- stage B ------------------------------------------------------------
+B1           1     9.38      --       0.00                        ReLU replaced by DyReLU
+B2           1     9.38      --       0.00                        DyReLU phased out over training instead of held on
+B3           1     9.38      --       0.00                        residual blocks share weights
+-- stage C ------------------------------------------------------------
+C-null       1     9.38      --                                   routed through BaCPTrainer with one view and no contrastive terms
+C0           1     9.38      --                                   plain supervised training on the winning substrate
+C0b          1     4.69      --      -4.69                        two augmented views per step; objective unchanged
+C1           1    10.94      --       6.25                        dense-teacher logit distillation added
+C2           1     4.69      --      -6.25                        logit KD swapped for feature-level matching
+C3           1     4.69      --       0.00                        feature regression swapped for the contrastive objective
+-- stage D ------------------------------------------------------------
+D1           1     9.38      --       4.69                        snapshot teachers added to the contrastive term
+D2           1     4.69      --      -4.69                        the pretrained-model teacher added
+-- stage D4 -----------------------------------------------------------
+D4-noPrC     1     9.38      --       4.69                        PrC removed; remaining three weights renormalised to 1/3
+D4-noFiC     1     4.69      --       0.00                        FiC removed; remaining three weights renormalised to 1/3
+D4-noSnC     1     9.38      --       4.69                        SnC removed; remaining three weights renormalised to 1/3
+D4-noCE      1     4.69      --       0.00                        CE removed; remaining three weights renormalised to 1/3
+
+Noise floor: not estimable (no rung has 2+ successful seeds).
+Endpoint: test_acc_exact_pct. No test-set model selection; no early stopping.

@@ -1,0 +1,37 @@
+# CPU-only environment for running the test suite locally (no GPU needed).
+#   python -m pip install -r requirements-dev.txt
+#
+# Several entries are here because of *module-scope* imports in the codebase,
+# not because the tests use them directly:
+#
+#   transformers  -> training_utils.py imports get_linear_schedule_with_warmup
+#                    at module scope. Drops out once that import moves inside
+#                    _initialize_scheduler.
+#   matplotlib    -> pruning_factory.py imports pyplot at module scope (used
+#                    only by check_sparsity_distribution). Needs MPLBACKEND=Agg,
+#                    which conftest.py sets.
+#   datasets      -> dataset_factory.py imports load_dataset and
+#                    get_dataset_config_names at module scope and never uses
+#                    them on the CV path. ~4s of import time per session; drops
+#                    out once those imports are made lazy.
+#   pyflakes      -> drives the L0 static-analysis tests.
+#
+# Excluded: wandb (scripts only), fvcore (compute_metrics.py, which nothing
+# imports).
+#
+# pandas + scipy are needed by results.load_runs, the 08_tables aggregation and the
+# experiment-invariant tests (paired Wilcoxon). Not needed to write a record.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+numpy==1.26.4
+transformers==4.46.3
+datasets==3.1.0
+matplotlib==3.9.2
+tqdm==4.67.1
+pytest==8.3.4
+pyflakes==3.2.0
+pandas==2.2.3
+scipy==1.14.1

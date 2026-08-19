@@ -1,3 +1,41 @@
 project/data
 project/__pycache__
 C:\Users\haroo\OneDrive\projects\research_w_Dr_Tahir\BaCP\project\__pycache__
+
+# Test environment and artifacts
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Logger writes here, relative to CWD (project/scripts/ in practice)
+log_records/
+project/scripts/log_records/
+# Dataset caches. _initialize_data_loaders sets cache_dir to './cache' relative
+# to the CWD, which is project/scripts/ when the runner invokes a script and
+# project/ when a notebook does -- so both locations appear.
+cache/
+project/cache/
+project/scripts/cache/
+
+# Run records. The JSON records are the source of truth and ARE worth keeping,
+# but checkpoints and logs are large and regenerable. Ignore the bulk and keep
+# the evidence.
+results/logs/
+results/*.pt
+results/**/*.pt
+results/_superseded_test_fixtures/
+
+# Model checkpoints. _initialize_paths_and_logger writes these relative to the
+# CWD, so a runner-driven sweep lands them under project/scripts/research/.
+# They are large (85 MB each, 7 GB after one tier-0 sweep) and fully
+# regenerable -- the RECORD is the artefact worth keeping, and it carries the
+# checkpoint's sha256 so provenance survives without the bytes.
+research/
+project/scripts/research/
+*.pt
+*.pth
+
+# Superseded records, archived rather than deleted when a run is re-done.
+results/runs/_superseded/
+results/runs/*.patch

@@ -3,7 +3,6 @@ import os
 sys.path.append(os.path.abspath('..'))
 
 import torch
-import wandb
 from pathlib import Path
 
 from bacp import BaCPTrainer, BaCPTrainingArguments
@@ -23,8 +22,9 @@ def run_training(args):
 
     # Pop non-trainer arguments before creating BaCPTrainingArguments
     log_to_wandb = args_dict.pop('log_to_wandb')
-    seed = args_dict.pop('seed')
-    set_seed(seed)
+    # seed stays IN args_dict so it reaches the dataclass and gets recorded.
+    # __post_init__ re-seeds; this call covers anything before construction.
+    set_seed(args_dict['seed'])
     
     # Initialize arguments and trainer
     bacp_training_args = BaCPTrainingArguments(**args_dict)
@@ -34,6 +34,9 @@ def run_training(args):
     final_args = bacp_trainer    
 
     if log_to_wandb:
+        # Imported here, not at module scope: wandb is optional, and a
+        # top-level import made even `--help` fail without it installed.
+        import wandb
         wandb_login()
         
         datestamp = final_args.datestamp
@@ -58,7 +61,8 @@ def run_training(args):
             bacp_trainer.train(run)
 
             # Evaluate and log metrics
-            metrics = bacp_trainer.evaluate(run)
+            metrics = bacp_trainer.evaluate(run=run)  # keyword: evaluate(self, weights=None,
+            # run=None), so a positional Run was passed where a checkpoint path goes
             wandb.log(metrics)
 
             # Use the save path already set in the trainer

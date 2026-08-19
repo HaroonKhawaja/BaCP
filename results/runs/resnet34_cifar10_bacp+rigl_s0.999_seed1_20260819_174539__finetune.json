@@ -1,0 +1,486 @@
+{
+ "schema_version": 1,
+ "record_id": "resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174539__finetune",
+ "run_id": "resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174539",
+ "phase": "finetune",
+ "experiment_group": "t0.D2.resnet34.cifar10.s0.999.seed1",
+ "experiment_type": "ladder-D",
+ "status": "ok",
+ "error": null,
+ "notes": "",
+ "started_at": "2026-08-19T12:45:39.578436+00:00",
+ "ended_at": "2026-08-19T12:46:16.873681+00:00",
+ "duration_s": 38.595,
+ "cmdline": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\bacp_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type rigl --layerwise_alloc erk --prune_task_head --lambdas 0.25 0.25 0.25 0.25 --num_snapshots 2 --n_views 2 --distill_mode none --lambda_kd 0.0 --contrastive_mode cap --proj_mode tied_frozen --enable_finetune --optimizer_type_ft adamw --learning_rate_ft 0.0001 --epochs_ft 2 --experiment_type ladder-D --trained_weights C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1",
+ "git_sha": "bdf9d105215d6b005907ebb494caff57cf8e51e2",
+ "git_branch": "main",
+ "git_dirty": true,
+ "git_n_dirty": 39,
+ "git_untracked": 13,
+ "git_patch_sha1": "0afbe55d7d648cb74697923113af3b5031269e47",
+ "code_fingerprint": "b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc",
+ "hostname": "Haroon-Zbook",
+ "platform": "Windows-11-10.0.26200-SP0",
+ "python_version": "3.12.10",
+ "torch_version": "2.5.1+cpu",
+ "torchvision_version": "0.20.1+cpu",
+ "transformers_version": "4.46.3",
+ "numpy_version": "1.26.4",
+ "cuda_version": null,
+ "cudnn_version": null,
+ "gpu_name": null,
+ "gpu_count": 0,
+ "gpu_mem_total_gb": null,
+ "cudnn_deterministic": true,
+ "cudnn_benchmark": false,
+ "deterministic_algorithms": false,
+ "seed": 1,
+ "seed_source": "args",
+ "val_split_seed": 1234,
+ "model_name": "resnet34",
+ "model_family": "resnet",
+ "model_type": "cv",
+ "model_task": "classification",
+ "pretrained": true,
+ "init_source": "random",
+ "dataset_name": "cifar10",
+ "num_classes": 10,
+ "image_size": 32,
+ "n_views": 2,
+ "batch_size": 32,
+ "num_workers": 0,
+ "amp_enabled": true,
+ "train_batches": 2,
+ "eval_batches": 2,
+ "eval_split": "test",
+ "eval_samples_seen": 64,
+ "eval_samples_dropped": 0,
+ "embedded_dim": 512,
+ "num_out_features": 128,
+ "total_params": 21347786,
+ "trainable_params": 21282122,
+ "prunable_params": 21265088,
+ "nonprunable_params": 82698,
+ "nonzero_all_params": 103244,
+ "active_prunable_params": 21288,
+ "mask_total": 21265088,
+ "mask_covers_prunable": true,
+ "shared_params_total": null,
+ "shared_params_unique": null,
+ "method": "bacp+rigl",
+ "pruner": "rigl",
+ "is_bacp": true,
+ "contrastive_mode": "cap",
+ "proj_mode": "tied_frozen",
+ "lambdas_json": "[0.25, 0.25, 0.25, 0.25]",
+ "learnable_lambdas": false,
+ "tau": 0.07,
+ "num_snapshots": 2,
+ "n_snapshots_used": 1,
+ "distill_mode": "none",
+ "lambda_kd": 0.0,
+ "dyrelu_en": false,
+ "dyrelu_phasing_en": false,
+ "weight_sharing_en": false,
+ "sparsity_requested": 0.999,
+ "sparsity_target_adjusted": 0.999,
+ "sparsity_scheduler": "cubic",
+ "delta_T": 1,
+ "east_s_min": null,
+ "east_prune_rate": null,
+ "east_Tc_ratio": null,
+ "rigl_alpha": 0.3,
+ "layerwise_alloc": "erk",
+ "wanda_group": "output",
+ "prune_task_head": true,
+ "prune_embeddings": false,
+ "scope_key": "backbone+head",
+ "initial_sparsity": 2.8215260618719285e-07,
+ "optimizer_type": "sgd",
+ "learning_rate": 0.1,
+ "weight_decay": 0.0005,
+ "scheduler_type": "cosine",
+ "epochs": 2,
+ "recovery_epochs": 0,
+ "patience": 0,
+ "epochs_ft": 2,
+ "optimizer_type_ft": "adamw",
+ "learning_rate_ft": 0.0001,
+ "total_steps": 4,
+ "warmup_steps": null,
+ "epochs_completed": 2,
+ "early_stopped": false,
+ "limit_train_batches": 2,
+ "limit_eval_batches": 2,
+ "is_smoke": true,
+ "trained_weights": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt",
+ "save_path": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_rigl_0.999_ladder-D_20260819_174539_finetune.pt",
+ "checkpoint_sha256": "54bdb695d1bc9a1fb74cd9a0fc6d2116638f26620823898906ebf15947852af8",
+ "checkpoint_bytes": 85543930,
+ "trained_weights_sha256": "7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb",
+ "test_acc_pct": 4.6875,
+ "test_loss": 2.296875,
+ "test_ppl": 9.943061828613281,
+ "test_acc_exact_pct": 4.6875,
+ "test_loss_exact": 2.306718111038208,
+ "test_ppl_exact": 10.041415707419977,
+ "metrics_are_batch_means": true,
+ "final_train_loss": null,
+ "sparsity_reported": 0.9989989225532478,
+ "sparsity_mask": 0.9989989225532478,
+ "sparsity_value": 0.9989989225532478,
+ "sparsity_gap": 0.0,
+ "sparsity_all_params": 0.9951637139326767,
+ "wall_total_s": 38.595,
+ "wall_eval_s": 0.633,
+ "s_per_epoch_mean": 9.032,
+ "s_per_epoch_std": 1.408,
+ "peak_gpu_mem_gb": null,
+ "latency_ms_bs1": null,
+ "latency_ms_batch": null,
+ "throughput_samples_s": null,
+ "gflops_dense": null,
+ "gflops_sparse_est": null,
+ "flops_method": null,
+ "inference_dtype": null,
+ "detail": {
+  "logger_params": {
+   "model_name": "resnet34",
+   "model_type": "cv",
+   "dataset_name": "cifar10",
+   "num_classes": 10,
+   "batch_size": 32,
+   "optimizer_type": "sgd",
+   "learning_rate": 0.1,
+   "tau": 0.07,
+   "num_out_features": 128,
+   "image_size": 32,
+   "epochs": 2,
+   "scheduler_type": "cosine",
+   "patience": 0,
+   "trained_weights": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt",
+   "experiment_type": "ladder-D",
+   "log_epochs": false,
+   "enable_tqdm": false,
+   "enable_mixed_precision": true,
+   "databricks_env": false,
+   "num_workers": 0,
+   "pruning_type": "rigl",
+   "target_sparsity": 0.999,
+   "sparsity_scheduler": "cubic",
+   "recovery_epochs": 0,
+   "enable_finetune": true,
+   "epochs_ft": 2,
+   "optimizer_type_ft": "adamw",
+   "learning_rate_ft": 0.0001,
+   "lambdas": [
+    0.25,
+    0.25,
+    0.25,
+    0.25
+   ],
+   "learnable_lambdas": false,
+   "n_views": 2,
+   "contrastive_mode": "cap",
+   "proj_mode": "tied_frozen",
+   "num_snapshots": 2,
+   "distill_mode": "none",
+   "lambda_kd": 0.0,
+   "kd_temperature": 4.0,
+   "feature_distill_metric": "cosine",
+   "dyrelu_en": false,
+   "dyrelu_phasing_en": false,
+   "weight_sharing_en": false,
+   "delta_T": 1,
+   "layerwise_alloc": "erk",
+   "wanda_group": "output",
+   "weight_decay": 0.0005,
+   "limit_train_batches": 2,
+   "limit_eval_batches": 2,
+   "prune_task_head": true,
+   "prune_embeddings": false,
+   "seed": 1,
+   "val_split_seed": 1234,
+   "deterministic": false,
+   "auto_init": true,
+   "device": "cpu",
+   "retrain": false,
+   "is_bacp": true,
+   "embedded_dim": 512,
+   "cache_dir": "./cache",
+   "total_steps": 4,
+   "initial_sparsity": 2.8215260618719285e-07,
+   "prune": 0.999,
+   "requested_sparsity": 0.999,
+   "adjusted_sparsity": 0.999,
+   "datestamp": "20260819_174539",
+   "base_path": ".\\research\\bacp\\resnet34\\cifar10\\20260819",
+   "save_path": ".\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_rigl_0.999_ladder-D_20260819_174539.pt"
+  },
+  "epoch_times_s": [
+   9.51,
+   9.409,
+   10.218,
+   6.99
+  ],
+  "excluded_keywords": [
+   "hyperfunction",
+   "relu",
+   "encoder_head",
+   "embedding"
+  ],
+  "layer_sparsity": {
+   "model.conv1.weight": {
+    "numel": 1728,
+    "zeros": 1702,
+    "mask_active": 26
+   },
+   "model.layer1.0.conv1.weight": {
+    "numel": 36864,
+    "zeros": 36702,
+    "mask_active": 162
+   },
+   "model.layer1.0.conv2.weight": {
+    "numel": 36864,
+    "zeros": 36658,
+    "mask_active": 206
+   },
+   "model.layer1.1.conv1.weight": {
+    "numel": 36864,
+    "zeros": 36673,
+    "mask_active": 191
+   },
+   "model.layer1.1.conv2.weight": {
+    "numel": 36864,
+    "zeros": 36674,
+    "mask_active": 190
+   },
+   "model.layer1.2.conv1.weight": {
+    "numel": 36864,
+    "zeros": 36659,
+    "mask_active": 205
+   },
+   "model.layer1.2.conv2.weight": {
+    "numel": 36864,
+    "zeros": 36703,
+    "mask_active": 161
+   },
+   "model.layer2.0.conv1.weight": {
+    "numel": 73728,
+    "zeros": 73518,
+    "mask_active": 210
+   },
+   "model.layer2.0.conv2.weight": {
+    "numel": 147456,
+    "zeros": 147108,
+    "mask_active": 348
+   },
+   "model.layer2.0.downsample.0.weight": {
+    "numel": 8192,
+    "zeros": 8132,
+    "mask_active": 60
+   },
+   "model.layer2.1.conv1.weight": {
+    "numel": 147456,
+    "zeros": 147061,
+    "mask_active": 395
+   },
+   "model.layer2.1.conv2.weight": {
+    "numel": 147456,
+    "zeros": 147083,
+    "mask_active": 373
+   },
+   "model.layer2.2.conv1.weight": {
+    "numel": 147456,
+    "zeros": 147048,
+    "mask_active": 408
+   },
+   "model.layer2.2.conv2.weight": {
+    "numel": 147456,
+    "zeros": 147037,
+    "mask_active": 419
+   },
+   "model.layer2.3.conv1.weight": {
+    "numel": 147456,
+    "zeros": 147076,
+    "mask_active": 380
+   },
+   "model.layer2.3.conv2.weight": {
+    "numel": 147456,
+    "zeros": 147104,
+    "mask_active": 352
+   },
+   "model.layer3.0.conv1.weight": {
+    "numel": 294912,
+    "zeros": 294489,
+    "mask_active": 423
+   },
+   "model.layer3.0.conv2.weight": {
+    "numel": 589824,
+    "zeros": 589114,
+    "mask_active": 710
+   },
+   "model.layer3.0.downsample.0.weight": {
+    "numel": 32768,
+    "zeros": 32638,
+    "mask_active": 130
+   },
+   "model.layer3.1.conv1.weight": {
+    "numel": 589824,
+    "zeros": 589063,
+    "mask_active": 761
+   },
+   "model.layer3.1.conv2.weight": {
+    "numel": 589824,
+    "zeros": 589062,
+    "mask_active": 762
+   },
+   "model.layer3.2.conv1.weight": {
+    "numel": 589824,
+    "zeros": 589114,
+    "mask_active": 710
+   },
+   "model.layer3.2.conv2.weight": {
+    "numel": 589824,
+    "zeros": 589066,
+    "mask_active": 758
+   },
+   "model.layer3.3.conv1.weight": {
+    "numel": 589824,
+    "zeros": 589109,
+    "mask_active": 715
+   },
+   "model.layer3.3.conv2.weight": {
+    "numel": 589824,
+    "zeros": 589095,
+    "mask_active": 729
+   },
+   "model.layer3.4.conv1.weight": {
+    "numel": 589824,
+    "zeros": 589046,
+    "mask_active": 778
+   },
+   "model.layer3.4.conv2.weight": {
+    "numel": 589824,
+    "zeros": 589137,
+    "mask_active": 687
+   },
+   "model.layer3.5.conv1.weight": {
+    "numel": 589824,
+    "zeros": 589069,
+    "mask_active": 755
+   },
+   "model.layer3.5.conv2.weight": {
+    "numel": 589824,
+    "zeros": 589074,
+    "mask_active": 750
+   },
+   "model.layer4.0.conv1.weight": {
+    "numel": 1179648,
+    "zeros": 1178840,
+    "mask_active": 808
+   },
+   "model.layer4.0.conv2.weight": {
+    "numel": 2359296,
+    "zeros": 2357860,
+    "mask_active": 1436
+   },
+   "model.layer4.0.downsample.0.weight": {
+    "numel": 131072,
+    "zeros": 130866,
+    "mask_active": 206
+   },
+   "model.layer4.1.conv1.weight": {
+    "numel": 2359296,
+    "zeros": 2357810,
+    "mask_active": 1486
+   },
+   "model.layer4.1.conv2.weight": {
+    "numel": 2359296,
+    "zeros": 2357855,
+    "mask_active": 1441
+   },
+   "model.layer4.2.conv1.weight": {
+    "numel": 2359296,
+    "zeros": 2357797,
+    "mask_active": 1499
+   },
+   "model.layer4.2.conv2.weight": {
+    "numel": 2359296,
+    "zeros": 2357807,
+    "mask_active": 1489
+   },
+   "cls_head.weight": {
+    "numel": 5120,
+    "zeros": 4951,
+    "mask_active": 169
+   }
+  },
+  "total_losses": {
+   "0.999": [
+    4.045815467834473,
+    5.775652170181274
+   ]
+  },
+  "prc_losses": {
+   "0.999": [
+    1.734375,
+    1.734375
+   ]
+  },
+  "fic_losses": {
+   "0.999": [
+    1.734375,
+    1.734375
+   ]
+  },
+  "snc_losses": {
+   "0.999": [
+    0.0,
+    1.734375
+   ]
+  },
+  "ce_losses": {
+   "0.999": [
+    0.5770654678344727,
+    0.5725271701812744
+   ]
+  },
+  "training_acc": {
+   "0.999": [
+    7.8125,
+    10.9375
+   ]
+  },
+  "finetuning_loss": {
+   "0.999": [
+    2.347119450569153,
+    2.3179510831832886
+   ]
+  },
+  "finetuning_acc": {
+   "0.999": [
+    14.0625,
+    14.0625
+   ]
+  },
+  "lambda_history": {
+   "lambda1": [
+    0.25,
+    0.25
+   ],
+   "lambda2": [
+    0.25,
+    0.25
+   ],
+   "lambda3": [
+    0.25,
+    0.25
+   ],
+   "lambda4": [
+    0.25,
+    0.25
+   ]
+  }
+ }
+}

@@ -6,21 +6,13 @@ from tqdm import tqdm
 from torch.amp import GradScaler, autocast
 from dataclasses import dataclass
 from training_utils import (
-    _initialize_models,
-    _initialize_data_loaders,
-    _initialize_optimizer,
-    _initialize_scheduler,
-    _initialize_pruner,
-    _initialize_paths_and_logger,
-    _initialize_log_parameters,
-    _initialize_dyrelu_phasing,
+    _finalize_run,
+    _initialize_all,
     _initialize_logs,
-    
+
     _optimizer_step,
-    _epoch_pruning_step,
     _step_pruning_step,
-    _handle_wanda_calibration,
-    
+
     _handle_data_to_device,
     _handle_tqdm_logs,
     _log_metrics,
@@ -28,7 +20,7 @@ from training_utils import (
 )
 from dyrelu_adapter import step_dyrelu_adapter
 from pruning_factory import check_model_sparsity
-from utils import load_weights
+from utils import load_weights, set_seed
 
 @dataclass
 class TrainingArguments:
@@ -60,11 +52,55 @@ class TrainingArguments:
     recovery_epochs:        int = 0
     pruning_module:         object = None
     delta_T:                int = 100
+    # How the global sparsity budget is split across layers. Only read by
+    # LocalMagnitudePrune ('erk' | 'uniform'); RigL and EAST always use ERK.
+    # A config field rather than a pruner default so it reaches logger_params and
+    # the run record -- the two settings report different things.
+    layerwise_alloc:        str = 'erk'
+    # Wanda's comparison group: 'output' (per output neuron, Wanda's headline
+    # setting for LLMs) or 'layer' (one threshold per layer). Wanda's Appendix A
+    # finds per-output does NOT transfer to image classifiers, so this is our
+    # design choice and is recorded as one.
+    wanda_group:            str = 'output'
+    # L2 / weight decay. 1e-4 is EAST's value (TMLR 2025, Table B.1); GraNet uses
+    # 5e-4. Which one is correct depends entirely on which paper's numbers you
+    # intend to sit beside, so it is a declared field rather than a constant.
+    weight_decay:           float = 5e-4
+    # Tier-0 smoke controls: truncate the loaders to N batches. 0 = no limit.
+    # Always recorded, so a truncated run cannot be mistaken for a real one.
+    limit_train_batches:    int = 0
+    limit_eval_batches:     int = 0
 
     # DyReLU / EAST
     dyrelu_en:              bool = False
     dyrelu_phasing_en:      bool = False
     weight_sharing_en:      bool = False
+
+    # Prunable scope. The paper's appendix D.4 keeps task heads dense; dynamic
+    # sparse training conventionally prunes everything. Both are defensible, but
+    # they report different quantities -- see pruning_factory.set_prunable_scope.
+    prune_task_head:        bool = False
+    # Off by default and dangerous for transformers: DistilBERT and RoBERTa tie
+    # word_embeddings to the output projection, so pruning embeddings also prunes
+    # the LM head, and the embedding table then dominates the sparsity denominator.
+    prune_embeddings:       bool = False
+
+    # Run seed. Previously popped from args_dict in the scripts before the dataclass
+    # was constructed, so it never reached args and was never recorded anywhere --
+    # making every run un-reproducible after the fact.
+    seed:                   int = 42
+    # Train/val split seed, deliberately separate from `seed`. See
+    # dataset_factory.load_cv_datasets for why the split must not track the run seed.
+    val_split_seed:         int = 1234
+    # torch.use_deterministic_algorithms. Off by default: it hard-errors on ops with
+    # no deterministic kernel and costs throughput. Recorded either way.
+    deterministic:          bool = False
+
+    # Set False to construct the arguments object without building models,
+    # dataloaders, optimizer or pruner. Only the cheap prefix in __post_init__
+    # runs. Used by the test suite so the dataclass is constructible on CPU with
+    # no /dbfs checkpoints; not exposed on the CLI.
+    auto_init:              bool = True
 
     def __post_init__(self):
         self.scaler = GradScaler() if self.enable_mixed_precision else None
@@ -72,16 +108,17 @@ class TrainingArguments:
         self.retrain = (self.recovery_epochs > 0)
         self.is_bacp = False
 
-        _initialize_models(self)
-        _initialize_data_loaders(self)
-        _initialize_optimizer(self)
-        _initialize_scheduler(self)
+        if not self.auto_init:
+            return
 
-        _initialize_pruner(self)
+        # Seed here, not only in the scripts: this guarantees the recorded seed is
+        # the one actually active when models were built and the val split drawn.
+        set_seed(self.seed)
+        if self.deterministic:
+            os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
+            torch.use_deterministic_algorithms(True)
 
-        _initialize_paths_and_logger(self)
-        _initialize_log_parameters(self)
-        _initialize_dyrelu_phasing(self)
+        _initialize_all(self)
 
 class Trainer:
     """
@@ -156,7 +193,8 @@ class Trainer:
             final_metrics[key] = value
         final_metrics['sparsity'] = sparsity
 
-        _log_metrics(self, 'Final', final_metrics, run) 
+        _log_metrics(self, 'Final', final_metrics, run)
+        _finalize_run(self, final_metrics)
 
         return final_metrics
     
@@ -257,27 +295,41 @@ class Trainer:
         current_samples = 0
         current_loss = 0
 
+        # current_loss accumulates a SUM over samples so the division below
+        # recovers a mean. Both branches previously got this wrong: the CV branch
+        # never assigned it at all (so every vision run reported val_loss None and
+        # perplexity None, leaving accuracy as the only metric and forcing early
+        # stopping to key off accuracy), and the wikitext2 branch assigned
+        # outputs.loss -- already a mean over masked tokens -- which was then
+        # divided by the token count a second time, pinning avg_loss near 0 and
+        # perplexity at ~1.0 for every batch.
         if self.model_type == 'llm':
             if self.dataset_name == 'wikitext2':
                 mask = (labels != -100)
 
-                logits = outputs.logits[mask]                        
+                logits = outputs.logits[mask]
                 masked_labels = labels[mask]
                 preds = torch.argmax(logits, dim=-1)
 
                 current_correct = (preds == masked_labels).sum().item()
                 current_samples = mask.sum().item()
-                current_loss = outputs.loss.item()
+                current_loss = outputs.loss.item() * current_samples
             else:
-                preds = torch.argmax(outputs.logits, dim=1)
+                logits = outputs.logits
+                preds = torch.argmax(logits, dim=1)
                 current_correct = (preds == labels).sum().item()
                 current_samples = labels.size(0)
-                
+                current_loss = self.criterion(logits, labels).item() * current_samples
+
         else:
             logits = outputs.logits if hasattr(outputs, 'logits') else outputs
             preds = logits.max(1)[1]
             current_correct = (preds == labels).sum().item()
             current_samples = labels.size(0)
+            current_loss = self.criterion(logits, labels).item() * current_samples
+
+        if current_samples == 0:
+            return {'batch_val_loss': 0.0, 'batch_accuracy': 0.0, 'batch_perplexity': 1.0}
 
         avg_loss = current_loss / current_samples
         avg_accuracy = 100 * current_correct / current_samples

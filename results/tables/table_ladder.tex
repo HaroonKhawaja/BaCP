@@ -1,0 +1,43 @@
+% generated  2026-08-19T12:50:23.177586+00:00
+% git        bdf9d105215d6b005907ebb494caff57cf8e51e2 (main) DIRTY
+% fingerprint b700ed0ce138b18a
+% rows       22 planned, 22 ok, 0 failed, 0 missing
+% !! 22 of these rows are TIER-0 SMOKE runs on truncated loaders. They are not measurements and must not be published.
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{llrrrr}
+\toprule
+Rung & Change & $n$ & Top-1 (\%) & $\Delta$ & 95\% CI \\
+\midrule
+A0 & no pruning at all & 1 & 10.94 & -- & -- \\
+A1 & uniform layer-wise budget; classifier in the prunable scope & 1 & 9.38 & -1.56 & -- \\
+A2 & classifier removed from the prunable scope & 1 & 9.38 & +0.00 & -- \\
+A3 & layer-wise budget switched from uniform to ERK & 1 & 9.38 & +0.00 & -- \\
+A4 & both, to close the 2x2 & 1 & 9.38 & +0.00 & -- \\
+A5 & static ERK mask replaced by dynamic topology & 1 & 9.38 & +0.00 & -- \\
+A6 & RigL's schedule replaced by EAST's cyclic one & 1 & 9.38 & +0.00 & -- \\
+\cmidrule(lr){1-6}
+B1 & ReLU replaced by DyReLU & 1 & 9.38 & +0.00 & -- \\
+B2 & DyReLU phased out over training instead of held on & 1 & 9.38 & +0.00 & -- \\
+B3 & residual blocks share weights & 1 & 9.38 & +0.00 & -- \\
+\cmidrule(lr){1-6}
+C-null & routed through BaCPTrainer with one view and no contrastive terms & 1 & 9.38 & -- & -- \\
+C0 & plain supervised training on the winning substrate & 1 & 9.38 & -- & -- \\
+C0b & two augmented views per step; objective unchanged & 1 & 4.69 & -4.69 & -- \\
+C1 & dense-teacher logit distillation added & 1 & 10.94 & +6.25 & -- \\
+C2 & logit KD swapped for feature-level matching & 1 & 4.69 & -6.25 & -- \\
+C3 & feature regression swapped for the contrastive objective & 1 & 4.69 & +0.00 & -- \\
+\cmidrule(lr){1-6}
+D1 & snapshot teachers added to the contrastive term & 1 & 9.38 & +4.69 & -- \\
+D2 & the pretrained-model teacher added & 1 & 4.69 & -4.69 & -- \\
+\cmidrule(lr){1-6}
+D4-noPrC & PrC removed; remaining three weights renormalised to 1/3 & 1 & 9.38 & +4.69 & -- \\
+D4-noFiC & FiC removed; remaining three weights renormalised to 1/3 & 1 & 4.69 & +0.00 & -- \\
+D4-noSnC & SnC removed; remaining three weights renormalised to 1/3 & 1 & 9.38 & +4.69 & -- \\
+D4-noCE & CE removed; remaining three weights renormalised to 1/3 & 1 & 4.69 & +0.00 & -- \\
+\bottomrule
+\end{tabular}
+\caption{Ablation ladder on ResNet-34 / CIFAR-10 at 99.9\% sparsity. Each rung changes exactly one thing relative to the rung above it and inherits everything else. $\Delta$ is against the inherited rung; Stage A is unpaired (Welch), Stages B--D are seed-paired. }
+\label{tab:ladder}
+\end{table}

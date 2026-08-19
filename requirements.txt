@@ -1,0 +1,23 @@
+# Full environment, for Databricks GPU runs.
+#
+# torch>=2.4 is a hard floor, not a preference: trainer.py and bacp.py import
+# `torch.amp.GradScaler` / `autocast(device_type=...)`, which only exist under
+# torch.amp from 2.4 onward.
+#
+# numpy is pinned to 1.26.x rather than 2.x because fvcore is unmaintained and
+# brittle against the NumPy 2 ABI.
+#
+# pandas is required by results.rebuild_index's readers and by the table notebooks.
+# It is NOT needed to *write* a record -- results.py's writer is stdlib-only, so a
+# training run never fails for want of pandas.
+
+torch==2.5.1
+torchvision==0.20.1
+transformers==4.46.3
+datasets==3.1.0
+numpy==1.26.4
+matplotlib==3.9.2
+tqdm==4.67.1
+wandb==0.18.7
+fvcore==0.1.5.post20221221
+pandas==2.2.3

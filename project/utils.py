@@ -44,32 +44,48 @@ def freeze_weights(model):
         param.requires_grad = False
         
 def load_weights(model, path):
+    """Load a checkpoint into `model`. Returns True only if weights were loaded.
+
+    Callers must check the return value. A False here means the model still holds
+    whatever it was initialised with -- which, for a run that asked for pretrained
+    weights, means random init. Silently continuing from that point produces a
+    "pretrained" baseline that was never pretrained.
+    """
     print(f"[LOADING] Loading weights: {path}")
+
+    if path is None:
+        print("> Could not load weights: no path given")
+        return False
+
     if not os.path.exists(path):
         print(f"> Could not load weights. Path does not exist: {path}")
-        # raise Exception(f"Error loading weights: {path}")
         return False
+
     try:
-        print(f"> Full load successful!: {path}")
-        state_dict = torch.load(path, map_location=get_device())
+        state_dict = torch.load(path, map_location=get_device(), weights_only=True)
         model.load_state_dict(state_dict)
+        # Printed only *after* the load actually succeeds. This message used to be
+        # emitted before torch.load was even called, so the logs claimed success
+        # on runs that then fell through to the partial-load path -- or failed.
+        print(f"> Full load successful!: {path}")
         return True
-    except:
-        print(f"> Could not load weights: {path}")
-        print(f"> Attempting partial load")
-    
-        state_dict = torch.load(path, map_location=get_device())
-        filtered_state_dict = {
-            k: v for k, v in state_dict.items() 
-            if not any(head_key in k for head_key in ['encoder_head', 'fc', 'classifier', 'head', 'vocab_projector'])
-            }
-        try:
-            missing, unexpected = model.load_state_dict(filtered_state_dict, strict=False)
-            print(f"> Partial load successful! Number of keys missing: {len(missing)}")
-            return True
-        except Exception as e:
-            raise Exception(f"> Error loading weights: {e}")
-    return False
+    except Exception as e:
+        # Was a bare `except:`, which also swallowed KeyboardInterrupt and
+        # SystemExit and hid the actual reason for the failure.
+        print(f"> Could not load weights: {type(e).__name__}: {e}")
+        print("> Attempting partial load")
+
+    state_dict = torch.load(path, map_location=get_device(), weights_only=True)
+    filtered_state_dict = {
+        k: v for k, v in state_dict.items()
+        if not any(head_key in k for head_key in ['encoder_head', 'fc', 'classifier', 'head', 'vocab_projector'])
+        }
+    try:
+        missing, unexpected = model.load_state_dict(filtered_state_dict, strict=False)
+        print(f"> Partial load successful! Missing keys: {len(missing)}, unexpected: {len(unexpected)}")
+        return True
+    except Exception as e:
+        raise RuntimeError(f"Error loading weights from {path}: {e}") from e
               
 def graph_losses_n_accs(losses, train_accs, test_accs):
     _, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -118,7 +134,13 @@ def print_dynamic_lambdas_statistics(trainer_instance):
         print("Trainer instance does not have a 'lambda_history'.")
         return
 
-    lambda_types = ['CE lambda', 'PrC lambda', 'SnC lambda', 'FiC lambda']
+    # Order matters and was previously wrong. BaCPTrainer._combine_losses maps
+    # lambda1 -> PrC, lambda2 -> FiC, lambda3 -> SnC, lambda4 -> CE, and
+    # lambda_history is keyed lambda1..lambda4 in that order. The old labels read
+    # ['CE', 'PrC', 'SnC', 'FiC'], so every dynamic-lambda figure produced by this
+    # function had three of its four series mislabelled.
+    # Pinned by test_losses.py::test_lambda_to_loss_mapping.
+    lambda_types = ['PrC lambda', 'FiC lambda', 'SnC lambda', 'CE lambda']
     lambda_history = trainer_instance.lambda_history
 
     plt.figure(figsize=(10, 6))

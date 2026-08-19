@@ -1,0 +1,3976 @@
+diff --git a/.gitignore b/.gitignore
+index 0e3d23d..abd92ab 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,3 +1,27 @@
+ project/data
+ project/__pycache__
+-C:\Users\haroo\OneDrive\projects\research_w_Dr_Tahir\BaCP\project\__pycache__
+\ No newline at end of file
++C:\Users\haroo\OneDrive\projects\research_w_Dr_Tahir\BaCP\project\__pycache__
++
++# Test environment and artifacts
++.venv/
++__pycache__/
++*.py[cod]
++.pytest_cache/
++
++# Logger writes here, relative to CWD (project/scripts/ in practice)
++log_records/
++project/scripts/log_records/
++# Dataset caches. _initialize_data_loaders sets cache_dir to './cache' relative
++# to the CWD, which is project/scripts/ when the runner invokes a script and
++# project/ when a notebook does -- so both locations appear.
++cache/
++project/cache/
++project/scripts/cache/
++
++# Run records. The JSON records are the source of truth and ARE worth keeping,
++# but checkpoints and logs are large and regenerable. Ignore the bulk and keep
++# the evidence.
++results/logs/
++results/*.pt
++results/**/*.pt
++results/_superseded_test_fixtures/
+diff --git a/project/bacp.py b/project/bacp.py
+index f78ce9a..ab641d5 100644
+--- a/project/bacp.py
++++ b/project/bacp.py
+@@ -7,12 +7,30 @@ from copy import deepcopy
+ from torch.amp import autocast, GradScaler
+ from dataclasses import dataclass
+ from types import SimpleNamespace
+-from training_utils import *
+-from dataset_factory import load_cv_dataloaders
++# Explicit imports, not `from x import *`. This is load bearing: in the presence
++# of a star import pyflakes downgrades UndefinedName to the far weaker
++# ImportStarUsage, so no linter could flag a call to a function that does not
++# exist. That is precisely how three broken call sites survived here
++# (_handle_wanda_hooks, _handle_optimizer_and_pruning, PRUNING_REGISTRY).
++from training_utils import (
++    _get_sparsity_key,
++    _handle_data_to_device,
++    _handle_tqdm_logs,
++    _finalize_run,
++    _initialize_all,
++    _initialize_logs,
++    _initialize_optimizer,
++    _log_metrics,
++    _optimizer_step,
++)
++from dataset_factory import get_dataloaders
+ from dyrelu_adapter import step_dyrelu_adapter, set_t_for_dyrelu_adapter
+-from loss_functions import SupConLoss, NTXentLoss
+-from pruning_factory import *
+-from utils import *
++from loss_functions import (CAPContrastiveLoss, SupConLoss, NTXentLoss,
++                            kd_kl_loss, feature_distill_loss)
++# Aliased: BaCPTrainer has its own get_pruner() method, and an unaliased import
++# would make the two names visually indistinguishable at the call site.
++from pruning_factory import check_model_sparsity, layer_check, get_pruner as build_pruner
++from utils import load_weights, set_seed
+ 
+ @dataclass
+ class BaCPTrainingArguments:
+@@ -53,28 +71,135 @@ class BaCPTrainingArguments:
+     # BaCP arguments
+     lambdas:                list = None     # List of lambdas for BaCP
+     learnable_lambdas:      bool = False    # Whether to learn lambdas or keep them static
+-    n_views:                int = 2         # Number of views for contrast  
++    n_views:                int = 2         # Number of views for contrast
++
++    # 'cap'    -- one CAP Eq.1 functional evaluated twice (instance-level and
++    #             label-level positives) over a shared denominator, with
++    #             rectangular student-anchor/teacher-candidate similarities.
++    # 'legacy' -- the original SupConLoss + NTXentLoss sum over a square 2B x 2B
++    #             matrix. Kept so published numbers stay reproducible.
++    contrastive_mode:       str = 'cap'
++
++    # 'tied_frozen' -- one frozen projection head shared by student and teachers.
++    # 'none'        -- no head on the contrastive path (CAP-faithful).
++    # 'current'     -- per-model trainable heads (original behaviour).
++    proj_mode:              str = 'tied_frozen'
++
++    # Cap on retained snapshots for SnC. Each one costs an extra forward pass per
++    # batch and sits on the GPU, so this bounds both time and memory. The code
++    # previously allowed up to epochs - 1 while the paper reported 2.
++    num_snapshots:          int = 2
++
++    # Distillation controls. These are NOT part of BaCP; they are the arms that
++    # make BaCP's claim falsifiable. 'kl' is Hinton response distillation on the
++    # fine-tuned dense teacher's logits, 'feature' is FitNets-style matching on
++    # its embeddings, 'both' runs the two together. See manifest rungs C1/C2 --
++    # without them the evidence supports "a dense teacher helps", which is a
++    # weaker and different claim than the paper makes.
++    #
++    # The teacher is model_ft and not model_pt in both cases, deliberately: the
++    # pretrained model's head is not aligned to this task, so its logits carry no
++    # usable class posterior and its features are the wrong ones to regress onto.
++    distill_mode:           str = 'none'    # 'none' | 'kl' | 'feature' | 'both'
++    lambda_kd:              float = 0.0
++    kd_temperature:         float = 4.0
++    feature_distill_metric: str = 'cosine'  # 'cosine' | 'mse'
+ 
+     # DyReLU Phasing
+     dyrelu_en:              bool = False
+     dyrelu_phasing_en:      bool = False
+-    
++
++    # EAST weight sharing. Declared here because _initialize_pruner reads
++    # args.weight_sharing_en unconditionally -- it was previously present only on
++    # TrainingArguments, so every BaCP run raised AttributeError inside
++    # __post_init__ before training could start.
++    weight_sharing_en:      bool = False
++
++    # Mask-update interval in optimizer steps. Same story: _initialize_pruner and
++    # _step_pruning_step both read args.delta_T.
++    delta_T:                int = 100
++
++    # How the global sparsity budget is split across layers. Only read by
++    # LocalMagnitudePrune ('erk' | 'uniform'); RigL and EAST always use ERK.
++    # A config field rather than a pruner default so it reaches logger_params and
++    # the run record -- the two settings report different things.
++    layerwise_alloc:        str = 'erk'
++    # Wanda's comparison group: 'output' (per output neuron, Wanda's headline
++    # setting for LLMs) or 'layer' (one threshold per layer). Wanda's Appendix A
++    # finds per-output does NOT transfer to image classifiers, so this is our
++    # design choice and is recorded as one.
++    wanda_group:            str = 'output'
++    # L2 / weight decay. 1e-4 is EAST's value (TMLR 2025, Table B.1); GraNet uses
++    # 5e-4. Which one is correct depends entirely on which paper's numbers you
++    # intend to sit beside, so it is a declared field rather than a constant.
++    weight_decay:           float = 5e-4
++    # Tier-0 smoke controls: truncate the loaders to N batches. 0 = no limit.
++    # Always recorded, so a truncated run cannot be mistaken for a real one.
++    limit_train_batches:    int = 0
++    limit_eval_batches:     int = 0
++    # Prunable scope. The paper's appendix D.4 keeps task heads dense; dynamic
++    # sparse training conventionally prunes everything. Both are defensible, but
++    # they report different quantities -- see pruning_factory.set_prunable_scope.
++    prune_task_head:        bool = False
++    # Off by default and dangerous for transformers: DistilBERT and RoBERTa tie
++    # word_embeddings to the output projection, so pruning embeddings also prunes
++    # the LM head, and the embedding table then dominates the sparsity denominator.
++    prune_embeddings:       bool = False
++
++    # Run seed. Previously popped from args_dict in the scripts before the dataclass
++    # was constructed, so it never reached args and was never recorded anywhere --
++    # making every run un-reproducible after the fact.
++    seed:                   int = 42
++    # Train/val split seed, deliberately separate from `seed`. See
++    # dataset_factory.load_cv_datasets for why the split must not track the run seed.
++    val_split_seed:         int = 1234
++    # torch.use_deterministic_algorithms. Off by default: it hard-errors on ops with
++    # no deterministic kernel and costs throughput. Recorded either way.
++    deterministic:          bool = False
++
++    # See TrainingArguments.auto_init.
++    auto_init:              bool = True
++
+     def __post_init__(self):
++        # A distillation arm that is silently off is worse than one that crashes:
++        # results.canonical_method names the run 'kd_<mode>+<pruner>' from
++        # distill_mode alone, so the record would claim a KD arm while the
++        # objective contained no KD term at all, and the ladder would score that
++        # null as a real teacher effect.
++        _mode = getattr(self, 'distill_mode', 'none')
++        if _mode not in (None, 'none') and not getattr(self, 'lambda_kd', 0.0):
++            raise ValueError(
++                f"distill_mode={_mode!r} with lambda_kd=0 is a no-op, but the run "
++                f"would still be recorded as a KD arm. Set --lambda_kd > 0, or "
++                f"--distill_mode none."
++            )
++        if _mode in (None, 'none') and getattr(self, 'lambda_kd', 0.0):
++            raise ValueError(
++                f"lambda_kd={self.lambda_kd} has no effect with "
++                f"distill_mode='none'. Set --distill_mode, or --lambda_kd 0."
++            )
++
+         self.scaler = GradScaler() if self.enable_mixed_precision else None
+         self.device = "cuda" if torch.cuda.is_available() else "cpu"
++        # Legacy pair, kept for contrastive_mode='legacy'.
+         self.supervised_criterion = SupConLoss(self.tau, self.tau, self.device).to(self.device)
+         self.unsupervised_criterion = NTXentLoss(self.tau, self.device).to(self.device)
++        # CAP Eq.1, used when contrastive_mode='cap' (the default).
++        self.cap_criterion = CAPContrastiveLoss(self.tau).to(self.device)
+         self.retrain = True if self.recovery_epochs > 0 else False
+         self.is_bacp = True
+ 
+-        _initialize_models(self)
+-        _initialize_data_loaders(self)
+-        _initialize_optimizer(self)
+-        _initialize_scheduler(self)
+-        _initialize_pruner(self)
+-        _initialize_paths_and_logger(self)
+-        _initialize_log_parameters(self)
+-        _initialize_dyrelu_phasing(self)
++        if not self.auto_init:
++            return
++
++        # Seed here, not only in the scripts: this guarantees the recorded seed is
++        # the one actually active when models were built and the val split drawn.
++        set_seed(self.seed)
++        if self.deterministic:
++            os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
++            torch.use_deterministic_algorithms(True)
++
++        _initialize_all(self)
+ 
+ class BaCPTrainer:
+     def __init__(self, bacp_training_args):
+@@ -84,6 +209,19 @@ class BaCPTrainer:
+         # Initialize training state
+         self.recover = False
+         self.snapshots = []
++
++        # Fine-tuning loaders are only built by finetune(). Default them to None so
++        # evaluate() can fall back to the main test loader: --enable_finetune is a
++        # store_true flag whose False default overrides the dataclass default of
++        # True, so the out-of-the-box invocation skips finetune() entirely and then
++        # raised AttributeError on the unassigned ft_testloader.
++        self.ft_trainloader = None
++        self.ft_valloader = None
++        self.ft_testloader = None
++
++        # _handle_metrics needs a criterion to report a real loss. finetune() sets
++        # this, but evaluate() can be reached without finetune() having run.
++        self.criterion = nn.CrossEntropyLoss()
+         self.current_sparsity = check_model_sparsity(self.model)
+         self.context = autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext()
+         self._initialize_lambdas()
+@@ -92,8 +230,11 @@ class BaCPTrainer:
+         # Initializing list for GPU-resident snapshots
+         self.ss_models_on_device = []
+ 
+-        # Initializing DyReLU Phasing Schedule
+-        self._initialize_dyrelu_phasing()
++        # NOTE: the DyReLU phasing schedule is already configured by
++        # _initialize_all() during BaCPTrainingArguments.__post_init__. A second
++        # call used to live here as `self._initialize_dyrelu_phasing()`, which is
++        # not a method -- _initialize_dyrelu_phasing is a module-level function in
++        # training_utils, so this raised AttributeError before training began.
+ 
+         self.model.train()
+         self.model_pt.eval()
+@@ -190,27 +331,27 @@ class BaCPTrainer:
+             print(f"[TRAINER] Model sparsity is {model_sparsity}. Target sparsity is {self.target_sparsity}. Skipping finetuning.")
+             return
+ 
+-        # Creating new dataloaders
+-        data = load_cv_dataloaders(
+-            dataset_name=self.dataset_name, 
+-            t_type='supervised',
+-            batch_size=self.batch_size, 
+-            size=self.image_size,
+-            n_views=1,
+-            num_workers=self.num_workers,
+-            cache_dir=self.cache_dir,
+-            )
+-        
++        # Rebuild single-view supervised loaders for the fine-tuning phase.
++        # Routed through get_dataloaders rather than load_cv_dataloaders directly:
++        # the direct call raised "Unsupported dataset: sst2" for every language model,
++        # so BaCP + DistilBERT/RoBERTa + --enable_finetune had no working path.
++        # supervised_override forces n_views=1 even though self.is_bacp is still True
++        # at this point (finetune() clears it a few lines above, but not before this).
++        data = get_dataloaders(self, supervised_override=True)
++
++
+         self.ft_trainloader = data.get("trainloader")
+         self.ft_valloader = data.get("valloader")
+         self.ft_testloader = data.get("testloader")
+ 
+-        optimizer_args = {
+-            "optimizer_type":   self.optimizer_type_ft,
+-            "learning_rate":    self.learning_rate_ft,
+-            "model":            self.model
+-        }
+-        _initialize_optimizer(SimpleNamespace(**optimizer_args))
++        # Swap in the fine-tuning optimizer and learning rate. This used to build
++        # the optimizer on a throwaway SimpleNamespace, setting `.optimizer` on that
++        # temporary object and leaving self.optimizer untouched -- so every
++        # fine-tuning epoch ever run used the *contrastive* optimizer and learning
++        # rate, and optimizer_type_ft / learning_rate_ft had no effect at all.
++        self.optimizer_type = self.optimizer_type_ft
++        self.learning_rate = self.learning_rate_ft
++        _initialize_optimizer(self)
+ 
+         for epoch in range(self.epochs_ft):
+             # Training phase
+@@ -268,7 +409,8 @@ class BaCPTrainer:
+             final_metrics[key] = value
+         final_metrics['sparsity'] = sparsity
+ 
+-        _log_metrics(self, 'Final', final_metrics, run) 
++        _log_metrics(self, 'Final', final_metrics, run)
++        _finalize_run(self, final_metrics)
+ 
+         return final_metrics
+ 
+@@ -298,35 +440,30 @@ class BaCPTrainer:
+ 
+     def _run_train_epoch(self, epoch, desc=""):
+         """Run a training epoch."""
+-        _handle_wanda_hooks(self)
++        # A call to _handle_wanda_hooks(self) used to sit here. That function has
++        # never existed anywhere in the codebase -- the WandaPruner it belonged to
++        # is entirely commented out in pruning_factory.py, and only the unrelated
++        # _handle_wanda_calibration was ever written. Removed rather than stubbed.
+ 
+         if len(self.snapshots) > len(self.ss_models_on_device):
+             for i in range(len(self.ss_models_on_device), len(self.snapshots)):
+                 self.ss_models_on_device.append(self.snapshots[i].to(self.device))
+ 
+         total_loss, total_prc, total_snc, total_fic, total_ce, total_acc = 0, 0, 0, 0, 0, 0
++        total_kd = 0
+         batchloader = tqdm(self.trainloader, desc=desc, leave=False) if self.enable_tqdm else self.trainloader
+ 
+         for step, batch in enumerate(batchloader):
+             # Unpacking batch and moving to device
+             data, labels = _handle_data_to_device(self, batch)
+-            data1, data2 = data
++            data1, data2 = self._split_views(data)
+ 
+             with self.context:
+-                if self.model_type == 'cv':
+-                    curr_emb, curr_logits = self._get_embeddings_and_logits(data1)
+-                else:
+-                    raise ValueError("Model type not supported")
++                curr_emb, curr_logits = self._get_embeddings_and_logits(data1)
+ 
+                 with torch.no_grad():
+-                    if self.model_type == 'cv':
+-                        pt_emb = self.model_pt(data2, return_emb=True)
+-                        pt_emb = pt_emb.logits if hasattr(pt_emb, 'logits') else pt_emb
+-
+-                        ft_emb = self.model_ft(data2, return_emb=True)
+-                        ft_emb = ft_emb.logits if hasattr(ft_emb, 'logits') else ft_emb
+-                    else:
+-                        raise ValueError("Model type not supported")
++                    pt_emb = self.model_pt(data2, return_emb=True)
++                    ft_emb = self.model_ft(data2, return_emb=True)
+ 
+                 # PrC Module
+                 L_prc_raw = self._calculate_contrastive_loss(curr_emb, pt_emb, labels)
+@@ -340,30 +477,42 @@ class BaCPTrainer:
+                     for ss_model in self.ss_models_on_device:
+                         with torch.no_grad():
+                             ss_emb = ss_model(data2, return_emb=True)
+-                            ss_emb = ss_emb.logits if hasattr(ss_emb, 'logits') else ss_emb
+ 
+                         L_snc_raw += self._calculate_contrastive_loss(curr_emb, ss_emb, labels)
+                     L_snc_raw /= len(self.ss_models_on_device)
+ 
+                 # CE Module
+-                L_ce_raw = nn.CrossEntropyLoss()(curr_logits, labels)
++                L_ce_raw = self._task_loss(curr_logits, labels)
++
++                # Distillation control (rungs C1/C2). Off unless --distill_mode is
++                # set, so it costs nothing on the BaCP path.
++                L_kd_raw = self._distillation_loss(curr_emb, curr_logits, data1, labels)
+ 
+                 # Applying lambdas and combining losses
+-                loss, prc_loss, snc_loss, fic_loss, ce_loss = self._combine_losses(
+-                    L_prc_raw, L_snc_raw, L_fic_raw, L_ce_raw
++                loss, prc_loss, snc_loss, fic_loss, ce_loss, kd_loss = self._combine_losses(
++                    L_prc_raw, L_snc_raw, L_fic_raw, L_ce_raw, L_kd_raw
+                 )
+ 
+-                # Accuracy
+-                preds = curr_logits.max(1)[1]
+-                accuracy = ((preds == labels).sum() / labels.size(0)) * 100
++                accuracy = self._task_accuracy(curr_logits, labels)
+ 
+-            _handle_optimizer_and_pruning(self, loss, epoch, step)
++            # zero_grad -> backward -> prune -> optimizer.step -> re-apply mask.
++            # Replaces a call to _handle_optimizer_and_pruning, which does not
++            # exist (an older commented-out version in training_utils calls
++            # pruner.ratio_step()/pruner.prune(), an API BasePruner no longer has,
++            # so restoring it would only trade a NameError for an AttributeError).
++            #
++            # The index must be step-indexed, not epoch-indexed: _step_pruning_step
++            # gates on `step % delta_T` against a pruner end_idx derived from
++            # total_steps, so passing an epoch number would make the comparison
++            # meaningless.
++            _optimizer_step(self, loss, epoch * len(self.trainloader) + step)
+ 
+             total_loss += loss.item()
+             total_prc += prc_loss.item()
+             total_fic += fic_loss.item()
+             total_snc += snc_loss.item()
+             total_ce  += ce_loss.item()
++            total_kd  += kd_loss.item()
+             total_acc += accuracy.item()
+ 
+             # Calculating running mean of loss components
+@@ -373,6 +522,7 @@ class BaCPTrainer:
+                 "SnC Loss": _to_float(total_snc / (step + 1)),
+                 "FiC Loss": _to_float(total_fic / (step + 1)),
+                 "CE Loss": _to_float(total_ce / (step + 1)),
++                "KD Loss": _to_float(total_kd / (step + 1)),
+                 "Training Accuracy": _to_float(total_acc / (step + 1)),
+                 "lambdas":[
+                     _to_float(self.lambda1),
+@@ -408,8 +558,11 @@ class BaCPTrainer:
+                     loss = self.criterion(outputs, labels)
+             ft_total_loss += loss.item()
+ 
+-            # Handling backprop, optimization, and pruning
+-            _handle_optimizer_and_pruning(self, loss, epoch, step)
++            # Handling backprop, optimization, and pruning. self.recover is True
++            # throughout fine-tuning, so _step_pruning_step short-circuits and the
++            # masks are held fixed -- only apply_mask() runs, maintaining sparsity
++            # without pruning further.
++            _optimizer_step(self, loss, epoch * len(self.ft_trainloader) + step)
+ 
+             running_loss = ft_total_loss / (step + 1)
+             _handle_tqdm_logs(self, batchloader, {'Finetuning Loss': running_loss})
+@@ -426,7 +579,19 @@ class BaCPTrainer:
+         self.model.eval()
+         val_loss, val_acc, val_perp = 0, 0, 0
+ 
+-        dataloader = self.ft_testloader if (mode=='eval' and self.ft_testloader) else self.ft_valloader
++        # Fall back to the main loaders when the fine-tuning ones were never built,
++        # which is the case whenever enable_finetune is False -- the default for the
++        # CLI, since --enable_finetune is a store_true flag.
++        if mode == 'eval':
++            dataloader = self.ft_testloader or self.testloader
++        else:
++            dataloader = self.ft_valloader or self.valloader or self.ft_testloader or self.testloader
++
++        if dataloader is None:
++            print("[TRAINER] No validation/test loader available; skipping evaluation")
++            return {'Finetuning Val Loss': None, 'Finetuning Accuracy': None,
++                    'Finetuning Perplexity': None}
++
+         batchloader = tqdm(dataloader, desc=desc, leave=False) if self.enable_tqdm else dataloader
+ 
+         with torch.no_grad():
+@@ -454,42 +619,148 @@ class BaCPTrainer:
+         }
+ 
+ 
+-    def _get_embeddings_and_logits(self, data):
++    def _task_loss(self, logits, labels):
++        """Cross-entropy over whichever shape the task produces.
++
++        Classification gives [B, C] against [B]. Masked language modelling gives
++        [B, T, V] against [B, T] with -100 on unmasked positions, so the tensors
++        have to be flattened first -- nn.CrossEntropyLoss ignores index -100 by
++        default, which is exactly the convention DataCollatorForLanguageModeling
++        writes.
++        """
++        if logits.dim() == 3:
++            # With every position ignored, CrossEntropyLoss averages over zero
++            # elements and returns NaN -- which would propagate through backward and
++            # destroy the weights rather than merely skipping a batch. Unlikely at
++            # the default 15% masking, but unrecoverable when it happens.
++            if not bool((labels != -100).any()):
++                return logits.sum() * 0.0
++            return nn.CrossEntropyLoss()(
++                logits.reshape(-1, logits.size(-1)), labels.reshape(-1)
++            )
++        return nn.CrossEntropyLoss()(logits, labels)
++
++    def _task_accuracy(self, logits, labels):
++        """Top-1 accuracy; for MLM, over the masked positions only."""
++        if logits.dim() == 3:
++            mask = labels != -100
++            if not bool(mask.any()):
++                return torch.tensor(0.0, device=logits.device)
++            preds = logits.argmax(dim=-1)[mask]
++            return (preds == labels[mask]).float().mean() * 100
++
++        preds = logits.argmax(dim=1)
++        return (preds == labels).float().mean() * 100
++
++    def _split_views(self, data):
++        """Return the two views fed to the student and to the frozen teachers.
++
++        Images arrive as a list of two independently augmented tensors. Text arrives
++        as a single dict: no text augmentation is applied, so there is no second
++        view to unpack.
++
++        That is not a shortcut. In CAP the two "views" of a text example are the
++        same tokens seen through two *different models* -- the pruned student and a
++        frozen teacher -- which is precisely what the cross-model contrastive term
++        compares. Duplicating the batch is the faithful formulation, not a fallback.
+         """
+-        Perform a single forward pass on the main model to extract 
+-        features, logits (classification), and embeddings (contrastive).
++        if isinstance(data, (list, tuple)):
++            if len(data) != 2:
++                raise ValueError(
++                    f"Expected 2 augmented views, got {len(data)}. BaCP's contrastive "
++                    "step pairs one student view against one teacher view."
++                )
++            return data[0], data[1]
++        return data, data
++
++    def _get_embeddings_and_logits(self, data):
++        """One forward pass on the trainable model, yielding embeddings and logits.
++
++        Delegates to the wrapper's forward_all so vision and language share a path:
++        for CV the features come from the stripped backbone and logits from cls_head;
++        for LLMs the features are the [CLS] last-hidden-state and the "logits" come
++        from the model's own retained head (a sequence classifier, or the vocabulary
++        projection for MLM).
+         """
+-        if self.model_type == 'cv':
+-            features = self.model(data, return_feat=True)
+-            features = features.logits if hasattr(features, 'logits') else features
+-            logits = self.model.cls_head(features)   
+-            embeddings = self.model.get_embeddings(features)
+-        else:
+-            raise ValueError("Model type not supported")
++        features, output = self.model.forward_all(data)
++        logits = output.logits if hasattr(output, 'logits') else output
++        embeddings = self.model.get_embeddings(features)
+         return embeddings, logits
+ 
+ 
+     def _calculate_contrastive_loss(self, current_emb, target_emb, labels):
++        """Cross-model contrastive loss for one teacher. Used by PrC, FiC and SnC.
++
++        contrastive_mode='cap' (default) evaluates a single CAP Eq.1 functional
++        twice -- instance-level then label-level positives -- over a shared
++        denominator, with the student as anchor and the teacher as candidates.
++
++        contrastive_mode='legacy' reproduces the original SupConLoss + NTXentLoss
++        sum. See loss_functions.cap_contrastive_loss for why the two are not
++        equivalent and why the legacy composition worked against itself.
+         """
+-        Calculates the combined Supervised and Unsupervised Contrastive Loss 
+-        (L_sup + L_unsup). Used for PrC, FiC, and SnC modules.
+-        """
+-        L_sup = self.supervised_criterion(current_emb, target_emb, labels)
+-        L_unsup = self.unsupervised_criterion(current_emb, target_emb)
+-        return L_sup + L_unsup
++        if getattr(self, 'contrastive_mode', 'cap') == 'legacy':
++            L_sup = self.supervised_criterion(current_emb, target_emb, labels)
++            L_unsup = self.unsupervised_criterion(current_emb, target_emb)
++            return L_sup + L_unsup
++
++        return self.cap_criterion(current_emb, target_emb, labels)
+     
+     
+-    def _combine_losses(self, prc_raw, snc_raw, fic_raw, ce_raw):
++    def _distillation_loss(self, curr_emb, curr_logits, data1, labels):
++        """The dense-teacher control term. Zero unless --distill_mode is set.
++
++        The teacher forward runs on `data1` -- the *same* view the student saw --
++        because KD is a per-example agreement objective, not a cross-view one.
++        Feeding the teacher the second view would turn C1 into a noisier hybrid of
++        distillation and augmentation-invariance, and its comparison against C0b
++        (which isolates view count) would no longer be clean.
++
++        The extra forward pass is charged only when distillation is on. Stage C's
++        FLOP matching is maintained by `_combine_losses` keeping the PrC/FiC
++        teacher forwards running on every rung regardless of lambda, so the
++        rung-to-rung difference is one teacher pass either way.
+         """
+-        Applies the lambda weights to the four loss components and sums them.
++        if self.distill_mode in (None, 'none') or not self.lambda_kd:
++            return torch.tensor(0.0, device=self.device)
++
++        with torch.no_grad():
++            t_features, t_output = self.model_ft.forward_all(data1)
++            t_logits = t_output.logits if hasattr(t_output, 'logits') else t_output
++            t_emb = self.model_ft.get_embeddings(t_features)
++
++        loss = torch.tensor(0.0, device=self.device)
++        if self.distill_mode in ('kl', 'both'):
++            loss = loss + kd_kl_loss(curr_logits, t_logits, T=self.kd_temperature)
++        if self.distill_mode in ('feature', 'both'):
++            loss = loss + feature_distill_loss(curr_emb, t_emb,
++                                               mode=self.feature_distill_metric)
++        return loss
++
++
++    def _combine_losses(self, prc_raw, snc_raw, fic_raw, ce_raw, kd_raw=None):
++        """
++        Applies the lambda weights to the loss components and sums them.
++
++        The distillation term carries its own weight rather than sharing the four
++        lambdas. That is a design choice with a reason: the submitted paper's
++        ablation zeroed one of four 0.25 weights and left the rest alone, so every
++        "no X" arm was simultaneously a removal *and* a 25% downweighting of the
++        whole objective -- two interventions wearing one label. Keeping
++        lambda_kd outside the simplex means turning distillation on does not
++        silently rescale the contrastive terms, so C0b -> C1 is one change.
+         """
+         prc_loss = prc_raw * self.lambda1
+         fic_loss = fic_raw * self.lambda2
+         snc_loss = snc_raw * self.lambda3
+         ce_loss = ce_raw * self.lambda4
+-        
+-        total_loss = prc_loss + snc_loss + fic_loss + ce_loss
+-        return total_loss, prc_loss, snc_loss, fic_loss, ce_loss
++
++        if kd_raw is None:
++            kd_raw = torch.tensor(0.0, device=self.device)
++        kd_loss = kd_raw * self.lambda_kd
++
++        total_loss = prc_loss + snc_loss + fic_loss + ce_loss + kd_loss
++        return total_loss, prc_loss, snc_loss, fic_loss, ce_loss, kd_loss
+ 
+ 
+     def _handle_metrics(self, outputs, labels):
+@@ -497,27 +768,34 @@ class BaCPTrainer:
+         current_samples = 0
+         current_loss = 0
+ 
++        # See Trainer._handle_metrics for why current_loss must be a sum here.
+         if self.model_type == 'llm':
+             if self.dataset_name == 'wikitext2':
+                 mask = (labels != -100)
+ 
+-                logits = outputs.logits[mask]                        
++                logits = outputs.logits[mask]
+                 masked_labels = labels[mask]
+                 preds = torch.argmax(logits, dim=-1)
+ 
+                 current_correct = (preds == masked_labels).sum().item()
+                 current_samples = mask.sum().item()
+-                current_loss = outputs.loss.item()
++                current_loss = outputs.loss.item() * current_samples
+             else:
+-                preds = torch.argmax(outputs.logits, dim=1)
++                logits = outputs.logits
++                preds = torch.argmax(logits, dim=1)
+                 current_correct = (preds == labels).sum().item()
+                 current_samples = labels.size(0)
+-                
++                current_loss = self.criterion(logits, labels).item() * current_samples
++
+         else:
+             logits = outputs.logits if hasattr(outputs, 'logits') else outputs
+             preds = logits.max(1)[1]
+             current_correct = (preds == labels).sum().item()
+             current_samples = labels.size(0)
++            current_loss = self.criterion(logits, labels).item() * current_samples
++
++        if current_samples == 0:
++            return {'FT Batch Val Loss': 0.0, 'FT Batch Accuracy': 0.0, 'FT Batch Perplexity': 1.0}
+ 
+         avg_loss = current_loss / current_samples
+         avg_accuracy = 100 * current_correct / current_samples
+@@ -530,27 +808,51 @@ class BaCPTrainer:
+                 
+     
+     def _handle_snapshot_creation(self):
++        """Snapshot the current model onto the CPU for use as an SnC teacher.
++
++        Bounded by num_snapshots (default 2, matching the paper) rather than by
++        epochs - 1. Every retained snapshot costs an additional forward pass per
++        batch and is moved onto the GPU in _run_train_epoch, so an unbounded cap
++        made both step time and GPU memory scale with the epoch count.
+         """
+-        Creates a snapshot of the current model and stores it on the CPU (to save GPU memory).
+-        The model is deepcopied to CPU here.
+-        """
+-        if len(self.snapshots) < self.epochs - 1:
+-            # Keep on CPU to save GPU memory. The transfer will happen once per epoch.
+-            ss_model = deepcopy(self.model).to('cpu').eval() 
++        cap = min(getattr(self, 'num_snapshots', 2), max(self.epochs - 1, 0))
++        if len(self.snapshots) < cap:
++            # Keep on CPU to save GPU memory. The transfer happens once per epoch.
++            ss_model = deepcopy(self.model).to('cpu').eval()
+             self.snapshots.append(ss_model)
+ 
+ 
+     def get_pruner(self):
+-        # Creating pruning module
+-        pruning_module = PRUNING_REGISTRY[self.pruning_type](
+-            self.model, self.epochs, self.target_sparsity, self.sparsity_scheduler
++        """Rebuild a pruner whose masks are recovered from the saved sparse weights.
++
++        Three things were wrong here and none of them could ever have run:
++          * the registry is named PRUNER_REGISTRY, not PRUNING_REGISTRY;
++          * BasePruner takes its scheduler settings as **kwargs, so passing
++            sparsity_scheduler as a 4th positional argument was a TypeError; and
++          * scheduler_type/delta_T/total_steps are all required.
++        """
++        pruning_module = build_pruner(
++            method_name=self.pruning_type,
++            model=self.model,
++            epochs=self.epochs,
++            sparsity=self.target_sparsity,
++            scheduler_type=self.sparsity_scheduler,
++            delta_T=self.delta_T,
++            total_steps=len(self.trainloader) * self.epochs,
+         )
+ 
+         # Loading sparse weights
+         load_weights(self.model, self.save_path)
+ 
+-        # Setting sparse mask
+-        zero_masks = {name: (param != 0).float() for name, param in self.model.named_parameters()}
++        # Recover the mask from which weights are exactly zero. Restricted to the
++        # parameters the pruner actually owns: spanning all of named_parameters()
++        # would also freeze any weight that merely happens to equal 0.0 -- a
++        # BatchNorm bias, a dead unit -- for the remainder of training.
++        zero_masks = {
++            name: (param != 0).float()
++            for name, param in self.model.named_parameters()
++            if layer_check(name, param)
++        }
+ 
+         pruning_module.masks = zero_masks
+         return pruning_module
+diff --git a/project/dataset_factory.py b/project/dataset_factory.py
+index 0698daa..d20c77e 100644
+--- a/project/dataset_factory.py
++++ b/project/dataset_factory.py
+@@ -3,12 +3,15 @@ import torchvision.transforms as T
+ from torchvision.transforms import AutoAugment, AutoAugmentPolicy
+ from torch.utils.data import DataLoader, Dataset
+ from torch.utils.data import random_split
+-from datasets import load_dataset 
+-from transformers import DataCollatorForLanguageModeling
++import numpy as np
++import torch
+ from utils import *
+ from functools import lru_cache
+-from datasets import get_dataset_config_names
+ import inspect
++
++# `datasets` and `transformers` are imported lazily inside the text loaders below.
++# At module scope they cost ~4s of import time on every run -- including every
++# pytest session -- while being unused on the entire CV path.
+ from copy import deepcopy
+ 
+ 
+@@ -61,6 +64,36 @@ CV_DATASETS = {
+ }
+ 
+ GRAYSCALE_DATASETS = ["mnist", "fmnist", "emnist"]
++
++# Fixed seed for the train/val split, independent of --seed. See load_cv_datasets
++# for why this must not track the run seed.
++VAL_SPLIT_SEED = 1234
++
++# Text datasets. Kept separate from CV_DATASETS because they need a tokenizer and
++# a collator rather than an image transform.
++#   sst2      -- GLUE sentence-level sentiment, 2 classes
++#   wikitext2 -- masked language modelling; DataCollatorForLanguageModeling
++#                supplies the -100 label masking that Trainer._handle_metrics and
++#                BaCPTrainer._handle_metrics both branch on.
++TEXT_DATASETS = {
++    'sst2':      ('glue', 'sst2'),
++    'wikitext2': ('wikitext', 'wikitext-2-raw-v1'),
++}
++
++# Class counts, so --num_classes cannot silently disagree with the data. EMNIST is
++# loaded with split='balanced' (47 classes), matching "EMNIST (Balanced)" in the
++# paper. wikitext2 is absent on purpose: MLM predicts over the tokenizer vocab, so
++# there is no fixed class count.
++DATASET_NUM_CLASSES = {
++    'cifar10': 10,
++    'cifar100': 100,
++    'mnist': 10,
++    'fmnist': 10,
++    'emnist': 47,
++    'svhn': 10,
++    'imagenet': 1000,
++    'sst2': 2,
++}
+ DATASET_STATS = {
+     "cifar10": ([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]),
+     "cifar100": ([0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]),
+@@ -88,8 +121,13 @@ def normalize_data(dataset_name):
+     mean, std = DATASET_STATS[dataset_name]
+     if dataset_name in GRAYSCALE_DATASETS:
+         return [
++            # T.Grayscale, not T.Lambda(lambda x: x.repeat(3, 1, 1)). A lambda
++            # closure cannot be pickled, so the transform could not be shipped to a
++            # DataLoader worker under spawn-based multiprocessing (Windows, macOS) --
++            # it only ever worked because the Databricks environment forks. Applied
++            # before ToTensor so it operates on the PIL image.
++            T.Grayscale(num_output_channels=3),
+             T.ToTensor(),
+-            T.Lambda(lambda x: x.repeat(3, 1, 1)),
+             T.Normalize(mean*3, std*3)
+         ]
+     else:
+@@ -137,8 +175,31 @@ def get_train_transform(dataset_name: str, t_type: str, size: int):
+                 T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
+             ]
+     else:
+-        raise ValueError(f"Unsupported dataset: {dataset_name}")
+-        
++        # Everything else reuses the CIFAR-style recipe (resize + crop + flip, plus
++        # the SimCLR colour/blur stack for the contrastive variant). Previously this
++        # branch raised, which made five of the seven datasets registered in
++        # CV_DATASETS -- cifar100, svhn, mnist, fmnist, emnist -- unreachable, even
++        # though cifar100 is accepted by the CLI and the paper reports results on
++        # several of them.
++        if t_type == 'supervised':
++            transform = [
++                T.Resize((size, size)),
++                T.RandomCrop(size, padding=4),
++                T.RandomHorizontalFlip(),
++            ]
++        elif t_type == 'contrastive':
++            transform = [
++                T.Resize((size, size)),
++                T.RandomResizedCrop(size=size, scale=(0.2, 1.0)),
++                T.RandomHorizontalFlip(),
++                T.RandomApply([T.ColorJitter(0.8, 0.8, 0.8, 0.2)], p=0.8),
++                T.RandomGrayscale(p=0.2),
++                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
++            ]
++        else:
++            raise ValueError(f"Unsupported t_type: {t_type}")
++
++
+     # Mean and STD normalization
+     transform.extend(normalize_data(dataset_name))
+     return T.Compose(transform)
+@@ -240,6 +301,7 @@ def load_cv_datasets(
+     size:           int,
+     n_views:        int,
+     cache_dir:      str = './cache',
++    val_split_seed: int = VAL_SPLIT_SEED,
+     ):
+ 
+     # Creating datasets
+@@ -256,12 +318,27 @@ def load_cv_datasets(
+         train_size = len(trainset)
+         val_size = int(0.20 * train_size)
+         train_size = train_size - val_size
+-        trainset, valset = random_split(trainset, [train_size, val_size])
++
++        # Seeded, and deliberately NOT from args.seed. Two reasons:
++        #
++        #   1. Without an explicit generator this consumed the *global* torch RNG,
++        #      whose state at this point depends on how much randomness model
++        #      construction used upstream (_initialize_models runs before
++        #      _initialize_data_loaders). Changing the backbone therefore changed
++        #      the validation split.
++        #   2. Holding the split fixed across seeds is what makes a 3-seed error bar
++        #      mean "initialisation and data-order variance". If the split moved with
++        #      the seed, the spread would also contain split variance and early
++        #      stopping would be selecting on different images per seed.
++        #
++        # Pass val_split_seed explicitly only for a deliberate split-robustness check.
++        generator = torch.Generator().manual_seed(val_split_seed)
++        trainset, valset = random_split(trainset, [train_size, val_size], generator=generator)
+ 
+         valset = deepcopy(valset)
+         valset.dataset.transform = get_test_transform(dataset_name, size)
+     else:
+-        valset = None        
++        valset = None
+ 
+     return {
+         'train': trainset,
+@@ -278,26 +355,32 @@ def load_cv_dataloaders(
+     n_views:        int,
+     num_workers:    int,
+     cache_dir:      str = './cache',
++    val_split_seed: int = VAL_SPLIT_SEED,
++    seed:           int = 0,
+     ):
+     try:
+-        datasets = load_cv_datasets(dataset_name, t_type, size, n_views, cache_dir)
+-        loader_args = {
+-            "batch_size": batch_size,
+-            "num_workers": num_workers,
+-            "pin_memory": True,
+-            "persistent_workers": num_workers > 0,
+-            "drop_last": True,
+-        }
+-        
+-        # Creating dataloaders
+-        trainloader = DataLoader(datasets["train"], shuffle=True, **loader_args)
+-        testloader = DataLoader(datasets["test"], shuffle=False, **loader_args)
++        datasets = load_cv_datasets(dataset_name, t_type, size, n_views, cache_dir,
++                                    val_split_seed=val_split_seed)
++
++        # Creating dataloaders. drop_last differs by split, which is not incidental:
++        # it used to be True everywhere, so CIFAR-10's 10,000-image test set was
++        # evaluated over floor(10000/512)*512 = 9,728 images. 272 test images were
++        # silently never scored, and *which* 272 depended on the batch size -- so
++        # changing batch size changed the reported accuracy.
++        trainloader = DataLoader(datasets["train"], shuffle=True,
++                                 **_loader_args(batch_size, num_workers,
++                                                drop_last=True, seed=seed, salt=0))
++        testloader = DataLoader(datasets["test"], shuffle=False,
++                                **_loader_args(batch_size, num_workers,
++                                               drop_last=False, seed=seed, salt=1))
+ 
+         if datasets["validation"] is not None:
+-            valloader = DataLoader(datasets["validation"], shuffle=False, **loader_args)
++            valloader = DataLoader(datasets["validation"], shuffle=False,
++                                   **_loader_args(batch_size, num_workers,
++                                                  drop_last=False, seed=seed, salt=2))
+         else:
+             valloader = None
+-        
++
+         return {
+             "trainloader": trainloader,
+             "valloader": valloader,
+@@ -309,22 +392,215 @@ def load_cv_dataloaders(
+         raise e
+ 
+ 
+-def get_dataloaders(args):
+-    """Returns Dataloaders"""
++# --- Text datasets --------------------------------------------------------
++#
++# Salvaged from dataset_utils_old.py, which nothing imported -- so the SST-2 and
++# WikiText-2 halves of the results table had no reachable code path at all.
++
++def _seed_worker(worker_id):
++    """Seed `random` and `numpy` inside each DataLoader worker.
++
++    PyTorch derives each worker's *torch* seed from the parent generator, but leaves
++    `random` and `numpy.random` unseeded. Any augmentation reaching for those is
++    therefore not reproducible, and `num_workers` defaults to `os.cpu_count()`, so
++    the number of workers -- and hence the sequence -- is machine-dependent.
++    """
++    import random as _random
++    worker_seed = torch.initial_seed() % 2 ** 32
++    np.random.seed(worker_seed)
++    _random.seed(worker_seed)
++
++
++def _loader_args(batch_size, num_workers, drop_last=True, seed=0, salt=0):
++    """DataLoader kwargs.
++
++    drop_last defaults True for the train loader's benefit, but callers MUST pass
++    drop_last=False for val and test: dropping a partial eval batch means never
++    scoring those samples, and which samples get dropped depends on the batch size.
++
++    The per-loader generator is salted so train/val/test do not share a shuffle
++    stream, while staying deterministic given (seed, salt).
++    """
++    generator = torch.Generator()
++    generator.manual_seed((int(seed) * 1000003) ^ int(salt))
++    return {
++        "batch_size": batch_size,
++        "num_workers": num_workers,
++        "pin_memory": True,
++        "persistent_workers": num_workers > 0,
++        "drop_last": drop_last,
++        "worker_init_fn": _seed_worker,
++        "generator": generator,
++    }
++
++
++class TokenizedDataset(Dataset):
++    """Thin wrapper yielding the three keys the training loop expects.
++
++    Needed because _handle_data_to_device recognises a dict batch by its keys, and
++    the HF Dataset's own extra columns (idx, sentence, ...) would ride along.
++    """
++
++    def __init__(self, hf_split):
++        self.data = hf_split
++
++    def __len__(self):
++        return len(self.data)
++
++    def __getitem__(self, idx):
++        example = self.data[idx]
++        return {
++            "input_ids": example["input_ids"],
++            "attention_mask": example["attention_mask"],
++            "labels": example["labels"],
++        }
++
++
++def get_tokenizer(model_name, cache_dir=None):
++    """Tokenizer for a registered language model.
++
++    Strips the '-mlm' suffix: 'roberta-base-mlm' and 'roberta-base' are the same
++    checkpoint with different heads, and only the former exists on the hub as
++    'roberta-base'.
++    """
++    from transformers import AutoTokenizer
++    checkpoint = model_name[:-4] if model_name.endswith('-mlm') else model_name
++    return AutoTokenizer.from_pretrained(checkpoint, cache_dir=cache_dir)
++
++
++def load_glue_dataloaders(tokenizer, task_name, batch_size, num_workers,
++                          cache_dir=None, max_length=128, seed=0):
++    """GLUE sequence classification. Only sst2 is used by this project."""
++    from datasets import load_dataset
++
++    if task_name not in ('sst2', 'mnli', 'qqp'):
++        raise ValueError(f"Unsupported GLUE task: {task_name}")
++
++    dataset = load_dataset('glue', task_name, cache_dir=cache_dir)
++
++    text_keys = {'sst2': ('sentence',),
++                 'mnli': ('premise', 'hypothesis'),
++                 'qqp': ('question1', 'question2')}[task_name]
++
++    def tokenize_fn(batch):
++        return tokenizer(*[batch[k] for k in text_keys], truncation=True,
++                         padding='max_length', max_length=max_length)
++
++    dataset = dataset.map(tokenize_fn, batched=True, batch_size=512)
++    dataset = dataset.rename_column('label', 'labels')
++    dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
++
++    # GLUE test splits are unlabelled (label == -1), so validation is used for both
++    # validation and final evaluation -- which is also what every paper in this
++    # space reports, CAP included ("results on development sets").
++    # drop_last=False on the eval loader: SST-2's dev set is 872 examples, so at
++    # batch 32 a drop_last=True loader would score 864 and silently discard 8.
++    trainloader = DataLoader(TokenizedDataset(dataset['train']), shuffle=True,
++                             **_loader_args(batch_size, num_workers,
++                                            drop_last=True, seed=seed, salt=0))
++    valloader = DataLoader(TokenizedDataset(dataset['validation']), shuffle=False,
++                           **_loader_args(batch_size, num_workers,
++                                          drop_last=False, seed=seed, salt=2))
++
++    return {"trainloader": trainloader, "valloader": valloader, "testloader": valloader}
++
++
++def load_mlm_dataloaders(tokenizer, batch_size, num_workers, cache_dir=None,
++                         block_size=None, mlm_probability=0.15):
++    """WikiText-2 masked language modelling."""
++    from datasets import load_dataset
++    from transformers import DataCollatorForLanguageModeling
++
++    dataset = load_dataset('wikitext', 'wikitext-2-raw-v1', cache_dir=cache_dir)
++
++    # Cap the block size: tokenizer.model_max_length is 512 for RoBERTa but a
++    # sentinel ~1e30 for some tokenizers, which would make grouping allocate
++    # unboundedly.
++    limit = getattr(tokenizer, 'model_max_length', 512)
++    block_size = block_size or (limit if limit and limit < 4096 else 512)
++
++    def tokenize_fn(batch):
++        return tokenizer(batch['text'], truncation=False,
++                         return_special_tokens_mask=True)
++
++    def group_texts(batch):
++        joined = {k: sum(batch[k], []) for k in batch}
++        total = (len(joined['input_ids']) // block_size) * block_size
++        return {k: [v[i:i + block_size] for i in range(0, total, block_size)]
++                for k, v in joined.items()}
++
++    dataset = dataset.map(tokenize_fn, batched=True, batch_size=512,
++                          remove_columns=['text'])
++    dataset = dataset.map(group_texts, batched=True, batch_size=512)
++
++    collator = DataCollatorForLanguageModeling(tokenizer, mlm=True,
++                                              mlm_probability=mlm_probability)
++
++    def loader(split, shuffle, drop_last, salt):
++        return DataLoader(dataset[split], shuffle=shuffle, collate_fn=collator,
++                          **_loader_args(batch_size, num_workers,
++                                         drop_last=drop_last, seed=seed, salt=salt))
++
++    return {
++        "trainloader": loader('train', True, True, 0),
++        "valloader": loader('validation', False, False, 2),
++        "testloader": loader('test', False, False, 1),
++    }
++
++
++def load_text_dataloaders(model_name, dataset_name, batch_size, num_workers,
++                          cache_dir=None, seed=0):
++    if dataset_name not in TEXT_DATASETS:
++        raise ValueError(f"Unsupported text dataset: {dataset_name}. "
++                         f"Choices: {sorted(TEXT_DATASETS)}")
++
++    tokenizer = get_tokenizer(model_name, cache_dir)
++
++    if dataset_name == 'wikitext2':
++        return load_mlm_dataloaders(tokenizer, batch_size, num_workers, cache_dir, seed=seed)
++    return load_glue_dataloaders(tokenizer, dataset_name, batch_size, num_workers,
++                                 cache_dir, seed=seed)
++
++
++def get_dataloaders(args, supervised_override=False):
++    """Returns Dataloaders.
++
++    supervised_override forces the single-view supervised recipe regardless of
++    is_bacp. BaCPTrainer.finetune() needs that: it rebuilds loaders for the
++    supervised fine-tuning phase, and previously called load_cv_dataloaders
++    directly -- which raised for sst2/wikitext2, so BaCP plus a language model plus
++    --enable_finetune had no working code path at all.
++    """
++    is_bacp = getattr(args, 'is_bacp', False) and not supervised_override
+ 
+-    t_type = 'contrastive' if args.is_bacp else 'supervised'
+     if args.model_type == 'cv':
+         return load_cv_dataloaders(
+-            dataset_name=args.dataset_name, 
+-            t_type=t_type,
+-            batch_size=args.batch_size, 
++            dataset_name=args.dataset_name,
++            t_type='contrastive' if is_bacp else 'supervised',
++            batch_size=args.batch_size,
+             size=args.image_size,
+-            n_views=args.n_views,
++            n_views=args.n_views if is_bacp else 1,
+             num_workers=args.num_workers,
+             cache_dir=args.cache_dir,
++            val_split_seed=getattr(args, 'val_split_seed', VAL_SPLIT_SEED),
++            seed=getattr(args, 'seed', 0),
+             )
+-    else:
+-        raise ValueError(f"Unsupported model type: {args.model_type}")
++
++    if args.model_type == 'llm':
++        # No text augmentation, so there is no second view to build. That is not a
++        # gap: in CAP the two "views" of a text example are the same tokens seen
++        # through two different models, which is exactly what the cross-model
++        # contrastive term needs. BaCPTrainer duplicates the batch accordingly.
++        return load_text_dataloaders(
++            model_name=args.model_name,
++            dataset_name=args.dataset_name,
++            batch_size=args.batch_size,
++            num_workers=args.num_workers,
++            cache_dir=args.cache_dir,
++            seed=getattr(args, 'seed', 0),
++            )
++
++    raise ValueError(f"Unsupported model type: {args.model_type!r}. Expected 'cv' or 'llm'.")
+ 
+ 
+ 
+diff --git a/project/dyrelu_adapter.py b/project/dyrelu_adapter.py
+index 1ac6229..9d5259b 100644
+--- a/project/dyrelu_adapter.py
++++ b/project/dyrelu_adapter.py
+@@ -24,8 +24,11 @@ class DyReLUB(nn.Module):
+             B, C, H, W = x.shape
+             theta = x.mean(dim=(2, 3))          # (B, C)
+         else:
++            # Was `thera = x` -- a typo that left `theta` unbound on this branch,
++            # so DyReLUB raised UnboundLocalError for any non-4D input. That is
++            # the VGG classifier path, where DyReLUB(4096) receives [B, 4096].
+             B, C = x.shape
+-            thera = x
++            theta = x
+ 
+         theta = self.hyperfunction(theta)   # (B, 2*K*C)
+         theta = theta * 2 - 1               # Normalize to [-1, 1]
+@@ -70,14 +73,21 @@ class DyReLUAdapter(nn.Module):
+ 
+     def get_beta(self):
+         if self.t_start is None or self.t_end is None:
+-            raise Exception("Please set t_start and t_end")
+-        
++            raise RuntimeError(
++                "DyReLU phasing window is unset. Call set_t_for_dyrelu_adapter("
++                "model, t_start, t_end) before training."
++            )
++
+         if self.t < self.t_start:
+             return 1.0
+-        elif self.t_start <= self.t <= self.t_end:
+-            return 1.0 - ((self.t - self.t_start) / (self.t_end - self.t_start))
+-        else:
++        if self.t >= self.t_end:
+             return 0.0
++
++        # A zero-length window (t_start == t_end) is a valid request for an
++        # instant switch, and previously divided by zero. The two guards above
++        # already cover it -- t >= t_end returns 0.0 -- so the denominator here
++        # is strictly positive.
++        return 1.0 - ((self.t - self.t_start) / (self.t_end - self.t_start))
+         
+     def forward(self, x):
+         beta = self.get_beta()
+@@ -106,8 +116,14 @@ def step_dyrelu_adapter(model):
+     for m in model.modules():
+         if isinstance(m, DyReLUAdapter):
+             m.step()
+-            beta = m.get_beta()
+-            beta_val = beta
++            beta_val = m.get_beta()
++
++    # A model with no DyReLUAdapter modules leaves beta_val as None, and the
++    # f-string format spec then raised TypeError. Reachable whenever
++    # dyrelu_phasing_en is True but the model was built with dyrelu_en as well:
++    # the if/elif in BasicBlock picks DyReLUB, so no adapters exist to step.
++    if beta_val is None:
++        return
+     print(f'[DyReLU ADAPTER] Updated Beta: {beta_val:.4f}')
+ 
+ 
+diff --git a/project/loss_functions.py b/project/loss_functions.py
+index a3b4b3d..d9e6823 100644
+--- a/project/loss_functions.py
++++ b/project/loss_functions.py
+@@ -1,6 +1,110 @@
+ import torch
+ import torch.nn as nn
+ 
++
++def cap_contrastive_loss(z_anchor, z_cand, pos_mask, tau, eps=1e-8):
++    """Cross-model contrastive loss, CAP Eq. 1 (Xu et al. 2022, AAAI 36).
++
++        L_i = -1/|P(i)| * sum_{j in P(i)} log( exp(sim(z_i, zc_j)/tau)
++                                               / sum_k exp(sim(z_i, zc_k)/tau) )
++
++    Args:
++        z_anchor: [B, D] L2-normalized student embeddings (require grad).
++        z_cand:   [N, D] L2-normalized candidate embeddings from the frozen
++                  teacher (in-batch, optionally plus a memory bank). N need not
++                  equal B.
++        pos_mask: [B, N] bool. Which candidates are positives for each anchor.
++        tau:      temperature.
++
++    Two structural properties, both deliberate and both differing from the
++    SupConLoss/NTXentLoss pair this replaces:
++
++    RECTANGULAR, NOT SQUARE. The similarity matrix is B x N -- anchors from the
++    student, candidates from the teacher. The previous implementations built
++    `z = cat([z_student, z_teacher])` and took `z @ z.T`, a 2B x 2B matrix with
++    four blocks. Only the student-teacher block appears in CAP or in BaCP's own
++    written equations; the other three were unintended. Their effects were:
++    student-student added a SimCLR term nobody specified, teacher-teacher
++    contributed constants with no gradient, and teacher-anchored rows diluted the
++    mean over 2B anchors by ~2x, silently halving the effective lambda on every
++    contrastive term.
++
++    ONE FUNCTIONAL, CALLED TWICE. CAP composes an unsupervised and a supervised
++    term as the same loss under two different definitions of P(i), sharing one
++    denominator. Summing two separately-normalized losses instead is not
++    equivalent: SupCon's positive set already contains the paired view (same label
++    by construction), so NT-Xent's single positive is a strict subset of it --
++    SupCon reduces to NT-Xent at |P(i)| = 1 (Khosla et al. 2020, sec. 3). Adding
++    NT-Xent therefore re-weights an existing signal and inverts the treatment of
++    every other same-class sample: SupCon pulls such a pair with weight
++    1/|P(i)| ~ 1/102 at batch 512 on CIFAR-10, while NT-Xent's single-target
++    cross-entropy pushes it apart at full softmax weight. The push wins by roughly
++    two orders of magnitude.
++
++    Anchors with no positives are EXCLUDED, not divided by a clamped 1. With
++    in-batch candidates every anchor has a positive, so this cannot currently
++    trigger -- but a memory bank may hold no example of a given label, and
++    contributing a zero to the mean would then dilute the loss by a
++    bank-composition-dependent factor.
++    """
++    logits = (z_anchor @ z_cand.T) / tau
++
++    # Row-wise max subtraction for numerical stability. Detached: it is a constant
++    # shift that cancels in the log-softmax, and must not carry gradient.
++    logits = logits - logits.max(dim=1, keepdim=True).values.detach()
++    log_prob = logits - torch.logsumexp(logits, dim=1, keepdim=True)
++
++    pos_mask = pos_mask.to(log_prob.dtype)
++    n_pos = pos_mask.sum(dim=1)
++    has_pos = n_pos > 0
++    if not bool(has_pos.any()):
++        return z_anchor.sum() * 0.0  # keeps the graph connected
++
++    per_anchor = -(log_prob * pos_mask).sum(dim=1) / n_pos.clamp(min=eps)
++    return per_anchor[has_pos].mean()
++
++
++class CAPContrastiveLoss(nn.Module):
++    """PrC / FiC / SnC as CAP defines them: L_unsup + L_sup over a shared denominator.
++
++    Positive sets follow CAP Table 1:
++        unsupervised -> the same instance seen through the other model
++        supervised   -> every candidate carrying the same label
++
++    Reference: Xu et al. 2022, "From Dense to Sparse: Contrastive Pruning for
++    Better Pre-trained Language Model Compression", AAAI 36, arXiv 2112.07198.
++    """
++
++    def __init__(self, tau, supervised=True, unsupervised=True):
++        super().__init__()
++        self.tau = tau
++        self.supervised = supervised
++        self.unsupervised = unsupervised
++
++    def forward(self, z_anchor, z_cand, labels, cand_labels=None):
++        if cand_labels is None:
++            # In-batch candidates: row i of z_cand is the same sample as row i of
++            # z_anchor, seen through the teacher.
++            cand_labels = labels
++
++        loss = z_anchor.sum() * 0.0
++
++        if self.unsupervised:
++            # P(i) = {the teacher's view of sample i}
++            inst = torch.zeros(z_anchor.shape[0], z_cand.shape[0],
++                               dtype=torch.bool, device=z_anchor.device)
++            n = min(z_anchor.shape[0], z_cand.shape[0])
++            inst[torch.arange(n), torch.arange(n)] = True
++            loss = loss + cap_contrastive_loss(z_anchor, z_cand, inst, self.tau)
++
++        if self.supervised:
++            # P(i) = {teacher views of every sample sharing anchor i's label}
++            label_mask = labels.view(-1, 1) == cand_labels.view(1, -1)
++            loss = loss + cap_contrastive_loss(z_anchor, z_cand, label_mask, self.tau)
++
++        return loss
++
++
+ class SupConLoss(nn.Module):
+     def __init__(self, temp, base_temp, device, n_views=2, eps=1e-8):
+         super(SupConLoss, self).__init__()
+@@ -62,3 +166,124 @@ class NTXentLoss(nn.Module):
+ 
+ 
+ 
++
++
++# --- distillation controls -------------------------------------------------
++#
++# These exist to answer the objection that sinks the contrastive claim if it is
++# left unanswered: BaCP puts three frozen dense teachers on one side of every
++# comparison and zero on the other, so the cheapest explanation of any gain is
++# "a dense teacher helps" -- nothing about contrast. Rung C1 injects the teacher
++# at the logits, C2 at the features, C3 swaps in the contrastive form against the
++# same teacher. Only C2 -> C3 isolates "contrastive" from "distillation", and it
++# does so only because C1/C2/C3 hold the teacher fixed.
++#
++# CITATION DISCIPLINE, checked against the primary sources:
++#
++#   kd_kl_loss  -- Hinton, Vinyals & Dean (2015), arXiv 1503.02531, is the right
++#       source for the soft-target idea and for the T^2 rescaling. It is NOT a
++#       source for the KL form or its direction: the paper defines the objective
++#       as cross-entropy with soft targets and never writes a KL divergence in
++#       it at all ('Kullback' and 'relative entropy' appear zero times; 'KL'
++#       appears only in Sec. 5.4, on ensembles). Cite implementations, not
++#       Hinton, for `F.kl_div(log_softmax(s/T), softmax(t/T))`.
++#
++#   feature_distill_loss -- do NOT cite FitNets (Romero et al. 2015) for this.
++#       FitNets regresses INTERMEDIATE activations through a LEARNED regressor
++#       under a squared Euclidean loss in unnormalised space, and its second
++#       stage operates on softened logits. It contains no cosine matching and no
++#       discussion of teacher/student norm mismatch, so it supports neither the
++#       metric nor the justification. Nor do the usual alternatives: SP (Tung &
++#       Mori 2019) and RKD (Park et al. 2019) are RELATIONAL -- they match
++#       sample-to-sample structure within a batch, not student feature to teacher
++#       feature -- and PKT builds a cosine-kernel distribution matched by KL.
++#       Cosine-on-penultimate-features here is BaCP's own design choice and the
++#       paper should say so rather than attach a source that does not carry it.
++
++
++def kd_kl_loss(student_logits, teacher_logits, T=4.0):
++    r"""Hinton-style response distillation: T^2 * KL(teacher_T || student_T).
++
++    .. math::
++        \mathcal{L}_{KD} = T^2 \, \mathrm{KL}\!\left(
++            \sigma(z_t/T) \,\|\, \sigma(z_s/T) \right)
++
++    The T^2 factor is not cosmetic. Hinton et al. (2015), end of Sec. 2, note that
++    the soft-target gradients scale as 1/T^2 and multiply by T^2 so that the
++    relative contribution of the soft and hard targets stays roughly unchanged as
++    T varies. Without it, raising the temperature quietly turns the term off --
++    which would surface in the ladder as "KD does nothing", indistinguishable from
++    a real null. Note the 1/T^2 relation is a HIGH-TEMPERATURE approximation (the
++    exact gradient is (1/T)(q_i - p_i), Eq. 2); T^2 is a balancing heuristic, not
++    an exact normaliser, and the paper should not claim otherwise.
++
++    Direction: `F.kl_div(log_softmax(student/T), softmax(teacher/T))` computes
++    KL(teacher || student) -- forward KL, teacher as the reference. That is the
++    standard convention across the reference implementations (RepDistiller,
++    mmrazor, the PyTorch tutorial), and it is gradient-identical to Hinton's
++    cross-entropy-with-soft-targets because H(p_t, q_s) = KL(p_t || q_s) + H(p_t)
++    and H(p_t) is constant in the student's parameters.
++
++    `batchmean` and not `mean`: PyTorch's DEFAULT for `F.kl_div` is `mean`, which
++    divides by numel (batch x classes) and which PyTorch's own documentation notes
++    does not return the true KL. The two differ by exactly the class count -- 10
++    on CIFAR-10, 100 on CIFAR-100 -- which composes multiplicatively with T^2 and
++    with lambda_kd, silently detuning the KD/CE balance across datasets. Every
++    reference implementation uses batchmean or hand-rolls it.
++    """
++    import torch.nn.functional as F
++
++    # Flatten a 3-D masked-LM tensor to [B*T, V] FIRST. `batchmean` divides by
++    # input.size(0) only, so on the MLM path a [B, T, V] tensor was summed over
++    # all T token positions and divided by B alone -- the returned term was
++    # exactly seq_len times the per-example quantity (measured: 128.0x at
++    # T=128). One shared lambda_kd across the vision and MLM paths would then
++    # mean two different things. _task_loss and _task_accuracy already branch on
++    # dim()==3; this had not.
++    if student_logits.dim() == 3:
++        student_logits = student_logits.reshape(-1, student_logits.size(-1))
++        teacher_logits = teacher_logits.reshape(-1, teacher_logits.size(-1))
++
++    s = F.log_softmax(student_logits / T, dim=-1)
++    t = F.softmax(teacher_logits.detach() / T, dim=-1)
++    return F.kl_div(s, t, reduction='batchmean') * (T * T)
++
++
++def feature_distill_loss(z_student, z_teacher, mode='cosine'):
++    r"""Feature-level matching between student and teacher embeddings.
++
++    'cosine' -- :math:`1 - \cos(z_s, z_t)`, averaged over the batch. Scale
++        invariant, which is the property that matters when a 0.1%-density student
++        is regressed onto a dense teacher.
++    'mse'    -- squared Euclidean, the loss FitNets uses (though FitNets applies
++        it to intermediate activations through a learned regressor, not to
++        penultimate features -- see the citation note at the top of this section).
++
++    **The two are not independent metrics at BaCP's call site.** Every branch of
++    ``ClassificationAndEncoderNetwork.get_embeddings`` ends in ``F.normalize``,
++    so both arguments arriving from ``_distillation_loss`` are unit-norm, and on
++    unit-norm inputs :math:`\lVert z_s - z_t \rVert^2 = 2(1 - \cos)` exactly --
++    the MSE branch is then :math:`(2/D)` times the cosine branch, a monotone
++    rescaling that changes only the effective ``lambda_kd``. Choosing between
++    them here is a learning-rate decision, not a metric comparison, and the
++    paper must not present a cosine/MSE ablation as evidence about norm versus
++    direction. The distinction becomes real only if unnormalised features are
++    passed in, which nothing currently does.
++
++    The deliberate parallel with the contrastive rung: cosine feature matching is
++    the *positive-pair* term of an InfoNCE objective with the denominator
++    removed, so C2 -> C3 isolates one thing -- the presence of negatives. That is
++    the sharpest available statement of what "contrastive" contributes over
++    "distillation", and as far as the citation search went it is NOT an argument
++    anyone has published in this form. Treat it as this paper's framing and state
++    it as such; the nearest published relative is the alignment/uniformity
++    decomposition of InfoNCE, which is a different decomposition of a different
++    object.
++    """
++    import torch.nn.functional as F
++    z_teacher = z_teacher.detach()
++    if mode == 'cosine':
++        return (1.0 - F.cosine_similarity(z_student, z_teacher, dim=-1)).mean()
++    if mode == 'mse':
++        return F.mse_loss(z_student, z_teacher)
++    raise ValueError(f"feature_distill_loss mode must be 'cosine' or 'mse', got {mode!r}")
+diff --git a/project/model_factory.py b/project/model_factory.py
+index 38c0144..aa253a9 100644
+--- a/project/model_factory.py
++++ b/project/model_factory.py
+@@ -1,91 +1,198 @@
+ from dataclasses import dataclass
+-import torch
++
+ import torch.nn as nn
+ import torch.nn.functional as F
+-from torchvision.models import vgg11, vgg19
+-from transformers import AutoModelForImageClassification, AutoModelForSequenceClassification, AutoModelForMaskedLM
+-from dataclasses import dataclass
++
+ from utils import load_weights
+ 
+ from models.resnet import resnet34, resnet50, resnet101
+-# from torchvision.models import ResNet50_Weights, ResNet101_Weights, VGG11_Weights, VGG19_Weights, ResNet34_Weights
++from models.vgg import vgg11 as local_vgg11, vgg19 as local_vgg19
++
++
++# --- Model registry -------------------------------------------------------
++#
++# Every entry carries a `builder` rather than a bare constructor. The reason is
++# that the local vision factories and the HuggingFace factories have
++# incompatible signatures: the former take dyrelu_en / dyrelu_phasing_en, which
++# no HF constructor accepts. initialize_model_components used to call
++# `spec.fn(dyrelu_en=..., dyrelu_phasing_en=...)` unconditionally, which is why
++# the ViT and language-model entries could not simply be uncommented.
++#
++# `type` is 'cv' or 'llm', matching --model_type on the CLI and the checks in
++# Trainer._handle_metrics / dataset_factory.get_dataloaders. It previously held
++# 'vision', giving two vocabularies for one concept.
+ 
+ @dataclass(frozen=True)
+ class ModelSpec:
+-    fn: object
+-    weight: str
+-    family: str
+-    type: str
++    builder: object   # callable(num_classes, dyrelu_en, dyrelu_phasing_en) -> nn.Module
++    weight: str       # local checkpoint path; '' when the builder supplies pretrained weights
++    family: str       # 'resnet' | 'vgg' | 'vit' | 'bert'
++    type: str         # 'cv' | 'llm'
++    task: str = 'classification'   # 'classification' | 'mlm'
++
++
++def _local_vision(fn):
++    """Wrap one of this project's own vision factories.
++
++    num_classes is ignored: the task head is stripped by remove_last_layer and
++    replaced with a fresh cls_head sized from num_classes downstream.
++    """
++    def build(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False):
++        return fn(dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en)
++    return build
++
++
++def _hf_image(checkpoint):
++    def build(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False):
++        _reject_dyrelu(checkpoint, dyrelu_en, dyrelu_phasing_en)
++        from transformers import AutoModelForImageClassification
++        return AutoModelForImageClassification.from_pretrained(
++            checkpoint, num_labels=num_classes, ignore_mismatched_sizes=True,
++        )
++    return build
++
++
++def _hf_seqcls(checkpoint):
++    def build(num_classes=2, dyrelu_en=False, dyrelu_phasing_en=False):
++        _reject_dyrelu(checkpoint, dyrelu_en, dyrelu_phasing_en)
++        from transformers import AutoModelForSequenceClassification
++        return AutoModelForSequenceClassification.from_pretrained(
++            checkpoint, num_labels=num_classes,
++        )
++    return build
++
++
++def _hf_mlm(checkpoint):
++    def build(num_classes=None, dyrelu_en=False, dyrelu_phasing_en=False):
++        _reject_dyrelu(checkpoint, dyrelu_en, dyrelu_phasing_en)
++        from transformers import AutoModelForMaskedLM
++        return AutoModelForMaskedLM.from_pretrained(checkpoint)
++    return build
++
++
++def _reject_dyrelu(checkpoint, dyrelu_en, dyrelu_phasing_en):
++    """Fail loudly rather than silently ignoring an EAST flag.
++
++    DyReLU phasing is implemented by threading flags into this project's own
++    BasicBlock/VGG stacks. A HuggingFace model has no such hook, so a run asking
++    for it would otherwise train a plain-ReLU network while the logs claimed
++    phasing was active.
++    """
++    if dyrelu_en or dyrelu_phasing_en:
++        raise ValueError(
++            f"DyReLU is not supported for '{checkpoint}'. It is wired into this "
++            "project's own ResNet/VGG blocks; HuggingFace models have no equivalent "
++            "hook. Drop --dyrelu_en / --dyrelu_phasing_en for this model."
++        )
+ 
+-PRETRAINED = True
+-DYRELU_ENABLED = False
+ 
+ MODELS = {
+-    'resnet34':     ModelSpec(resnet34, '/dbfs/research/bacp/resnet34_imagenet.pth',     'resnet',   'vision'),
+-    'resnet50':     ModelSpec(resnet50, '/dbfs/research/bacp/resnet50_imagenet.pth',     'resnet',   'vision'),
+-    'resnet101':    ModelSpec(resnet101, '/dbfs/research/bacp/resnet101_imagenet.pth',   'resnet',   'vision'),
+-
+-    # 'vgg11':    ModelSpec(vgg11, VGG11_Weights.IMAGENET1K_V1,   'vgg',    'vision'),
+-    # 'vgg19':    ModelSpec(vgg19, VGG19_Weights.IMAGENET1K_V1,   'vgg',    'vision'),
+-    # 'distilbert-base-uncased-mlm':  ModelSpec(AutoModelForMaskedLM,                 'distilbert-base-uncased',  'bert', 'language'),
+-    # 'distilbert-base-uncased':      ModelSpec(AutoModelForSequenceClassification,   'distilbert-base-uncased',  'bert', 'language'),
+-    # 'roberta-base-mlm': ModelSpec(AutoModelForMaskedLM,                 'roberta-base', 'bert', 'language'),
+-    # 'roberta-base':     ModelSpec(AutoModelForSequenceClassification,   'roberta-base', 'bert', 'language'),
++    # --- Vision: this project's own backbones (DyReLU-capable) ---
++    'resnet34':   ModelSpec(_local_vision(resnet34),   '/dbfs/research/bacp/resnet34_imagenet.pth',  'resnet', 'cv'),
++    'resnet50':   ModelSpec(_local_vision(resnet50),   '/dbfs/research/bacp/resnet50_imagenet.pth',  'resnet', 'cv'),
++    'resnet101':  ModelSpec(_local_vision(resnet101),  '/dbfs/research/bacp/resnet101_imagenet.pth', 'resnet', 'cv'),
++    'vgg11':      ModelSpec(_local_vision(local_vgg11), '/dbfs/research/bacp/vgg11_imagenet.pth',    'vgg',    'cv'),
++    'vgg19':      ModelSpec(_local_vision(local_vgg19), '/dbfs/research/bacp/vgg19_imagenet.pth',    'vgg',    'cv'),
++
++    # --- Vision Transformers (weights from the HF hub; no DyReLU) ---
++    # Expect --image_size 224. ignore_mismatched_sizes lets the 1000-way
++    # ImageNet head be replaced by a CIFAR-sized one.
++    'vit-tiny':   ModelSpec(_hf_image('WinKawaks/vit-tiny-patch16-224'),  '', 'vit', 'cv'),
++    'vit-small':  ModelSpec(_hf_image('WinKawaks/vit-small-patch16-224'), '', 'vit', 'cv'),
++
++    # --- Language models: sequence classification (SST-2) ---
++    'distilbert-base-uncased': ModelSpec(_hf_seqcls('distilbert-base-uncased'), '', 'bert', 'llm'),
++    'roberta-base':            ModelSpec(_hf_seqcls('roberta-base'),            '', 'bert', 'llm'),
++
++    # --- Language models: masked language modelling (WikiText-2) ---
++    'distilbert-base-uncased-mlm': ModelSpec(_hf_mlm('distilbert-base-uncased'), '', 'bert', 'llm', task='mlm'),
++    'roberta-base-mlm':            ModelSpec(_hf_mlm('roberta-base'),            '', 'bert', 'llm', task='mlm'),
+ }
+ 
++PRETRAINED = True
++DYRELU_ENABLED = False
++
++
+ def _get_embedded_dim_from_model(model):
+     """Returns the model's final embedded dimension"""
+     if hasattr(model, 'fc') and hasattr(model.fc, 'in_features'):
+         return model.fc.in_features
+-    
++
+     if hasattr(model, 'classifier'):
+         cls_head = model.classifier
+         if isinstance(cls_head, nn.Sequential):
+             return cls_head[-1].in_features
+         elif hasattr(cls_head, 'in_features'):
+             return cls_head.in_features
+-        
++
+     if hasattr(model, 'head') and hasattr(model.head, 'in_features'):
+         return model.head.in_features
+-    
++
++    # HF models: ViT, BERT and RoBERTa all expose hidden_size. Checked last so a
++    # concrete head wins when one exists.
+     if hasattr(model, 'config') and hasattr(model.config, 'hidden_size'):
+         return model.config.hidden_size
+-    
++
+     raise RuntimeError(f"Couldn't infer embedding dim for model: {model.__class__.__name__}")
+-    
+-def initialize_model_components(model_name: str, pretrained: bool, dyrelu_en: bool, dyrelu_phasing_en: bool):
++
++
++def initialize_model_components(model_name: str, pretrained: bool, dyrelu_en: bool,
++                                dyrelu_phasing_en: bool, num_classes: int = 1000):
+     if model_name not in MODELS:
+-        raise ValueError(f"Unknown model {model_name}. Choices: {list(MODELS.keys())}")
++        raise ValueError(f"Unknown model {model_name}. Choices: {sorted(MODELS)}")
+ 
+     spec = MODELS[model_name]
+-    if spec.type == 'vision':
+-        model = spec.fn(dyrelu_en=dyrelu_en, dyrelu_phasing_en=dyrelu_phasing_en)
+-        if pretrained:
+-            load_weights(model, spec.weight)
+-    else:
+-        raise ValueError(f"Unsupported model type: {spec.type}")
++    model = spec.builder(num_classes=num_classes,
++                         dyrelu_en=dyrelu_en,
++                         dyrelu_phasing_en=dyrelu_phasing_en)
++
++    # HF builders arrive already pretrained, so spec.weight is empty for them.
++    #
++    # `init_source` records what the weights ACTUALLY are, not what was asked
++    # for. load_weights fails soft by design -- a missing checkpoint warns and
++    # the run continues -- so on any machine without spec.weight on disk (a
++    # fresh GPU box; every path here points into /dbfs) a run that requested
++    # ImageNet init silently gets random init. Recording `pretrained=True`
++    # regardless, which is what results.py did, turns that into a provenance lie
++    # in the paper: the table would claim a pretrained baseline that was never
++    # pretrained.
++    #
++    # Worth knowing which you want: RigL, GraNet and EAST all train CIFAR from
++    # SCRATCH, so 'random' is the setting that makes this project's numbers
++    # comparable to their published ones. 'imagenet_checkpoint' is a deviation
++    # and has to be declared as one.
++    init_source = 'random'
++    if spec.weight == '':
++        init_source = 'hf_hub'                # arrived pretrained from the hub
++    elif pretrained and spec.weight:
++        init_source = ('imagenet_checkpoint'
++                       if load_weights(model, spec.weight) else 'random')
+ 
+-    embedded_dim = _get_embedded_dim_from_model(model)
+     return {
+         'model':        model,
+-        'embedded_dim': embedded_dim,
++        'embedded_dim': _get_embedded_dim_from_model(model),
+         'model_type':   spec.type,
+         'model_family': spec.family,
++        'model_task':   spec.task,
++        'init_source':  init_source,
+     }
+ 
++
+ def adapt_resnet_for_small_images(model):
+     if hasattr(model, 'conv1'):
+         model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+ 
++
+ def make_classification_head(embedded_dim: int, num_out_features: int):
+     return nn.Linear(embedded_dim, num_out_features)
+ 
++
+ def adapt_head_for_model(model, head: nn.Module, model_type: str, model_family: str):
+-    if model_type == 'vision':
++    if model_type == 'cv':
+         if hasattr(model, 'fc'):
+             model.fc = head
+             return
+-        
++
+         if hasattr(model, 'classifier'):
+             cls_head = model.classifier
+             if isinstance(cls_head, nn.Sequential):
+@@ -93,45 +200,66 @@ def adapt_head_for_model(model, head: nn.Module, model_type: str, model_family:
+             else:
+                 model.classifier = head
+             return
+-        
++
+         if hasattr(model, 'head'):
+             model.head = head
+             return
+-        
++
+         raise RuntimeError("Couldn't attach head to vision model: " + model.__class__.__name__)
+     else:
+         raise ValueError(f"Unsupported model type: {model_type}")
+ 
++
+ def remove_last_layer(model):
+-    children = list(model.named_children())
+-    last_name, last_module = children[-1]
+-
+-    if isinstance(last_module, nn.Sequential):
+-        layers = list(last_module.children())[:-1]
+-        layers.append(nn.Identity())
+-        setattr(model, last_name, nn.Sequential(*layers))
+-    elif isinstance(last_module, nn.Linear):
+-        setattr(model, last_name, nn.Identity())
+-    else:
+-        raise ValueError(f"Unsupported module type: {type(last_module)}")
+-    return model
++    """Replace the task head with Identity so forward() yields features.
++
++    Dispatches on the head attribute rather than on `named_children()[-1]`.
++    The positional version broke on HF sequence-classification models, whose last
++    registered child is a Dropout rather than the classifier.
++    """
++    if hasattr(model, 'fc') and isinstance(model.fc, (nn.Linear, nn.Sequential)):
++        model.fc = nn.Identity()
++        return model
++
++    if hasattr(model, 'classifier'):
++        if isinstance(model.classifier, nn.Sequential):
++            layers = list(model.classifier.children())[:-1] + [nn.Identity()]
++            model.classifier = nn.Sequential(*layers)
++        else:
++            model.classifier = nn.Identity()
++        return model
++
++    if hasattr(model, 'head') and isinstance(model.head, nn.Linear):
++        model.head = nn.Identity()
++        return model
++
++    raise ValueError(f"Don't know where the task head is on {model.__class__.__name__}")
++
+ 
+ class BaseModelWrapper(nn.Module):
+     def __init__(
+-        self, 
+-        model_name:        str, 
+-        device:            str, 
+-        pretrained:        bool = True, 
++        self,
++        model_name:        str,
++        device:            str,
++        pretrained:        bool = True,
+         adapt:             bool = True,
+         dyrelu_en:         bool = False,
+         dyrelu_phasing_en: bool = False,
++        num_classes:       int = 1000,
+         ):
+         super().__init__()
+-        components = initialize_model_components(model_name, pretrained, dyrelu_en, dyrelu_phasing_en)
++        components = initialize_model_components(
++            model_name, pretrained, dyrelu_en, dyrelu_phasing_en, num_classes,
++        )
+         self.model        = components['model']
+         self.embedded_dim = components['embedded_dim']
+         self.model_type   = components['model_type']
+         self.model_family = components['model_family']
++        self.model_task   = components['model_task']
++        # What the weights actually are, not what was requested. Read by
++        # results.record_run; see initialize_model_components for why the two
++        # can differ without anything raising.
++        self.init_source  = components['init_source']
+ 
+         if adapt and self.model_family == 'resnet':
+             adapt_resnet_for_small_images(self.model)
+@@ -141,20 +269,22 @@ class BaseModelWrapper(nn.Module):
+     def forward(self, *args, **kwargs):
+         raise NotImplementedError
+ 
++
+ class ClassificationAndEncoderNetwork(BaseModelWrapper):
+     def __init__(
+-        self, 
+-        model_name:         str, 
+-        num_classes:        int, 
+-        num_out_features:   int = None, 
+-        device:             str = 'cuda', 
+-        adapt:              bool = True, 
+-        pretrained:         bool = True, 
+-        freeze:             bool = False, 
++        self,
++        model_name:         str,
++        num_classes:        int,
++        num_out_features:   int = None,
++        device:             str = 'cuda',
++        adapt:              bool = True,
++        pretrained:         bool = True,
++        freeze:             bool = False,
+         dyrelu_en:          bool = False,
+         dyrelu_phasing_en:  bool = False
+         ):
+-        super().__init__(model_name, device, pretrained, adapt, dyrelu_en, dyrelu_phasing_en)
++        super().__init__(model_name, device, pretrained, adapt, dyrelu_en,
++                         dyrelu_phasing_en, num_classes)
+         self.model_name = model_name
+         self.num_classes = num_classes
+         self.num_out_features = num_out_features
+@@ -163,44 +293,74 @@ class ClassificationAndEncoderNetwork(BaseModelWrapper):
+         if freeze:
+             for p in self.model.parameters():
+                 p.requires_grad = False
+-        
+-        self.model = remove_last_layer(self.model)
+-        self.cls_head = make_classification_head(self.embedded_dim, self.num_classes).to(self.device)
++
++        if self.model_type == 'cv':
++            # Strip the backbone's head and attach our own, so features are
++            # available separately from logits.
++            self.model = remove_last_layer(self.model)
++            self.cls_head = make_classification_head(self.embedded_dim, self.num_classes).to(self.device)
++        else:
++            # Language models keep their own head: a sequence classifier or, for
++            # MLM, the vocabulary projection. Replacing it would discard the
++            # pretrained LM head, which is the entire task. Features come from the
++            # encoder's last hidden state instead.
++            self.cls_head = None
+ 
+         if self.num_out_features is not None:
+             self.encoder_head = nn.Linear(self.embedded_dim, self.num_out_features).to(self.device)
+-    
++
+     def get_embeddings(self, x):
++        """Project backbone features into the space the contrastive losses live in.
++
++        proj_mode controls whether a projection head is involved at all:
++
++          'none'  -- contrast the pooled backbone features directly. This is what
++                     CAP does (it uses the [CLS] hidden state), and it removes the
++                     failure mode below entirely.
++          else    -- project through encoder_head, as before.
++
++        Why the mode exists: encoder_head is excluded from pruning by layer_check
++        and, for a real ResNet-50, is a Linear(2048, 128) carrying ~262k dense
++        parameters. All three contrastive losses are computed *only* on its output.
++        With the teacher branch frozen, the student can therefore drive PrC/FiC/SnC
++        down by moving those 262k unpruned parameters without ever changing the
++        backbone -- the thing being pruned, and the thing the method claims to
++        protect. Ordinary contrastive learning is immune because both branches
++        share the encoder, so the only route to a lower loss is a better backbone.
++
++        The 'tied_frozen' mode (wired up in training_utils._apply_proj_mode) keeps
++        the head but shares one frozen weight matrix across the student and every
++        teacher, so the loss again measures backbone agreement.
++        """
++        if getattr(self, 'proj_mode', 'current') == 'none':
++            return F.normalize(x, dim=1)
+         raw_emb = self.encoder_head(x)
+         return F.normalize(raw_emb, dim=1)
+ 
+-    def forward(self, x, return_emb=False, return_feat=False):
+-        if self.model_type == 'vision':
+-            x = self.model(x)
+-        else:
+-            x = self.model(**x)
++    def _llm_forward(self, batch):
++        """One pass returning (features, HF output).
++
++        Features are the last hidden state at position 0 -- the [CLS] / <s> token --
++        matching CAP, which uses the [CLS] representation and reports it beat mean
++        pooling. Returning both from a single pass matters: computing them
++        separately would double the cost of every language-model step.
++        """
++        outputs = self.model(**batch, output_hidden_states=True)
++        features = outputs.hidden_states[-1][:, 0]
++        return features, outputs
++
++    def forward_all(self, x):
++        """Returns (features, task_output) from a single forward pass."""
++        if self.model_type == 'cv':
++            features = self.model(x)
++            features = features.logits if hasattr(features, 'logits') else features
++            return features, self.cls_head(features)
++        return self._llm_forward(x)
+ 
++    def forward(self, x, return_emb=False, return_feat=False):
++        features, output = self.forward_all(x)
+         if return_feat:
+-            return x
++            return features
+         if return_emb:
+-            return self.get_embeddings(x)
+-        return self.cls_head(x)
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
++            return self.get_embeddings(features)
++        return output
+diff --git a/project/pruning_factory.py b/project/pruning_factory.py
+index 17cea86..dfc29df 100644
+--- a/project/pruning_factory.py
++++ b/project/pruning_factory.py
+@@ -1,6 +1,7 @@
+ import os
+ import torch
+ import torch.nn as nn
++import torch.nn.functional as F
+ import matplotlib.pyplot as plt
+ from abc import abstractmethod, ABC
+ from typing import Dict
+@@ -12,18 +13,131 @@ import numpy as np
+ import pandas as pd
+ import math
+ 
++# Parameters the pruner never owns. Grouped by why, because the choice changes what
++# a reported sparsity figure means -- and at extreme sparsity these are not rounding
++# errors. A dense Linear(2048, 100) head is 204,800 weights; at 99% sparsity on
++# ResNet-50 the whole surviving budget is roughly 250,000.
++
++# EAST's DyReLU hyperfunctions. Correct to exclude: phasing removes them from the
++# forward pass by the end of training, so they are not part of the deployed model.
++_EXCLUDE_ACTIVATION = ('hyperfunction', 'relu')
++
++# The contrastive projection head. Not part of the task model at all -- it is
++# discarded after BaCP training.
++_EXCLUDE_PROJECTION = ('encoder_head',)
++
++# Token and position embeddings. Excluding these is not optional for language
++# models: DistilBERT and RoBERTa tie word_embeddings to the output projection, so
++# pruning the embedding matrix also prunes the LM head. On DistilBERT that single
++# tensor is 23.4M of 66M parameters, and including it made the prunable set 99.7%
++# of the model -- meaning a "99% sparsity" figure would be dominated by the
++# embedding table rather than describing the transformer blocks.
++_EXCLUDE_EMBEDDINGS = ('embedding',)
++
++# Task heads. Matches the protocol stated in the paper's appendix D.4 -- "the fc
++# layer was kept dense", "the final classifier.6 layer was kept dense",
++# "embeddings and classification heads were kept dense".
++_EXCLUDE_TASK_HEAD = (
++    'cls_head',                          # this project's replacement classifier
++    'vocab_projector', 'vocab_transform',  # DistilBERT MLM head
++    'lm_head',                           # RoBERTa MLM head
++    'classifier',                        # HF sequence-classification heads
++)
++
++# --- Prunable scope -------------------------------------------------------
++#
++# Whether the task head and the embeddings are prunable is a *choice*, and it has
++# to be the same choice for the pruner, check_model_sparsity and
++# check_sparsity_distribution -- otherwise the reported sparsity describes a
++# different set of weights than the one being pruned. Hence one module-level
++# setting rather than a per-call argument: a single source of truth.
++#
++# Set it once via set_prunable_scope(), which _initialize_pruner does before any
++# sparsity is measured.
++
++_PRUNE_TASK_HEAD = False
++_PRUNE_EMBEDDINGS = False
++
++
++def set_prunable_scope(prune_task_head=False, prune_embeddings=False, model=None):
++    """Declare which parameter groups the pruner owns.
++
++    prune_task_head:
++        Include the final classifier. The paper's appendix D.4 says heads were kept
++        dense ("the fc layer was kept dense"), but pruning everything is the
++        convention in dynamic sparse training, so both are legitimate -- just not
++        interchangeable. At 99% sparsity on ResNet-50/CIFAR-100 a dense
++        Linear(2048, 100) is 204,800 weights against a surviving budget of roughly
++        250,000, so this flag moves the headline number substantially. State which
++        convention you report.
++
++    prune_embeddings:
++        Include token and position embeddings. Off by default, and dangerous for
++        transformers: DistilBERT and RoBERTa tie word_embeddings to the output
++        projection, so pruning the embedding matrix also prunes the LM head. On
++        DistilBERT that single tensor is 23.4M of 66M parameters, which makes the
++        prunable set 99.7% of the model -- a "99% sparsity" figure would then be
++        describing the embedding table, not the transformer blocks.
++    """
++    global _PRUNE_TASK_HEAD, _PRUNE_EMBEDDINGS
++    _PRUNE_TASK_HEAD = bool(prune_task_head)
++    _PRUNE_EMBEDDINGS = bool(prune_embeddings)
++
++    scope = ['backbone']
++    if _PRUNE_TASK_HEAD:
++        scope.append('task head')
++    if _PRUNE_EMBEDDINGS:
++        scope.append('embeddings')
++    print(f"[SPARSITY SCOPE] Prunable: {', '.join(scope)}")
++
++    if _PRUNE_EMBEDDINGS and model is not None and _has_tied_embeddings(model):
++        print("  ! WARNING: this model ties its input embeddings to its output "
++              "projection. Pruning embeddings therefore also prunes the LM head, "
++              "and the embedding table will dominate the sparsity denominator.")
++
++
++def _has_tied_embeddings(model):
++    """True when input and output embeddings share storage."""
++    inner = getattr(model, 'model', model)
++    get_in = getattr(inner, 'get_input_embeddings', None)
++    get_out = getattr(inner, 'get_output_embeddings', None)
++    if not callable(get_in) or not callable(get_out):
++        return False
++    try:
++        emb_in, emb_out = get_in(), get_out()
++    except Exception:
++        return False
++    if emb_in is None or emb_out is None:
++        return False
++    w_in = getattr(emb_in, 'weight', None)
++    w_out = getattr(emb_out, 'weight', None)
++    return w_in is not None and w_out is not None and w_in.data_ptr() == w_out.data_ptr()
++
++
++def excluded_keywords():
++    """The keyword set layer_check currently excludes, given the active scope."""
++    excluded = _EXCLUDE_ACTIVATION + _EXCLUDE_PROJECTION
++    if not _PRUNE_EMBEDDINGS:
++        excluded += _EXCLUDE_EMBEDDINGS
++    if not _PRUNE_TASK_HEAD:
++        excluded += _EXCLUDE_TASK_HEAD
++    return excluded
++
++
+ def layer_check(name, param):
++    """True if the pruner owns this parameter.
++
++    Always excludes 1-D tensors (norms and biases), frozen tensors, the DyReLU
++    hyperfunctions and the contrastive projection head. The task head and the
++    embeddings are governed by set_prunable_scope().
++    """
+     if param is None:
+         return False
+     if param.dim() <= 1 or not param.requires_grad:
+         return False
+-    
+-    exclusion_keywords = [
+-        'hyperfunction', 'relu',
+-        'encoder_head',
+-    ]
+ 
+-    if any(keyword in name.lower() for keyword in exclusion_keywords):
++    lowered = name.lower()
++    if any(keyword in lowered for keyword in excluded_keywords()):
+         return False
+     return True
+ 
+@@ -65,11 +179,20 @@ class BasePruner(ABC):
+         return masks
+ 
+ 
+-    def calculate_erk_densities(self, model):
++    def calculate_erk_densities(self, model=None):
++        """Erdos-Renyi-Kernel per-layer densities for the current target sparsity.
++
++        `model` is optional and defaults to self.model. It has to accept both
++        forms: LocalMagnitudePrune calls it with no argument (which was a
++        TypeError, so that pruner never constructed) while EASTPruner passes the
++        model explicitly.
++        """
++        model = model if model is not None else self.model
++
+         layer_names = []
+-        layer_params = [] 
++        layer_params = []
+         layer_mass = []
+-        
++
+         for name, param in model.named_parameters():
+             if layer_check(name, param):
+                 n_out = param.shape[0]
+@@ -221,9 +344,42 @@ class GlobalMagnitudePruner(BasePruner):
+ 
+ 
+ class LocalMagnitudePrune(BasePruner):
+-    def __init__(self, model, total_epochs, target_sparsity, scheduler_type):
+-        super().__init__(model, total_epochs, target_sparsity, scheduler_type)
+-        self.erk_densities = self.calculate_erk_densities()
++    """Per-layer magnitude pruning under a declared layer-wise budget.
++
++    `layerwise_alloc` chooses *how the global budget is split across layers*, which
++    is a separate mechanism from *which weights within a layer are cut*:
++
++      'erk'     -- Erdos-Renyi-Kernel (Evci et al. 2020). Wide layers get lower
++                   density than narrow ones. The default, and what RigL and EAST
++                   both use, so it is the like-for-like setting.
++      'uniform' -- every layer at the same density, 1 - target_sparsity. This is
++                   the honest floor, and it is required to disentangle "ERK helps"
++                   from "ERK protects the small classifier layer": the two are
++                   confounded in a single rung, because under ERK the classifier's
++                   ER mass is large relative to its parameter count and it ends up
++                   near-dense whether or not it is nominally in the prunable scope.
++
++    See project/experiments/manifest.py rungs A1-A4, which run these as a 2x2
++    against prune_task_head for exactly that reason.
++    """
++
++    # BasePruner takes its settings as **kwargs. The old signature accepted
++    # scheduler_type positionally and forwarded it as a 4th positional argument,
++    # which was a TypeError -- so this pruner could never be constructed, and
++    # get_pruner would also have handed it a delta_T it had nowhere to put.
++    def __init__(self, model, total_epochs, target_sparsity, **kwargs):
++        super().__init__(model, total_epochs, target_sparsity, **kwargs)
++        self.layerwise_alloc = kwargs.get('layerwise_alloc') or 'erk'
++        if self.layerwise_alloc not in ('erk', 'uniform'):
++            raise ValueError(
++                f"layerwise_alloc must be 'erk' or 'uniform', got "
++                f"{self.layerwise_alloc!r}"
++            )
++        if self.layerwise_alloc == 'uniform':
++            flat = 1.0 - self.target_sparsity
++            self.erk_densities = {n: flat for n in self.prunable_params}
++        else:
++            self.erk_densities = self.calculate_erk_densities()
+ 
+     def update_masks(self, epoch):
+         if self.current_sparsity == 0: return
+@@ -269,137 +425,248 @@ class SNIPPruner(BasePruner):
+             self.masks[name] = (score > threshold).float()
+ 
+ 
+-# class WandaPrune(Pruner):
+-#     """Weight and Activation pruning."""
+-
+-#     class WrappedLayer:
+-#         def __init__(self, layer, name):
+-#             self.layer = layer
+-#             self.scaler_row = None
+-#             self.nsamples = 0
+-
+-#             if hasattr(layer, 'weight'):
+-#                 self.rows = layer.weight.shape[0]
+-#                 self.cols = layer.weight.shape[1]
+-#                 self.device = layer.weight.device
+-#                 self.scaler_row = torch.zeros(self.cols, device=self.device)
+-
+-#         def add_batch(self, inp):
+-#             if self.scaler_row is None: return
+-
+-#             if len(inp.shape) == 2: inp = inp.unsqueeze(0)
+-#             tmp = inp.shape[0]
+-
+-#             if len(inp.shape) == 3: inp = inp.reshape((-1, inp.shape[-1]))
+-#             elif len(inp.shape) == 4: inp = inp.permute(0, 2, 3, 1).reshape(-1, inp.shape[1])
+-
+-#             scaler = torch.norm(inp, p=2, dim=1) ** 2 / tmp
+-#             self.scaler_row += scaler
+-#             self.nsamples += 1
+-
+-
+-#     def __init__(self, model, total_epochs, target_sparsity, scheduler_type):
+-#         super().__init__(model, total_epochs, target_sparsity, scheduler_type)
+-#         self.wrapped_layers = {}
+-#         self._wrap_layers()
+-#         self.hooks = self.register_hooks()
+-
+-
+-#     def _wrap_layers(self):
+-#         check = False
+-#         for name, module in self.model.named_modules():
+-#             if name in self.prunable_params:
+-#                 check = True
+-#                 self.wrapped_layers[name] = self.WrappedLayer(module)
+-#         if check: print("[Wanda] Layers are wrapped.")
+-    
+-
+-#     def activation_hook(self, name):
+-#         def hook(_, inputs, outputs):
+-#             if self.model.training:
+-#                 input_tensor = inputs[0] if isinstance(inputs, tuple) else inputs
+-#                 if name, wrapper in self.wrapped_layers.items():
+-#                     wrapper.add_batch(input_tensor.data.to(self.device))
+-#         return hook
+-
+-
+-#     def register_hooks(self):
+-#         print("[Wanda] Adding hooks")
+-#         for name, wrapper in self.wrapped_layers.items():
+-#             hook = wrapper.layer.register_forward_hook(
+-#                 self.activation_hook(name)
+-#             )
+-#             self.hooks.append(hook) 
+-
+-
+-#     def remove_hooks(self):
+-#         for hook in self.hooks: hook.remove()
+-#         self.hooks = []
+-
+-
+-#     def calibrate(self, loader, num_batches=100):
+-#         from training_utils import _handle_data_to_device
+-
+-#         print(f"[Wanda] Calibrating with {num_batches} batches.")
+-#         model.eval()
+-
+-#         with torch.no_grad():
+-#             for i, batch in enumerate(trainloader):
+-#                 if i > num_calibration_batches: break
+-#                 data, labels = _handle_data_to_device(self, batch)
++class WandaPruner(BasePruner):
++    """Weight-and-activation pruning (Sun et al. 2023, arXiv 2306.11695).
++
++    Importance of weight W[i,j] is
++
++        S[i,j] = |W[i,j]| * ||X[:,j]||_2
++
++    where ||X[:,j]||_2 is the L2 norm of the j-th input feature aggregated over a
++    calibration set. The insight is that magnitude alone mis-ranks weights whose
++    input channel is systematically small or large: a large weight on a dead
++    channel contributes nothing, and a small weight on a high-variance channel can
++    matter a great deal.
++
++    **The comparison group is a CHOICE here, and the citation does not settle it.**
++    Wanda ranks within each output row and reports that grouping as crucial -- but
++    only for LLMs. Its own Appendix A runs the same comparison on image
++    classifiers and finds the opposite: "we do not observe similar trend in image
++    classification models, suggesting that our observations regarding pruning per
++    output might be unique to LLMs", with layer-wise slightly better for both
++    ConvNeXt-B and DeiT-B. That text is in the ICLR 2024 camera-ready, not a
++    preprint artefact.
++
++    This project prunes ResNet/VGG on CIFAR. So there is no Wanda evidence for
++    per-output ranking in our setting in either direction, and the only vision
++    evidence that exists points the other way. `group` therefore defaults to
++    'output' (Wanda's headline configuration, so the column means what its name
++    says) but is a first-class, recorded knob, and the paper must present the
++    choice as ours rather than lean on the citation. Cite Wanda for the metric
++    |W| * ||X||_2, which does transfer; do not cite it for the grouping.
++
++      'output' -- rank within each row of W. Every output neuron keeps the same
++                  fraction of its inputs.
++      'layer'  -- one threshold for the whole layer, as this file's magnitude and
++                  SNIP pruners use. Wanda's vision experiments favour this.
++
++    **The activation norm is accumulated, not sampled.** scaler_row holds a running
++    mean of ||X[:,j]||^2 over calibration batches in incremental form, so the
++    statistic does not depend on how many batches happened to be available.
++
++    **The Conv2d convention is ours, not Wanda's.** Wanda's reference
++    implementation (lib/layerwrapper.py) handles nn.Linear only -- its reshape
++    branch is gated on isinstance(layer, nn.Linear) -- so there is no published
++    convention to follow for 4-D weights. We fold the kernel into the input
++    dimension: a weight of shape (out, in, kh, kw) is scored against F.unfold'd
++    input columns, giving the same [rows x columns] matrix Wanda scores for a
++    Linear layer. Scoring per (in, kh, kw) position against a per-channel norm
++    instead would ignore that different kernel positions see different input
++    statistics. Stated here because the paper has to state it.
++
++    Calibration is driven by set_calibration_loader(). Without it every norm falls
++    back to 1, which is *exactly magnitude pruning*. That fallback prints a warning
++    rather than passing silently, because an unnoticed fallback would put a "WANDA"
++    column in a table that actually contains magnitude numbers -- the most
++    misleading failure this class could have, and the reason the previous
++    commented-out draft was worse than no implementation at all.
++    """
+ 
+-#                 # Forward pass
+-#                 if len(data) == 2:
+-#                     for d in data:
+-#                         _ = model(d, return_emb=True)
+-#                 else:
+-#                     _ = model(data)
+-
+-#                 # Print progress every 10 batches
+-#                 if (i + 1) % 10 == 0:
+-#                     print(f"  > Calibration progress: {i+1}/{num_calibration_batches} batches")
+-        
+-#         self.remove_hooks()
+-#         self.model.train()
+-#         print("[Wanda] Calibration done.")
+-
+-    
+-#     def update_masks(self, epoch):
+-#         raise NotImplementedError()
+-
+-#         # if self.current_sparsity == 0: return
+-
+-#         # all_importances = []
+-#         # importance_cache = {}
+-
+-#         # for name in self.wrapped_layers:
+-#         #     if self.wrapped_layers[name].scaler_row is None:
+-#         #         continue
+-
+-#         #     W = self.main_layers[name].weight.data
+-#         #     scaler_row = self.wrapped_layers[name].scaler_row.to(self.device).float()
+-#         #     scaler_row = torch.clamp(torch.nan_to_num(scaler_row, nan=0.0, posinf=1e6, neginf=0.0), min=0.0)
+-
+-#         #     if W.dim() == 4:
+-#         #         scaler_row = scaler_row.reshape(1, -1, 1, 1)
+-#         #     else: 
+-#         #         scaler_row = scaler_row.reshape(1, -1)
++    def __init__(self, model, total_epochs, target_sparsity, **kwargs):
++        super().__init__(model, total_epochs, target_sparsity, **kwargs)
++        self.calibration_loader = kwargs.get('calibration_loader')
++        self.calibration_batches = int(kwargs.get('calibration_batches') or 8)
++        self.group = kwargs.get('wanda_group') or 'output'
++        if self.group not in ('output', 'layer'):
++            raise ValueError(
++                f"wanda_group must be 'output' or 'layer', got {self.group!r}")
++        self.scaler_row = {}          # param name -> Tensor[in_features]
++        self._nsamples = {}
++        self._calibrated = False
++        self._calibration_step = None
++        self._fallback_layers = set()
++        self._modules = self._find_scored_modules()
++
++    def _find_scored_modules(self):
++        """param name -> (module name, module), for prunable Linear/Conv2d weights."""
++        out = {}
++        for mod_name, module in self.model.named_modules():
++            if not isinstance(module, (nn.Linear, nn.Conv2d)):
++                continue
++            param_name = f'{mod_name}.weight' if mod_name else 'weight'
++            if param_name in self.prunable_params:
++                out[param_name] = (mod_name, module)
++        return out
++
++    def set_calibration_loader(self, loader, batches=None):
++        self.calibration_loader = loader
++        if batches is not None:
++            self.calibration_batches = int(batches)
++        self._calibrated = False
+ 
+-#         #     # Calculating local importance and threshold
+-#         #     importance = (torch.abs(W) * torch.sqrt(scaler_row + 1e-10))
+-#         #     importance_cache[name] = importance
+-#         #     all_importances.append(importance.view(-1))
++    @torch.no_grad()
++    def calibrate(self, loader=None, device=None):
++        """Accumulate per-input-feature activation norms over a few batches.
++
++        Hooks only the scored modules, so this costs a handful of forward passes
++        and no backward pass.
++        """
++        loader = loader or self.calibration_loader
++        if loader is None:
++            print('  ! [WANDA] no calibration loader: activation norms default to '
++                  '1.0, which makes this EXACTLY magnitude pruning. Any table '
++                  'column produced from this run is mislabelled.')
++            self._calibrated = True
++            return False
++
++        device = device or self.device
++        self.scaler_row = {}
++        self._nsamples = {}
++
++        def make_hook(param_name):
++            def hook(module, inputs, _output):
++                x = inputs[0].detach()
++                if isinstance(module, nn.Conv2d):
++                    # Fold the kernel into the input dimension so the scored
++                    # matrix matches the Linear case exactly.
++                    x = F.unfold(x, kernel_size=module.kernel_size,
++                                 dilation=module.dilation, padding=module.padding,
++                                 stride=module.stride)          # [B, C*kh*kw, L]
++                    x = x.transpose(1, 2).reshape(-1, x.shape[1])
++                else:
++                    x = x.reshape(-1, x.shape[-1])
++                x = x.float()
++
++                n_new = x.shape[0]
++                n_old = self._nsamples.get(param_name, 0)
++                prev = self.scaler_row.get(param_name)
++                if prev is None:
++                    prev = torch.zeros(x.shape[1], device=x.device)
++
++                # Incremental mean of squared column norms, so the statistic does
++                # not depend on the number of calibration batches available.
++                prev *= n_old / (n_old + n_new)
++                prev += x.pow(2).sum(dim=0) / (n_old + n_new)
++                self.scaler_row[param_name] = prev
++                self._nsamples[param_name] = n_old + n_new
++            return hook
++
++        handles = [module.register_forward_hook(make_hook(pname))
++                   for pname, (_, module) in self._modules.items()]
++
++        was_training = self.model.training
++        self.model.eval()
++        seen = 0
++        try:
++            for i, batch in enumerate(loader):
++                if i >= self.calibration_batches:
++                    break
++                seen = i + 1
++                data = batch[0] if isinstance(batch, (list, tuple)) else batch
++                if isinstance(data, (list, tuple)):
++                    data = data[0]
++                if isinstance(data, dict):
++                    data = {k: v.to(device) for k, v in data.items()
++                            if hasattr(v, 'to')}
++                    # Positionally, NOT splatted. ClassificationAndEncoderNetwork
++                    # takes the whole batch as one argument and does the splatting
++                    # itself in _llm_forward. `self.model(**data)` raised
++                    # "unexpected keyword argument 'input_ids'" on every GLUE run
++                    # with --pruning_type wanda, at the first mask update.
++                    self.model(data)
++                else:
++                    self.model(data.to(device))
++        finally:
++            for h in handles:
++                h.remove()
++            if was_training:
++                self.model.train()
++
++        self._calibrated = True
++        print(f'  > [WANDA] calibrated on {seen} batch(es) over '
++              f'{len(self.scaler_row)} of {len(self.prunable_params)} prunable '
++              f'layer(s)')
++        return True
+ 
+-#         # # Calculating global importance and threshold
+-#         # global_importances = torch.cat(all_importances)
+-#         # total_weights = global_importances.numel()
++    def update_masks(self, epoch):
++        """Recompute the masks.
++
++        Calibration is ONE-SHOT: it runs on the first mask update and is never
++        repeated, so under a gradual schedule the weights are re-read live while
++        the activation norms stay frozen at the first update. That is a protocol
++        decision, not an oversight -- re-calibrating every update would cost a
++        forward pass over the calibration set every delta_T steps -- but it is a
++        decision the paper has to state, so `calibration_step` is recorded and
++        pinned by a test rather than left implicit.
++        """
++        if self.current_sparsity == 0:
++            return
++        if not self._calibrated:
++            self._calibration_step = epoch
++            self.calibrate()
++            if self._fallback_layers:
++                pass  # populated below, after the first scoring pass
+ 
+-#         # k = max(0, min(total_weights, int(total_weights * self.s_curr)))
+-#         # threshold = torch.kthvalue(global_importances, k).values.item()
++        for name, param in self.prunable_params.items():
++            W = param.detach()
++            flat = W.reshape(W.shape[0], -1)            # [out, in*kh*kw]
+ 
+-#         # # Updating masks
+-#         # for name, importance in importance_cache.items():
+-#         #     self.masks[name] = torch.gt(importance, threshold).float()
++            norms = self.scaler_row.get(name)
++            if norms is not None and norms.numel() == flat.shape[1]:
++                scale = norms.sqrt().to(flat.device).unsqueeze(0)
++            else:
++                # No statistic for this layer -> magnitude ranking FOR THAT LAYER,
++                # announced rather than silent. Grouped and depth-wise Conv2d hit
++                # this deterministically, because F.unfold is group-unaware and
++                # produces C_in*kh*kw columns where the weight has only
++                # (C_in/groups)*kh*kw -- so a ResNeXt-style backbone would have
++                # been magnitude-pruned throughout while reporting itself as WANDA.
++                self._fallback_layers.add(name)
++                scale = torch.ones(1, flat.shape[1], device=flat.device)
++
++            scores = flat.abs() * scale
++
++            if self.group == 'output':
++                # Rank within each output row: every neuron keeps the same
++                # fraction of its inputs. Wanda's headline configuration --
++                # established for LLMs, explicitly NOT established for vision.
++                k = int(flat.shape[1] * self.current_sparsity)
++                if k < 1:
++                    continue
++                k = min(k, flat.shape[1] - 1)
++                idx = torch.argsort(scores, dim=1)[:, :k]
++                mask = torch.ones_like(flat)
++                mask.scatter_(1, idx, 0.0)
++            else:
++                # One threshold for the whole layer. Rows may then lose very
++                # different fractions, up to and including a whole neuron -- which
++                # is the risk the per-output grouping exists to avoid, and the
++                # reason both are offered rather than one being assumed.
++                k = int(scores.numel() * self.current_sparsity)
++                if k < 1:
++                    continue
++                k = min(k, scores.numel() - 1)
++                threshold = torch.kthvalue(scores.reshape(-1), k).values
++                mask = (scores > threshold).to(flat.dtype)
++            self.masks[name] = mask.reshape(W.shape)
++
++        if self._fallback_layers and not getattr(self, '_warned_fallback', False):
++            self._warned_fallback = True
++            print(f'  ! [WANDA] {len(self._fallback_layers)} layer(s) had no '
++                  f'usable activation statistic and were MAGNITUDE-pruned: '
++                  f'{sorted(self._fallback_layers)[:5]}'
++                  f'{" ..." if len(self._fallback_layers) > 5 else ""}. '
++                  f'Any WANDA column covering these layers is mislabelled.')
+ 
+ 
+ class RigLPruner(BasePruner):
+@@ -457,11 +724,21 @@ class EASTPruner(BasePruner):
+         super(EASTPruner, self).__init__(model, total_epochs, target_sparsity, **kwargs)
+         self.s_max = target_sparsity
+         self.delta_T = kwargs.get('delta_T', None)
+-        self.prune_rate = kwargs.get('prune_rate', None)
+-        self.Tc_ratio = kwargs.get('Tc_ratio', None)
+-        
++
++        # `or default` rather than kwargs.get(k, default): _initialize_pruner
++        # passes these as an explicit None for every non-EAST pruner, so a plain
++        # .get() would return None even though the key is present.
++        self.prune_rate = kwargs.get('prune_rate') or 0.1
++        self.Tc_ratio = kwargs.get('Tc_ratio') or 0.5
++
++        # s_min must be assigned to self. update_masks reads it with
++        # getattr(self, 's_min', 0.05), which silently returned the 0.05 default
++        # on every run because nothing ever set the attribute -- so the s_min
++        # that callers passed had no effect at all.
++        self.s_min = kwargs.get('s_min') or 0.05
++
+         # Use end_idx to determine Cycle length regardless of Epoch vs Step mode
+-        self.Tc = int(self.end_idx * self.Tc_ratio) 
++        self.Tc = max(1, int(self.end_idx * self.Tc_ratio))
+         
+         self.erk_densities = self.calculate_erk_densities(model)
+         self._init_sparse_masks()
+@@ -474,15 +751,33 @@ class EASTPruner(BasePruner):
+                 self.masks[n] = torch.bernoulli(torch.full_like(p, self.erk_densities[n]))
+ 
+     def update_masks(self, current_idx):
+-        if current_idx % self.delta_T != 0: return
++        # NOTE: no `current_idx % self.delta_T` gate here. There used to be one,
++        # and it made this method a permanent no-op: _step_pruning_step already
++        # gates on `step % delta_T == 0`, then BasePruner.step does
++        # `t = current_idx + 1` before calling update_masks(t). So this saw
++        # step + 1, and (step + 1) % delta_T is never 0 for any delta_T > 1.
++        # EAST's masks therefore never updated once, staying frozen at their
++        # Bernoulli ERK initialisation for the whole run.
+         is_cyclic = current_idx <= self.Tc
+-        
++
+         if is_cyclic:
+-            # 1. Calculate the global target sparsity (s_target) based on the cosine schedule
++            # 1. Global target sparsity from the cyclic cosine schedule.
++            #
++            # Phase matters. cos(0) = 1, so the naive
++            #   s_min + (s_max - s_min) * 0.5 * (1 - cos(2*pi*t/Tc))
++            # starts the cycle at s_min -- while _init_sparse_masks has just
++            # initialised the masks at s_max. At t=0 that reads as "grow from 99%
++            # sparse to 5% sparse", densifying the network to 95% density and
++            # abandoning the sparsity budget entirely.
++            #
++            # Anchored at s_max instead: the cycle starts and ends at s_max and
++            # dips to s_min at the half-cycle, which is the exploration behaviour
++            # EAST describes (Li et al. 2024, arXiv 2411.13545).
+             norm_t = current_idx / self.Tc
+-            s_min = getattr(self, 's_min', 0.05) # Define s_min, assuming it was passed in kwargs or has a default
+-            s_target = s_min + (self.s_max - s_min) * 0.5 * (1 - math.cos(2 * math.pi * norm_t))
+-            
++            s_min = self.s_min
++            s_target = self.s_max - (self.s_max - s_min) * 0.5 * (1 - math.cos(2 * math.pi * norm_t))
++
++
+             # 2. Calculate current global sparsity (s_curr)
+             total_active_global = sum(m.sum().item() for m in self.masks.values())
+             total_params_global = sum(m.numel() for m in self.masks.values())
+@@ -500,8 +795,8 @@ class EASTPruner(BasePruner):
+             if param.grad is None: continue
+             
+             mask = self.masks[name]
+-            numel = param.numel()
+             active_params = mask.sum().item()
++            inactive_params = mask.numel() - active_params
+ 
+             # Determine k for this specific layer
+             if is_cyclic:
+@@ -511,7 +806,7 @@ class EASTPruner(BasePruner):
+                     target_active = active_params * ((1.0 - s_target) / (1.0 - s_curr))
+                 else:
+                     target_active = active_params
+-                
++
+                 if diff > 0: # Pruning phase (s_target > s_curr, so we need fewer active params)
+                     k_prune = max(0, int(active_params - target_active))
+                     k_grow = 0
+@@ -524,6 +819,15 @@ class EASTPruner(BasePruner):
+                 # Non-cyclic phase: drop and grow a flat percentage of currently active connections
+                 k_prune = k_grow = int(active_params * self.prune_rate)
+ 
++            # Clamp to what this layer can actually supply. k is derived from the
++            # *global* sparsity ratio but spent per-layer, so a layer whose ERK
++            # density differs from the global average can be asked to prune more
++            # weights than it has active, or grow more than it has inactive --
++            # torch.topk then raises "selected index k out of range". Previously
++            # unreachable because update_masks always early-returned.
++            k_prune = int(min(k_prune, active_params))
++            k_grow = int(min(k_grow, inactive_params))
++
+             if k_prune < 1 and k_grow < 1: continue
+ 
+             new_mask = mask.clone().view(-1)
+@@ -562,7 +866,7 @@ PRUNER_REGISTRY = {
+     "snip": SNIPPruner,
+     "rigl": RigLPruner,
+     "east": EASTPruner,
+-    # "wanda": WandaPruner
++    "wanda": WandaPruner,
+ }
+ 
+ def get_pruner(method_name, model, epochs, sparsity, **kwargs):
+@@ -572,6 +876,18 @@ def get_pruner(method_name, model, epochs, sparsity, **kwargs):
+ 
+ 
+ def check_model_sparsity(model):
++    """Fraction of prunable weights that are exactly zero.
++
++    Note this measures *values*, not the mask. Under dynamic sparse training the two
++    diverge: RigL and EAST zero-initialise regrown connections, so a freshly grown
++    weight is structurally active but numerically zero and is counted here as pruned.
++    Measured on a tiny ResNet, RigL's mask sparsity held at 0.8976 while this
++    function reported 0.9277 -- i.e. it *overstates* sparsity, the flattering
++    direction.
++
++    For monotone pruning (magnitude, SNIP) nothing regrows, so the two agree and
++    this is the right measure. When a pruner is present, prefer check_mask_sparsity.
++    """
+     sum_zero, total_count = 0, 0
+     for name, param in model.named_parameters():
+         if layer_check(name, param):
+@@ -580,6 +896,26 @@ def check_model_sparsity(model):
+     return (sum_zero / total_count) if total_count > 0 else 0.0
+ 
+ 
++def check_mask_sparsity(pruner):
++    """Fraction of prunable weights the mask has switched off.
++
++    The structural measure, and the correct one to report for dynamic sparse
++    training: it counts connections, so it is unaffected by a regrown weight
++    happening to sit at zero before its first update.
++    """
++    if pruner is None or not getattr(pruner, 'masks', None):
++        return None
++    active = sum(m.sum().item() for m in pruner.masks.values())
++    total = sum(m.numel() for m in pruner.masks.values())
++    return (1.0 - active / total) if total > 0 else 0.0
++
++
++def report_sparsity(model, pruner=None):
++    """The sparsity figure to report: mask-based when a pruner owns the masks."""
++    mask_sparsity = check_mask_sparsity(pruner)
++    return mask_sparsity if mask_sparsity is not None else check_model_sparsity(model)
++
++
+ def check_sparsity_distribution(model, verbose=True):
+     names = []
+     sparsities = []
+@@ -634,7 +970,7 @@ def check_sparsity_distribution(model, verbose=True):
+     # Plotting
+     if names: # Only plot if we found backbone layers
+         plt.figure(figsize=(10, 0.2 * len(names)))
+-        bars = plt.barh(range(len(names)), sparsities, color='skyblue')
++        plt.barh(range(len(names)), sparsities, color='skyblue')
+         plt.yticks(range(len(names)), names)
+         plt.xlabel("Sparsity (Fraction of Zero Weights)")
+         plt.title("Layer-wise Sparsity Distribution")
+diff --git a/project/scripts/bacp_script.py b/project/scripts/bacp_script.py
+index 2710183..c886ceb 100644
+--- a/project/scripts/bacp_script.py
++++ b/project/scripts/bacp_script.py
+@@ -3,7 +3,6 @@ import os
+ sys.path.append(os.path.abspath('..'))
+ 
+ import torch
+-import wandb
+ from pathlib import Path
+ 
+ from bacp import BaCPTrainer, BaCPTrainingArguments
+@@ -23,8 +22,9 @@ def run_training(args):
+ 
+     # Pop non-trainer arguments before creating BaCPTrainingArguments
+     log_to_wandb = args_dict.pop('log_to_wandb')
+-    seed = args_dict.pop('seed')
+-    set_seed(seed)
++    # seed stays IN args_dict so it reaches the dataclass and gets recorded.
++    # __post_init__ re-seeds; this call covers anything before construction.
++    set_seed(args_dict['seed'])
+     
+     # Initialize arguments and trainer
+     bacp_training_args = BaCPTrainingArguments(**args_dict)
+@@ -34,6 +34,9 @@ def run_training(args):
+     final_args = bacp_trainer    
+ 
+     if log_to_wandb:
++        # Imported here, not at module scope: wandb is optional, and a
++        # top-level import made even `--help` fail without it installed.
++        import wandb
+         wandb_login()
+         
+         datestamp = final_args.datestamp
+@@ -58,7 +61,8 @@ def run_training(args):
+             bacp_trainer.train(run)
+ 
+             # Evaluate and log metrics
+-            metrics = bacp_trainer.evaluate(run)
++            metrics = bacp_trainer.evaluate(run=run)  # keyword: evaluate(self, weights=None,
++            # run=None), so a positional Run was passed where a checkpoint path goes
+             wandb.log(metrics)
+ 
+             # Use the save path already set in the trainer
+diff --git a/project/scripts/baseline_script.py b/project/scripts/baseline_script.py
+index 4aee417..19b39cc 100644
+--- a/project/scripts/baseline_script.py
++++ b/project/scripts/baseline_script.py
+@@ -3,7 +3,6 @@ import os
+ sys.path.append(os.path.abspath('..'))
+ 
+ import torch
+-import wandb
+ from pathlib import Path
+ 
+ from trainer import Trainer, TrainingArguments
+@@ -22,12 +21,16 @@ def run_training(args):
+     args_dict = vars(args)
+ 
+     log_to_wandb = args_dict.pop('log_to_wandb')
+-    seed = args_dict.pop('seed')
+-    set_seed(seed)
++    # seed stays IN args_dict so it reaches the dataclass and gets recorded.
++    # __post_init__ re-seeds; this call covers anything before construction.
++    set_seed(args_dict['seed'])
+     
+     training_args = TrainingArguments(**args_dict)
+     trainer = Trainer(training_args)
+     if log_to_wandb:
++        # Imported here, not at module scope: wandb is optional, and a
++        # top-level import made even `--help` fail without it installed.
++        import wandb
+         wandb_login()
+         group = f'{args.model_name}-{args.experiment_type}'
+         name = f'{args.model_name}-{args.experiment_type}-{args.dataset_name}-{get_timestamp()}'
+@@ -41,7 +44,8 @@ def run_training(args):
+             trainer.train(run)
+ 
+             # Evaluate and log metrics
+-            metrics = trainer.evaluate(run)
++            metrics = trainer.evaluate(run=run)  # keyword: evaluate(self, load=True, run=None),
++            # so a positional Run bound to `load` and never reached wandb
+             wandb.log(metrics)
+ 
+             run.log_model(path=trainer.save_path, name=name)
+diff --git a/project/scripts/pruning_script.py b/project/scripts/pruning_script.py
+index b44ec29..dda03a5 100644
+--- a/project/scripts/pruning_script.py
++++ b/project/scripts/pruning_script.py
+@@ -3,7 +3,6 @@ import os
+ sys.path.append(os.path.abspath('..'))
+ 
+ import torch
+-import wandb
+ from pathlib import Path
+ 
+ from trainer import Trainer, TrainingArguments
+@@ -22,12 +21,16 @@ def run_training(args):
+     args_dict = vars(args)
+ 
+     log_to_wandb = args_dict.pop('log_to_wandb')
+-    seed = args_dict.pop('seed')
+-    set_seed(seed)
++    # seed stays IN args_dict so it reaches the dataclass and gets recorded.
++    # __post_init__ re-seeds; this call covers anything before construction.
++    set_seed(args_dict['seed'])
+ 
+     training_args = TrainingArguments(**args_dict)
+     trainer = Trainer(training_args)
+     if log_to_wandb:
++        # Imported here, not at module scope: wandb is optional, and a
++        # top-level import made even `--help` fail without it installed.
++        import wandb
+         wandb_login()
+         group = f'{args.model_name}-{args.experiment_type}'
+         name = f'{args.model_name}-{args.experiment_type}-{args.dataset_name}-{get_timestamp()}'
+@@ -41,7 +44,8 @@ def run_training(args):
+             trainer.train(run)
+ 
+             # Evaluate and log metrics
+-            metrics = trainer.evaluate(run)
++            metrics = trainer.evaluate(run=run)  # keyword: evaluate(self, load=True, run=None),
++            # so a positional Run bound to `load` and never reached wandb
+             wandb.log(metrics)
+ 
+             run.log_model(path=trainer.save_path, name=name)
+diff --git a/project/scripts/scripting_utils.py b/project/scripts/scripting_utils.py
+index 07a9a10..d243b3e 100644
+--- a/project/scripts/scripting_utils.py
++++ b/project/scripts/scripting_utils.py
+@@ -1,26 +1,53 @@
+ import os
+ import argparse
+-import wandb
+ import datetime
+ 
++
+ def wandb_login():
++    # wandb is imported lazily: it is used only here, but a module-scope import
++    # forced every consumer of the argument parsers -- including the test suite --
++    # to have wandb installed.
+     api_key = os.getenv("WANDB_API_KEY")
+-    if api_key:
+-        wandb.login(key=api_key)
+-    else:
++    if not api_key:
+         print("[WARNING] WANDB_API_KEY not found, skipping login.")
++        return
++    import wandb
++    wandb.login(key=api_key)
+ 
+ 
+ def get_timestamp():
+     timestamp = datetime.datetime.now().strftime("%y%m%d%H%M%S")
+     return timestamp
+ 
+-models      = ['resnet34', 'resnet50', 'resnet101', 'vgg11', 'vgg19']
++# Keep in sync with model_factory.MODELS and dataset_factory. Pinned by
++# test_imports.py::test_cli_model_choices_are_all_registered and
++# ::test_cli_dataset_choices_are_all_registered -- the two lists had drifted
++# before, so the CLI accepted vgg11/vgg19 while both were unregistered.
++models = [
++    # vision (this project's backbones, DyReLU-capable)
++    'resnet34', 'resnet50', 'resnet101', 'vgg11', 'vgg19',
++    # vision transformers (HF hub; no DyReLU; use --image_size 224)
++    'vit-tiny', 'vit-small',
++    # language: sequence classification (SST-2)
++    'distilbert-base-uncased', 'roberta-base',
++    # language: masked language modelling (WikiText-2)
++    'distilbert-base-uncased-mlm', 'roberta-base-mlm',
++]
+ model_types = ['cv', 'llm']
+-datasets    = ['cifar10', 'cifar100']
++datasets = [
++    'cifar10', 'cifar100', 'mnist', 'fmnist', 'emnist', 'svhn', 'imagenet',
++    'sst2', 'wikitext2',
++]
++
+ 
++# The parsers are built and parsed in two steps. `build_*_parser()` returns the
++# parser without consuming sys.argv, so project/experiments/runner.py can
++# introspect it -- which option strings exist, which are store_true flags -- and
++# construct command lines from the manifest without duplicating the CLI contract
++# in a second place. A duplicated contract is how a sweep ends up silently
++# dropping a flag the script never learned about.
+ 
+-def baseline_parse_args():
++def build_baseline_parser():
+     parser = argparse.ArgumentParser(
+         description="Train a baseline dense model."
+     )
+@@ -53,14 +80,58 @@ def baseline_parse_args():
+     # Weight Sharing
+     parser.add_argument('--weight_sharing_en', action='store_true')
+ 
++    parser.add_argument('--layerwise_alloc', type=str, default='erk',
++                        choices=['erk', 'uniform'],
++                        help="How the global sparsity budget is split across layers. "
++                             "'erk' (default) matches RigL/EAST; 'uniform' gives every "
++                             "layer the same density and is the floor arm of the "
++                             "manifest's A1-A4 2x2. Only LocalMagnitudePrune reads it.")
++
++    parser.add_argument('--limit_train_batches', type=int, default=0,
++                        help="Truncate the train loader to N batches (0 = all). Tier-0 "
++                             "smoke only; recorded on every run so a truncated result "
++                             "can never be read as a measurement.")
++    parser.add_argument('--limit_eval_batches',  type=int, default=0,
++                        help="Truncate the val/test loaders to N batches (0 = all).")
++
++    parser.add_argument('--wanda_group', type=str, default='output',
++                        choices=['output', 'layer'],
++                        help="WANDA's comparison group. 'output' ranks within each "
++                             "output neuron (WANDA's headline setting); 'layer' uses "
++                             "one threshold per layer. WANDA establishes 'output' for "
++                             "LLMs and its Appendix A explicitly finds it does NOT "
++                             "transfer to image classifiers, so on CIFAR this is a "
++                             "design choice rather than a reproduction.")
++
++    parser.add_argument('--weight_decay', type=float, default=5e-4,
++                        help="L2 coefficient. EAST (TMLR 2025) uses 1e-4; GraNet uses "
++                             "5e-4. Set it to match whichever published numbers the "
++                             "run is meant to sit beside.")
++
++    # Prunable scope (see pruning_factory.set_prunable_scope)
++    parser.add_argument('--prune_task_head',   action='store_true',
++                        help="Include the final classifier in the prunable set. "
++                             "Standard in dynamic sparse training; the paper's "
++                             "appendix D.4 instead keeps heads dense.")
++    parser.add_argument('--prune_embeddings',  action='store_true',
++                        help="Include token/position embeddings. Dangerous for "
++                             "transformers: tied embeddings mean this also prunes "
++                             "the LM head and dominates the sparsity denominator.")
++
+     # Non-trainer args
+     parser.add_argument('--log_to_wandb',        action='store_true', help="Log results to Weights & Biases (WANDB).")
+     parser.add_argument('--seed',                type=int,       default=42)
++    parser.add_argument('--val_split_seed',      type=int,       default=1234,
++                        help="Train/val split seed, held fixed across runs so a 3-seed "
++                             "error bar measures init and data-order variance only.")
++    parser.add_argument('--deterministic',       action='store_true',
++                        help="torch.use_deterministic_algorithms(True). Slower and errors "
++                             "on ops lacking deterministic kernels; recorded either way.")
+ 
+-    return parser.parse_args()
++    return parser
+ 
+ 
+-def pruning_parse_args():
++def build_pruning_parser():
+     parser = argparse.ArgumentParser(
+         description="Prune a model using a specific pruning strategy"
+     )
+@@ -99,14 +170,58 @@ def pruning_parse_args():
+     # Weight Sharing
+     parser.add_argument('--weight_sharing_en', action='store_true')
+ 
++    parser.add_argument('--layerwise_alloc', type=str, default='erk',
++                        choices=['erk', 'uniform'],
++                        help="How the global sparsity budget is split across layers. "
++                             "'erk' (default) matches RigL/EAST; 'uniform' gives every "
++                             "layer the same density and is the floor arm of the "
++                             "manifest's A1-A4 2x2. Only LocalMagnitudePrune reads it.")
++
++    parser.add_argument('--limit_train_batches', type=int, default=0,
++                        help="Truncate the train loader to N batches (0 = all). Tier-0 "
++                             "smoke only; recorded on every run so a truncated result "
++                             "can never be read as a measurement.")
++    parser.add_argument('--limit_eval_batches',  type=int, default=0,
++                        help="Truncate the val/test loaders to N batches (0 = all).")
++
++    parser.add_argument('--wanda_group', type=str, default='output',
++                        choices=['output', 'layer'],
++                        help="WANDA's comparison group. 'output' ranks within each "
++                             "output neuron (WANDA's headline setting); 'layer' uses "
++                             "one threshold per layer. WANDA establishes 'output' for "
++                             "LLMs and its Appendix A explicitly finds it does NOT "
++                             "transfer to image classifiers, so on CIFAR this is a "
++                             "design choice rather than a reproduction.")
++
++    parser.add_argument('--weight_decay', type=float, default=5e-4,
++                        help="L2 coefficient. EAST (TMLR 2025) uses 1e-4; GraNet uses "
++                             "5e-4. Set it to match whichever published numbers the "
++                             "run is meant to sit beside.")
++
++    # Prunable scope (see pruning_factory.set_prunable_scope)
++    parser.add_argument('--prune_task_head',   action='store_true',
++                        help="Include the final classifier in the prunable set. "
++                             "Standard in dynamic sparse training; the paper's "
++                             "appendix D.4 instead keeps heads dense.")
++    parser.add_argument('--prune_embeddings',  action='store_true',
++                        help="Include token/position embeddings. Dangerous for "
++                             "transformers: tied embeddings mean this also prunes "
++                             "the LM head and dominates the sparsity denominator.")
++
+     # Non-trainer args
+     parser.add_argument('--log_to_wandb',        action='store_true', help="Log results to Weights & Biases (WANDB).")
+     parser.add_argument('--seed',                type=int,       default=42)
++    parser.add_argument('--val_split_seed',      type=int,       default=1234,
++                        help="Train/val split seed, held fixed across runs so a 3-seed "
++                             "error bar measures init and data-order variance only.")
++    parser.add_argument('--deterministic',       action='store_true',
++                        help="torch.use_deterministic_algorithms(True). Slower and errors "
++                             "on ops lacking deterministic kernels; recorded either way.")
+ 
+-    return parser.parse_args()
++    return parser
+ 
+ 
+-def bacp_parse_args():
++def build_bacp_parser():
+     parser = argparse.ArgumentParser(
+         description="BaCP method for pruning a model using a specific pruning strategy"
+     )
+@@ -137,6 +252,49 @@ def bacp_parse_args():
+     parser.add_argument('--learning_rate_ft',    type=float,     default=0.005, help="Learning rate for fine-tuning phase.")
+     parser.add_argument('--epochs_ft',           type=int,       default=100, help="Number of epochs for fine-tuning phase.")
+ 
++    # Contrastive formulation (see loss_functions.cap_contrastive_loss).
++    parser.add_argument('--contrastive_mode',    type=str, default='cap', choices=['cap', 'legacy'],
++                        help="'cap': one CAP Eq.1 functional, rectangular student-anchor/"
++                             "teacher-candidate similarities. 'legacy': the original "
++                             "SupCon + NT-Xent sum over a square 2Bx2B matrix.")
++    parser.add_argument('--proj_mode',           type=str, default='tied_frozen',
++                        choices=['tied_frozen', 'none', 'current'],
++                        help="'tied_frozen': one frozen projection head shared by student "
++                             "and teachers. 'none': contrast pooled features directly "
++                             "(CAP-faithful). 'current': per-model trainable heads (legacy).")
++    parser.add_argument('--num_snapshots',       type=int,       default=2,
++                        help="Max SnC snapshots retained; each costs a forward pass per batch.")
++
++    # Loss weights. Order is lambda1=PrC, lambda2=FiC, lambda3=SnC, lambda4=CE --
++    # see BaCPTrainer._combine_losses. Required for the CE-only control run
++    # (--lambdas 0 0 0 1), which was not expressible from the CLI before.
++    parser.add_argument('--lambdas',             type=float, nargs=4, default=None,
++                        metavar=('PRC', 'FIC', 'SNC', 'CE'),
++                        help="Four loss weights in the order PrC FiC SnC CE. "
++                             "Defaults to 0.25 each. Use '0 0 0 1' for a CE-only control.")
++    parser.add_argument('--learnable_lambdas',   action='store_true',
++                        help="Make the four loss weights learnable parameters.")
++
++    # Distillation controls (manifest rungs C1/C2). Not part of BaCP -- these are
++    # the arms that make its claim falsifiable, by asking whether ANY dense-teacher
++    # signal helps in this regime before asking whether the contrastive one does.
++    parser.add_argument('--distill_mode',   type=str, default='none',
++                        choices=['none', 'kl', 'feature', 'both'],
++                        help="'kl': Hinton response distillation on the fine-tuned "
++                             "dense teacher's logits. 'feature': FitNets-style "
++                             "matching on its embeddings. 'both': the two summed.")
++    parser.add_argument('--lambda_kd',      type=float, default=0.0,
++                        help="Weight on the distillation term. Deliberately OUTSIDE "
++                             "the four-lambda simplex, so switching distillation on "
++                             "does not also rescale the contrastive terms.")
++    parser.add_argument('--kd_temperature', type=float, default=4.0)
++    parser.add_argument('--feature_distill_metric', type=str, default='cosine',
++                        choices=['cosine', 'mse'])
++    parser.add_argument('--n_views',        type=int, default=2,
++                        help="Augmented views per step. Rung C0b sets this against a "
++                             "CE-only objective to separate 'contrast helps' from "
++                             "'two views per step helps'.")
++
+     parser.add_argument('--image_size',          type=int,       default=32)
+     parser.add_argument('--scheduler_type',      type=str,       default=None)
+     parser.add_argument('--patience',            type=int,       default=None)
+@@ -151,15 +309,80 @@ def bacp_parse_args():
+     # DyReLU phasing
+     parser.add_argument('--dyrelu_en',           action='store_true', help="Enable DyReLU activation function.")
+     parser.add_argument('--dyrelu_phasing_en',   action='store_true', help="Enable phasing mechanism for DyReLU.")
+-    
++
++    # EAST weight sharing. Previously accepted by the pruning/baseline parsers but
++    # not this one, even though _initialize_pruner reads args.weight_sharing_en on
++    # every path -- so BaCP runs raised AttributeError during __post_init__.
++    parser.add_argument('--weight_sharing_en',   action='store_true', help="Enable EAST weight sharing across residual blocks.")
++
++    # Mask-update interval in optimizer steps. Read by _initialize_pruner and
++    # _step_pruning_step; same missing-field story as above.
++    parser.add_argument('--delta_T',             type=int,       default=100, help="Steps between pruner mask updates.")
++
++    parser.add_argument('--layerwise_alloc', type=str, default='erk',
++                        choices=['erk', 'uniform'],
++                        help="How the global sparsity budget is split across layers. "
++                             "'erk' (default) matches RigL/EAST; 'uniform' gives every "
++                             "layer the same density and is the floor arm of the "
++                             "manifest's A1-A4 2x2. Only LocalMagnitudePrune reads it.")
++
++    parser.add_argument('--limit_train_batches', type=int, default=0,
++                        help="Truncate the train loader to N batches (0 = all). Tier-0 "
++                             "smoke only; recorded on every run so a truncated result "
++                             "can never be read as a measurement.")
++    parser.add_argument('--limit_eval_batches',  type=int, default=0,
++                        help="Truncate the val/test loaders to N batches (0 = all).")
++
++    parser.add_argument('--wanda_group', type=str, default='output',
++                        choices=['output', 'layer'],
++                        help="WANDA's comparison group. 'output' ranks within each "
++                             "output neuron (WANDA's headline setting); 'layer' uses "
++                             "one threshold per layer. WANDA establishes 'output' for "
++                             "LLMs and its Appendix A explicitly finds it does NOT "
++                             "transfer to image classifiers, so on CIFAR this is a "
++                             "design choice rather than a reproduction.")
++
++    parser.add_argument('--weight_decay', type=float, default=5e-4,
++                        help="L2 coefficient. EAST (TMLR 2025) uses 1e-4; GraNet uses "
++                             "5e-4. Set it to match whichever published numbers the "
++                             "run is meant to sit beside.")
++
++    # Prunable scope (see pruning_factory.set_prunable_scope)
++    parser.add_argument('--prune_task_head',     action='store_true',
++                        help="Include the final classifier in the prunable set. Standard "
++                             "in dynamic sparse training; the paper's appendix D.4 instead "
++                             "keeps heads dense. Changes what the sparsity figure denotes.")
++    parser.add_argument('--prune_embeddings',    action='store_true',
++                        help="Include token/position embeddings. Dangerous for transformers: "
++                             "tied embeddings mean this also prunes the LM head, and the "
++                             "embedding table then dominates the sparsity denominator.")
++
+     # Non-trainer args
+     parser.add_argument('--log_to_wandb',        action='store_true', help="Log results to Weights & Biases (WANDB).")
+     parser.add_argument('--seed',                type=int,       default=42)
++    parser.add_argument('--val_split_seed',      type=int,       default=1234,
++                        help="Train/val split seed, held fixed across runs so a 3-seed "
++                             "error bar measures init and data-order variance only.")
++    parser.add_argument('--deterministic',       action='store_true',
++                        help="torch.use_deterministic_algorithms(True). Slower and errors "
++                             "on ops lacking deterministic kernels; recorded either way.")
++
++    return parser
++
++
++
++
++
+ 
+-    return parser.parse_args()
+ 
+ 
++def baseline_parse_args(argv=None):
++    return build_baseline_parser().parse_args(argv)
+ 
+ 
++def pruning_parse_args(argv=None):
++    return build_pruning_parser().parse_args(argv)
+ 
+ 
++def bacp_parse_args(argv=None):
++    return build_bacp_parser().parse_args(argv)
+diff --git a/project/trainer.py b/project/trainer.py
+index 0e85d02..4e2d3eb 100644
+--- a/project/trainer.py
++++ b/project/trainer.py
+@@ -6,21 +6,13 @@ from tqdm import tqdm
+ from torch.amp import GradScaler, autocast
+ from dataclasses import dataclass
+ from training_utils import (
+-    _initialize_models,
+-    _initialize_data_loaders,
+-    _initialize_optimizer,
+-    _initialize_scheduler,
+-    _initialize_pruner,
+-    _initialize_paths_and_logger,
+-    _initialize_log_parameters,
+-    _initialize_dyrelu_phasing,
++    _finalize_run,
++    _initialize_all,
+     _initialize_logs,
+-    
++
+     _optimizer_step,
+-    _epoch_pruning_step,
+     _step_pruning_step,
+-    _handle_wanda_calibration,
+-    
++
+     _handle_data_to_device,
+     _handle_tqdm_logs,
+     _log_metrics,
+@@ -28,7 +20,7 @@ from training_utils import (
+ )
+ from dyrelu_adapter import step_dyrelu_adapter
+ from pruning_factory import check_model_sparsity
+-from utils import load_weights
++from utils import load_weights, set_seed
+ 
+ @dataclass
+ class TrainingArguments:
+@@ -60,28 +52,73 @@ class TrainingArguments:
+     recovery_epochs:        int = 0
+     pruning_module:         object = None
+     delta_T:                int = 100
++    # How the global sparsity budget is split across layers. Only read by
++    # LocalMagnitudePrune ('erk' | 'uniform'); RigL and EAST always use ERK.
++    # A config field rather than a pruner default so it reaches logger_params and
++    # the run record -- the two settings report different things.
++    layerwise_alloc:        str = 'erk'
++    # Wanda's comparison group: 'output' (per output neuron, Wanda's headline
++    # setting for LLMs) or 'layer' (one threshold per layer). Wanda's Appendix A
++    # finds per-output does NOT transfer to image classifiers, so this is our
++    # design choice and is recorded as one.
++    wanda_group:            str = 'output'
++    # L2 / weight decay. 1e-4 is EAST's value (TMLR 2025, Table B.1); GraNet uses
++    # 5e-4. Which one is correct depends entirely on which paper's numbers you
++    # intend to sit beside, so it is a declared field rather than a constant.
++    weight_decay:           float = 5e-4
++    # Tier-0 smoke controls: truncate the loaders to N batches. 0 = no limit.
++    # Always recorded, so a truncated run cannot be mistaken for a real one.
++    limit_train_batches:    int = 0
++    limit_eval_batches:     int = 0
+ 
+     # DyReLU / EAST
+     dyrelu_en:              bool = False
+     dyrelu_phasing_en:      bool = False
+     weight_sharing_en:      bool = False
+ 
++    # Prunable scope. The paper's appendix D.4 keeps task heads dense; dynamic
++    # sparse training conventionally prunes everything. Both are defensible, but
++    # they report different quantities -- see pruning_factory.set_prunable_scope.
++    prune_task_head:        bool = False
++    # Off by default and dangerous for transformers: DistilBERT and RoBERTa tie
++    # word_embeddings to the output projection, so pruning embeddings also prunes
++    # the LM head, and the embedding table then dominates the sparsity denominator.
++    prune_embeddings:       bool = False
++
++    # Run seed. Previously popped from args_dict in the scripts before the dataclass
++    # was constructed, so it never reached args and was never recorded anywhere --
++    # making every run un-reproducible after the fact.
++    seed:                   int = 42
++    # Train/val split seed, deliberately separate from `seed`. See
++    # dataset_factory.load_cv_datasets for why the split must not track the run seed.
++    val_split_seed:         int = 1234
++    # torch.use_deterministic_algorithms. Off by default: it hard-errors on ops with
++    # no deterministic kernel and costs throughput. Recorded either way.
++    deterministic:          bool = False
++
++    # Set False to construct the arguments object without building models,
++    # dataloaders, optimizer or pruner. Only the cheap prefix in __post_init__
++    # runs. Used by the test suite so the dataclass is constructible on CPU with
++    # no /dbfs checkpoints; not exposed on the CLI.
++    auto_init:              bool = True
++
+     def __post_init__(self):
+         self.scaler = GradScaler() if self.enable_mixed_precision else None
+         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+         self.retrain = (self.recovery_epochs > 0)
+         self.is_bacp = False
+ 
+-        _initialize_models(self)
+-        _initialize_data_loaders(self)
+-        _initialize_optimizer(self)
+-        _initialize_scheduler(self)
++        if not self.auto_init:
++            return
+ 
+-        _initialize_pruner(self)
++        # Seed here, not only in the scripts: this guarantees the recorded seed is
++        # the one actually active when models were built and the val split drawn.
++        set_seed(self.seed)
++        if self.deterministic:
++            os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
++            torch.use_deterministic_algorithms(True)
+ 
+-        _initialize_paths_and_logger(self)
+-        _initialize_log_parameters(self)
+-        _initialize_dyrelu_phasing(self)
++        _initialize_all(self)
+ 
+ class Trainer:
+     """
+@@ -156,7 +193,8 @@ class Trainer:
+             final_metrics[key] = value
+         final_metrics['sparsity'] = sparsity
+ 
+-        _log_metrics(self, 'Final', final_metrics, run) 
++        _log_metrics(self, 'Final', final_metrics, run)
++        _finalize_run(self, final_metrics)
+ 
+         return final_metrics
+     
+@@ -257,27 +295,41 @@ class Trainer:
+         current_samples = 0
+         current_loss = 0
+ 
++        # current_loss accumulates a SUM over samples so the division below
++        # recovers a mean. Both branches previously got this wrong: the CV branch
++        # never assigned it at all (so every vision run reported val_loss None and
++        # perplexity None, leaving accuracy as the only metric and forcing early
++        # stopping to key off accuracy), and the wikitext2 branch assigned
++        # outputs.loss -- already a mean over masked tokens -- which was then
++        # divided by the token count a second time, pinning avg_loss near 0 and
++        # perplexity at ~1.0 for every batch.
+         if self.model_type == 'llm':
+             if self.dataset_name == 'wikitext2':
+                 mask = (labels != -100)
+ 
+-                logits = outputs.logits[mask]                        
++                logits = outputs.logits[mask]
+                 masked_labels = labels[mask]
+                 preds = torch.argmax(logits, dim=-1)
+ 
+                 current_correct = (preds == masked_labels).sum().item()
+                 current_samples = mask.sum().item()
+-                current_loss = outputs.loss.item()
++                current_loss = outputs.loss.item() * current_samples
+             else:
+-                preds = torch.argmax(outputs.logits, dim=1)
++                logits = outputs.logits
++                preds = torch.argmax(logits, dim=1)
+                 current_correct = (preds == labels).sum().item()
+                 current_samples = labels.size(0)
+-                
++                current_loss = self.criterion(logits, labels).item() * current_samples
++
+         else:
+             logits = outputs.logits if hasattr(outputs, 'logits') else outputs
+             preds = logits.max(1)[1]
+             current_correct = (preds == labels).sum().item()
+             current_samples = labels.size(0)
++            current_loss = self.criterion(logits, labels).item() * current_samples
++
++        if current_samples == 0:
++            return {'batch_val_loss': 0.0, 'batch_accuracy': 0.0, 'batch_perplexity': 1.0}
+ 
+         avg_loss = current_loss / current_samples
+         avg_accuracy = 100 * current_correct / current_samples
+diff --git a/project/training_utils.py b/project/training_utils.py
+index 4b80181..c092e47 100644
+--- a/project/training_utils.py
++++ b/project/training_utils.py
+@@ -2,7 +2,8 @@ import os
+ import logging
+ from typing import Optional, Dict, Any
+ from copy import deepcopy
+-from datetime import datetime
++import time
++from datetime import datetime, timezone
+ 
+ import torch
+ import torch.nn as nn
+@@ -20,8 +21,10 @@ from weight_sharing import apply_weight_sharing_resnet
+ from tqdm import tqdm
+ 
+ from pruning_factory import (
+-    get_pruner, 
+-    check_model_sparsity
++    get_pruner,
++    check_model_sparsity,
++    report_sparsity,
++    set_prunable_scope,
+ )
+ 
+ def _create_base_model(args, is_main_model=False):
+@@ -44,6 +47,72 @@ def _create_base_model(args, is_main_model=False):
+     return model
+ 
+ 
++def _apply_proj_mode(args, models):
++    """Configure how the contrastive projection head behaves across models.
++
++      'tied_frozen' (default) -- every model shares ONE encoder_head module, and it
++          is frozen. The head is retained (dimensionality reduction, separate
++          contrastive space) but the student can no longer lower PrC/FiC/SnC by
++          moving it, so the only remaining route is the backbone. Sharing also
++          fixes a second problem by construction: the teachers' heads were never
++          trained or loaded (encoder_head is created in
++          ClassificationAndEncoderNetwork.__init__, which runs *after* the
++          load_weights call in BaseModelWrapper.__init__, and the partial-load path
++          explicitly filters encoder_head keys), so the student had been aligning
++          to a random projection of the teacher's features. With one shared W, the
++          same map applies on both sides and its distortion cancels.
++
++      'none' -- no head on the contrastive path; contrast pooled features directly,
++          as CAP does with the [CLS] state.
++
++      'current' -- the original behaviour: each model keeps its own head, the
++          student's trainable. Retained so existing results stay reproducible.
++    """
++    # Non-contrastive runs have no projection head and no use for one: the head
++    # exists solely to map features into the space the contrastive loss operates
++    # in. TrainingArguments does not even declare proj_mode, so the getattr below
++    # used to hand a baseline or pruning run the 'tied_frozen' default and then
++    # raise because no encoder_head exists -- which meant baseline_script.py and
++    # pruning_script.py both crashed during __post_init__ for every CLI
++    # invocation (num_out_features has no CLI flag, so it is always None there).
++    # The unit tests missed it because their fixtures set num_out_features.
++    if not getattr(args, 'is_bacp', False):
++        for model in [m for m in models if m is not None]:
++            model.proj_mode = 'none'
++        return
++
++    mode = getattr(args, 'proj_mode', 'tied_frozen')
++    models = [m for m in models if m is not None]
++
++    for model in models:
++        model.proj_mode = mode
++
++    if mode == 'none':
++        print('[PROJ] proj_mode=none: contrasting pooled backbone features directly')
++        return
++
++    if mode == 'current':
++        print('[PROJ] proj_mode=current: per-model trainable heads (legacy behaviour)')
++        return
++
++    if mode != 'tied_frozen':
++        raise ValueError(f"Unknown proj_mode {mode!r}; expected one of "
++                         "'tied_frozen', 'none', 'current'")
++
++    student = models[0]
++    if not hasattr(student, 'encoder_head'):
++        raise RuntimeError("proj_mode='tied_frozen' needs num_out_features set so "
++                           "that encoder_head exists")
++
++    for param in student.encoder_head.parameters():
++        param.requires_grad = False
++    for other in models[1:]:
++        other.encoder_head = student.encoder_head
++
++    print('[PROJ] proj_mode=tied_frozen: one frozen projection head shared across '
++          f'{len(models)} model(s)')
++
++
+ def _initialize_models(args):
+     """Initializes Model(s), applies Weight Sharing, and loads weights."""
+     if getattr(args, 'is_bacp', False):
+@@ -54,10 +123,19 @@ def _initialize_models(args):
+         model_ft = deepcopy(model_pt).to(args.device)
+         load_weights(model_ft, args.trained_weights)
+ 
++        # Weight sharing applies to the model being pruned only -- never to the
++        # frozen teachers, whose whole purpose is to supply an unmodified reference
++        # representation. It was previously never applied on the BaCP path at all,
++        # so --weight_sharing_en was a silent no-op here while still tripping
++        # _calculate_adjusted_sparsity into an AttributeError.
++        if getattr(args, 'weight_sharing_en', False):
++            apply_weight_sharing_resnet(curr_model)
++
+         args.model = curr_model
+         args.model_pt = model_pt
+         args.model_ft = model_ft
+         args.embedded_dim = args.model.embedded_dim
++        _apply_proj_mode(args, [curr_model, model_pt, model_ft])
+         print('[MODEL] Initialized BaCP models')
+ 
+     else:
+@@ -65,14 +143,19 @@ def _initialize_models(args):
+         print('[MODEL] Initializing Model')
+         args.model = _create_base_model(args, is_main_model=True)
+ 
+-        # Apply Weight Sharing BEFORE loading weights
++        # Load BEFORE sharing. state_dict() does not de-duplicate aliased
++        # Parameters even though named_parameters() does, so an unshared checkpoint
++        # loaded into an already-shared model writes every alias into the same
++        # storage and the last write wins -- leaving the shared weight holding
++        # whichever block happened to come last rather than the master's value.
++        if args.trained_weights:
++            load_weights(args.model, args.trained_weights)
++
+         if args.weight_sharing_en:
+             apply_weight_sharing_resnet(args.model)
+ 
+-        if args.trained_weights:
+-            load_weights(args.model, args.trained_weights)
+-        
+         args.embedded_dim = args.model.embedded_dim
++        _apply_proj_mode(args, [args.model])
+ 
+     print('[MODEL] Model Configured:')
+     print(f'  > Model: {args.model_name}')
+@@ -98,6 +181,72 @@ def _initialize_dyrelu_phasing(args):
+         print(f"  > Start: Epoch {t_start} | End: Epoch {t_end}")
+ 
+ 
++def _initialize_all(args):
++    """Run the eight initialisers in dependency order.
++
++    The single source of truth for this sequence. It used to be duplicated
++    between TrainingArguments.__post_init__ and BaCPTrainingArguments.__post_init__,
++    and the two copies drifted -- which is exactly how _initialize_pruner came to
++    read args.weight_sharing_en and args.delta_T, fields that only one of the two
++    dataclasses declared. One sequence plus one contract test parametrized over
++    both dataclasses closes that class of bug for good.
++
++    The order is load-bearing:
++        models     -> sets args.model, args.embedded_dim (and the BaCP teachers)
++        data       -> sets args.trainloader / valloader / testloader
++        optimizer  -> needs args.model
++        scheduler  -> needs args.optimizer and len(args.trainloader)
++        pruner     -> needs args.model and len(args.trainloader)
++        paths      -> sets args.datestamp, args.save_path, args.logger
++        log params -> snapshots every scalar attribute set above
++        dyrelu     -> needs args.model
++    """
++    _initialize_models(args)
++    _initialize_data_loaders(args)
++    _initialize_optimizer(args)
++    _initialize_scheduler(args)
++    _initialize_pruner(args)
++    _initialize_paths_and_logger(args)
++    _initialize_log_parameters(args)
++    _initialize_dyrelu_phasing(args)
++
++
++class _LimitedLoader:
++    """A DataLoader truncated to its first `n` batches.
++
++    Exists so tier-0 smoke runs can exercise every code path on CPU in seconds.
++    It is deliberately a wrapper with a correct `__len__` rather than an early
++    `break` in the training loop, because `len(trainloader)` is load-bearing in
++    three places -- the scheduler's total_steps, the pruner's total_steps, and
++    `train_batches` in the run record. An early break would leave all three
++    describing a run that did not happen.
++
++    Truncation is always recorded (`limit_train_batches` / `limit_eval_batches` on
++    the record), so a smoke run can never be mistaken for a real one.
++    """
++
++    def __init__(self, loader, n):
++        self.loader = loader
++        self.n = int(n)
++
++    def __iter__(self):
++        import itertools
++        return iter(itertools.islice(self.loader, self.n))
++
++    def __len__(self):
++        return min(self.n, len(self.loader))
++
++    def __getattr__(self, name):
++        # dataset, batch_size, collate_fn, ... all still resolve.
++        return getattr(self.loader, name)
++
++
++def _maybe_limit(loader, n):
++    if loader is None or not n or n <= 0:
++        return loader
++    return _LimitedLoader(loader, n)
++
++
+ def _initialize_data_loaders(args):
+     print("[DATA] Initializing Loaders")
+     args.cache_dir = '/dbfs/cache' if args.databricks_env else './cache'
+@@ -108,6 +257,15 @@ def _initialize_data_loaders(args):
+     args.valloader = data.get("valloader")
+     args.testloader = data.get("testloader")
+ 
++    n_train = getattr(args, 'limit_train_batches', 0)
++    n_eval = getattr(args, 'limit_eval_batches', 0)
++    args.trainloader = _maybe_limit(args.trainloader, n_train)
++    args.valloader = _maybe_limit(args.valloader, n_eval)
++    args.testloader = _maybe_limit(args.testloader, n_eval)
++    if n_train or n_eval:
++        print(f'  > [SMOKE] loaders truncated: train={n_train or "all"} '
++              f'eval={n_eval or "all"} -- results are NOT valid measurements')
++
+     print(f'  > Train Loader Initialized' if args.trainloader else '  > Train Loader NOT initialized')
+     print(f'  > Validation Loader Initialized' if args.valloader else '  > Validation Loader NOT initialized')
+     print(f'  > Test Loader Initialized' if args.testloader else '  > Test Loader NOT initialized')
+@@ -115,20 +273,53 @@ def _initialize_data_loaders(args):
+     print(f'  > Cache Directory: {args.cache_dir}')
+ 
+ 
++def _no_decay_param_groups(model, weight_decay):
++    """Split parameters so weight decay skips the weight-sharing scale factors.
++
++    apply_weight_sharing_resnet gives every shared block a scalar `scaler`
++    parameter. Under the default weight_decay=5e-4 those scalars decay toward
++    zero over training, progressively silencing the very blocks that sharing
++    introduced -- a slow, silent degradation that looks like the method simply not
++    working. Scale and gain parameters are conventionally exempt from decay.
++    """
++    decay, no_decay = [], []
++    for name, param in model.named_parameters():
++        if not param.requires_grad:
++            continue
++        if name.endswith('scaler') or param.ndim == 0:
++            no_decay.append(param)
++        else:
++            decay.append(param)
++
++    groups = [{'params': decay, 'weight_decay': weight_decay}]
++    if no_decay:
++        groups.append({'params': no_decay, 'weight_decay': 0.0})
++        print(f'  > {len(no_decay)} scale parameter(s) exempted from weight decay')
++    return groups
++
++
+ def _initialize_optimizer(args):
+     print("[OPTIMIZER] Initializing Optimizer")
+     lr = getattr(args, 'learning_rate', 0.0)
+     opt_type = getattr(args, 'optimizer_type', 'None')
+ 
++    # Weight decay was hardcoded at 5e-4 -- GraNet's value. EAST, which this
++    # project's anchor cell reproduces, uses 1e-4. A hardcoded constant cannot be
++    # recorded either, so two runs under different literature protocols would
++    # have looked identical in the record.
++    wd = getattr(args, 'weight_decay', 5e-4)
+     if opt_type == 'adamw':
+-        args.optimizer = optim.AdamW(args.model.parameters(), lr=lr)
++        args.optimizer = optim.AdamW(args.model.parameters(), lr=lr,
++                                     weight_decay=wd)
+     elif opt_type == 'sgd':
+-        args.optimizer = optim.SGD(args.model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
++        args.optimizer = optim.SGD(_no_decay_param_groups(args.model, wd),
++                                   lr=lr, momentum=0.9)
+     else:
+         raise ValueError(f"Unknown optimizer: {opt_type}")
+ 
+     print(f'  > Optimizer type: {opt_type}')
+     print(f'  > Optimizer learning rate: {lr}')
++    print(f'  > Weight decay: {wd}')
+     
+ 
+ def _initialize_scheduler(args):
+@@ -164,7 +355,24 @@ def _initialize_scheduler(args):
+ 
+ 
+ def _calculate_adjusted_sparsity(args):
++    """Re-express the target sparsity against the *unique* parameter count.
++
++    Under weight sharing the model has fewer unique parameters than nominal, so
++    pruning the unique set to the nominal target would leave far fewer live
++    weights than the unshared baseline. Rescaling keeps the absolute number of
++    surviving weights the same, which is what makes a shared model comparable to
++    an unshared one at the same reported sparsity.
++    """
+     model = args.model.model if hasattr(args.model, 'model') else args.model
++
++    if not hasattr(model, 'total_params') or not hasattr(model, 'unique_params'):
++        raise RuntimeError(
++            "_calculate_adjusted_sparsity needs model.total_params and "
++            "model.unique_params, which are set by apply_weight_sharing_resnet(). "
++            "Either weight_sharing_en was set without weight sharing having been "
++            "applied, or sharing ran on a different model object."
++        )
++
+     total_w = model.total_params
+     unique_w = model.unique_params
+ 
+@@ -172,11 +380,34 @@ def _calculate_adjusted_sparsity(args):
+     unique_w_ratio = keep_w / unique_w
+     adjusted_target = 1.0 - unique_w_ratio
+ 
+-    return round(adjusted_target, 4)
++    # The rescaling can leave the interval entirely: with total=100, unique=50 and
++    # a target of 0.3, keep_w=70 exceeds the 50 unique weights available, giving
++    # an adjusted target of -0.4. Silently handing a negative sparsity to the
++    # pruner produces nonsense, so say what went wrong.
++    if adjusted_target < 0.0:
++        raise ValueError(
++            f"Target sparsity {args.target_sparsity} is unreachable under weight "
++            f"sharing: keeping {keep_w:,.0f} of {total_w:,} nominal weights needs "
++            f"more than the {unique_w:,} unique weights that exist. Raise "
++            f"target_sparsity above {1.0 - unique_w / total_w:.4f}."
++        )
++
++    return round(min(adjusted_target, 1.0), 4)
+ 
+ 
+ def _initialize_pruner(args):
+     print('[SPARSITY SCHEDULER] Initializing Pruner')
++
++    # Declare the prunable scope BEFORE anything measures sparsity. The pruner and
++    # every reporting function must agree on which parameters are in scope, or the
++    # reported figure describes a different set of weights than the one being pruned.
++    set_prunable_scope(
++        prune_task_head=getattr(args, 'prune_task_head', False),
++        prune_embeddings=getattr(args, 'prune_embeddings', False),
++        model=args.model,
++    )
++
++    # No pruner exists yet, so the value-based measure is the only one available.
+     args.initial_sparsity = check_model_sparsity(args.model)
+     args.prune = (args.pruning_type and args.target_sparsity)
+ 
+@@ -188,13 +419,23 @@ def _initialize_pruner(args):
+         args.pruner = args.pruning_module
+         return
+     
++    # Keep both numbers. _calculate_adjusted_sparsity rewrites target_sparsity in
++    # place, so without this the requested value survives only in stdout and every
++    # record would report the adjusted figure as though it had been asked for.
++    # This runs before _initialize_log_parameters (step 7 of _initialize_all), so
++    # both land in logger_params for free.
++    args.requested_sparsity = args.target_sparsity
++
+     if args.weight_sharing_en:
+         old_target = args.target_sparsity
+         args.target_sparsity = _calculate_adjusted_sparsity(args)
+         print(f"  > Weight Sharing Enabled: Adjusted Target {old_target} -> {args.target_sparsity:.4f}")
+ 
++    args.adjusted_sparsity = args.target_sparsity
++
+     # total_epochs = args.epochs + args.recovery_epochs
+     total_epochs = args.epochs
++    is_east = (args.pruning_type == 'east')
+     args.pruner = get_pruner(
+         method_name=args.pruning_type,
+         model=args.model,
+@@ -207,9 +448,31 @@ def _initialize_pruner(args):
+         total_steps=len(args.trainloader) * args.epochs,
+         alpha=0.3 if args.pruning_type == 'rigl' else None,
+ 
+-        s_min=getattr(args, 's_min', 0.05) if args.pruning_type == 'east' else None,
+-        prune_rate=getattr(args, 'prune_rate', 0.1) if args.pruning_type == 'east' else None,
+-
++        # How the global budget is split across layers. Only LocalMagnitudePrune
++        # reads it; every other pruner either fixes the split (RigL/EAST use ERK)
++        # or derives it implicitly from a global threshold. Kept a config field
++        # rather than a pruner default so the choice lands in logger_params and
++        # therefore in the record -- 'erk' vs 'uniform' changes what the number
++        # means, so it cannot be an undeclared default.
++        layerwise_alloc=getattr(args, 'layerwise_alloc', 'erk'),
++
++        # EAST-only. Tc_ratio was previously never passed at all, so
++        # EASTPruner.__init__ evaluated int(self.end_idx * None) and raised a
++        # TypeError -- meaning the EAST pruner had never once constructed.
++        # WANDA-only. Without a calibration loader the activation norms are all
++        # 1.0 and WANDA degenerates to magnitude pruning -- so the loader is
++        # wired here rather than left to the caller, and WandaPruner prints a
++        # warning if it ever ends up without one.
++        calibration_loader=args.trainloader if args.pruning_type == 'wanda' else None,
++        calibration_batches=getattr(args, 'calibration_batches', 8),
++        # Wanda's comparison group. Recorded because Wanda's own Appendix A finds
++        # per-output does NOT beat layer-wise on image classifiers, so the choice
++        # is ours to defend and must appear in the record rather than in a default.
++        wanda_group=getattr(args, 'wanda_group', 'output'),
++
++        s_min=getattr(args, 's_min', 0.05) if is_east else None,
++        prune_rate=getattr(args, 'prune_rate', 0.1) if is_east else None,
++        Tc_ratio=getattr(args, 'Tc_ratio', 0.5) if is_east else None,
+     )
+     print(f"  > Pruner '{args.pruning_type}' initialized.")
+     print(f'  > Sparsity Scheduler: {args.sparsity_scheduler}')
+@@ -261,25 +524,34 @@ def _optimizer_step(args, loss, global_step):
+         args.scheduler.step()
+ 
+ 
+-def _epoch_pruning_step(args, epoch):
+-    """
+-    Called at the END of every epoch. 
+-    Handles mask updates.
+-    """
+-    if args.pruner and not args.recover:
+-        args.pruner.step(epoch)
+-        args.current_sparsity = check_model_sparsity(args.model)
++# _epoch_pruning_step was removed. It called args.pruner.step(epoch) -- an
++# *epoch* index -- while the pruner's end_idx and Tc are derived from total_steps,
++# i.e. a global *step* index. With both call sites live the same pruner was driven
++# on two incompatible clocks, and the epoch-indexed one also passed no optimizer,
++# so reset_optimizer_states was skipped on those updates. Pruning is now
++# step-driven only, via _optimizer_step -> _step_pruning_step. Its sole reference
++# in trainer.py was already commented out.
+ 
+ 
+ def _step_pruning_step(args, step):
+     """
+-    Called at the START of every step. 
++    Called at the START of every step.
+     Handles mask updates.
+     """
+     if args.pruner and not args.recover:
+         if step % args.delta_T == 0 and step <= args.pruner.end_idx:
+             args.pruner.step(step, args.optimizer)
+ 
++            # Refresh the cached sparsity after a mask update. This used to be done
++            # by _epoch_pruning_step, which was removed for driving the pruner on an
++            # epoch clock while its end_idx is step-indexed. Without it,
++            # args.current_sparsity kept its initial value for the whole run, so
++            # _get_sparsity_key -- which keys the accuracy history and labels the
++            # final metrics -- reported the sparsity the model started at rather
++            # than the one it reached. Only recomputed on an actual mask update, so
++            # the cost is once per delta_T steps.
++            args.current_sparsity = report_sparsity(args.model, args.pruner)
++
+ 
+ # def _apply_pruning(args, epoch, step):
+ #     """
+@@ -342,7 +614,7 @@ def _step_pruning_step(args, step):
+ 
+ #         # Update model sparsity once per epoch if pruning is active
+ #         if args.prune and step == 1:
+-#             args.current_sparsity = check_model_sparsity(args.model)
++#             args.current_sparsity = report_sparsity(args.model, args.pruner)
+ 
+ 
+ def _initialize_paths_and_logger(args):
+@@ -385,18 +657,35 @@ def _initialize_log_parameters(args):
+ 
+ 
+ def _handle_data_to_device(args, batch_data):
++    """Move one collated batch onto the device and split it into (data, labels).
++
++    Handles the two shapes default_collate produces here:
++      n_views=1 -> [Tensor[B,C,H,W], Tensor[B]]
++      n_views=2 -> [[Tensor[B,C,H,W], Tensor[B,C,H,W]], Tensor[B]]
++    plus HuggingFace-style dict batches.
++    """
+     if isinstance(batch_data, (list, tuple)) and len(batch_data) == 2:
+         data, labels = batch_data
+-        if isinstance(data, (list, tuple)) and len(data) == 2:
++        if isinstance(data, (list, tuple)):
+             data = [d.to(args.device) for d in data]
+         else:
+             data = data.to(args.device)
+         labels = labels.to(args.device)
+-    elif isinstance(batch_data, dict):
++        return data, labels
++
++    if isinstance(batch_data, dict):
+         data = {k: v.to(args.device) for k, v in batch_data.items()}
+-        labels = data.get('labels', None)
+-    
+-    return data, labels
++        return data, data.get('labels', None)
++
++    # Neither branch matched: `data` and `labels` used to be left unbound, so the
++    # caller saw an UnboundLocalError from inside this function rather than a
++    # description of the batch that caused it.
++    length = len(batch_data) if hasattr(batch_data, '__len__') else 'n/a'
++    raise ValueError(
++        f"Unsupported batch structure: {type(batch_data).__name__} of length {length}. "
++        "Expected a (data, labels) pair -- where data is a tensor or a list of view "
++        "tensors -- or a dict batch."
++    )
+ 
+ 
+ def _handle_tqdm_logs(args, batchloader, metrics):
+@@ -406,7 +695,17 @@ def _handle_tqdm_logs(args, batchloader, metrics):
+ 
+ 
+ def _log_metrics(args, info, metrics, run=None):
+-    metrics['sparsity'] = round(check_model_sparsity(args.model), 4)
++    # Epoch timing is collected here because this is the single point every training
++    # loop passes through once per epoch -- Trainer.train, Trainer._retrain,
++    # BaCPTrainer.train/_retrain/finetune. Nothing measured wall-clock before, and
++    # with no run-end timestamp the duration could not even be derived after the fact.
++    marks = args.__dict__.setdefault('_epoch_marks', [])
++    marks.append((info.split(' - ')[0], time.perf_counter()))
++
++    # Mask-based when a pruner owns the masks: counting exact zeros overstates
++    # sparsity under dynamic sparse training, where regrown weights are active but
++    # numerically zero until their first update.
++    metrics['sparsity'] = round(report_sparsity(args.model, getattr(args, 'pruner', None)), 4)
+     # Print to console
+     for k, v in metrics.items():
+         if isinstance(v, (int, float)):
+@@ -423,7 +722,44 @@ def _get_sparsity_key(args):
+     return round(args.current_sparsity, 4)
+ 
+ 
++def epoch_times(args, include_final=False):
++    """Per-epoch wall-clock seconds, derived from the marks _log_metrics leaves.
++
++    The final evaluation also passes through _log_metrics (labelled 'Final'), so it
++    is excluded by default -- otherwise a 2-epoch run reports 3 epochs completed.
++    """
++    marks = getattr(args, '_epoch_marks', None) or []
++    t0 = getattr(args, '_t0', None)
++    if not marks or t0 is None:
++        return []
++    if not include_final:
++        marks = [(label, t) for label, t in marks if not label.startswith('Final')]
++    if not marks:
++        return []
++    stamps = [t0] + [t for _, t in marks]
++    return [round(b - a, 3) for a, b in zip(stamps, stamps[1:])]
++
++
++def main_loop_epochs(args):
++    """Count of main-loop epochs completed, excluding recovery and fine-tuning.
++
++    Compared against `epochs` to decide whether early stopping fired, so it must not
++    count 'Recovery Epoch' or 'Fine-tuning Epoch' marks.
++    """
++    marks = getattr(args, '_epoch_marks', None) or []
++    return sum(1 for label, _ in marks if label.startswith('Epoch ['))
++
++
+ def _initialize_logs(args):
++    # Run-start markers for the results record. Set here rather than in
++    # __post_init__ so construction time (model download, dataset build) is not
++    # charged to training.
++    args.run_started_at = datetime.now(timezone.utc).isoformat()
++    args._t0 = time.perf_counter()
++    args._epoch_marks = []
++    if torch.cuda.is_available():
++        torch.cuda.reset_peak_memory_stats()
++
+     if args.logger is not None:
+         args.logger.create_log()
+         args.logger.log_hyperparameters(args.logger_params)
+@@ -431,6 +767,33 @@ def _initialize_logs(args):
+         pass
+ 
+ 
++def _finalize_run(args, metrics, phase=None, experiment_group=None):
++    """Write one standardized result record. Never allowed to break a finished run.
++
++    Kept in training_utils rather than in the trainers so `results` stays out of
++    their import graph, and so both trainers share one call site's worth of logic.
++    """
++    try:
++        from results import record_run
++    except Exception as e:                                    # noqa: BLE001
++        print(f"[RESULTS] not recorded ({type(e).__name__}: {e})")
++        return None
++
++    if phase is None:
++        # finetune() sets is_bacp=False before its own evaluate(), so the two BaCP
++        # evaluations self-label without needing an explicit argument.
++        if not hasattr(args, 'lambda_history'):
++            phase = 'prune' if getattr(args, 'pruning_type', None) else 'dense'
++        else:
++            phase = 'contrastive' if getattr(args, 'is_bacp', False) else 'finetune'
++
++    return record_run(
++        args, metrics, phase=phase,
++        experiment_group=experiment_group or os.environ.get('BACP_EXPERIMENT_GROUP'),
++        strict=False,
++    )
++
++
+ 
+ 
+ 
+diff --git a/project/utils.py b/project/utils.py
+index 63879d8..39c6ab8 100644
+--- a/project/utils.py
++++ b/project/utils.py
+@@ -44,32 +44,48 @@ def freeze_weights(model):
+         param.requires_grad = False
+         
+ def load_weights(model, path):
++    """Load a checkpoint into `model`. Returns True only if weights were loaded.
++
++    Callers must check the return value. A False here means the model still holds
++    whatever it was initialised with -- which, for a run that asked for pretrained
++    weights, means random init. Silently continuing from that point produces a
++    "pretrained" baseline that was never pretrained.
++    """
+     print(f"[LOADING] Loading weights: {path}")
++
++    if path is None:
++        print("> Could not load weights: no path given")
++        return False
++
+     if not os.path.exists(path):
+         print(f"> Could not load weights. Path does not exist: {path}")
+-        # raise Exception(f"Error loading weights: {path}")
+         return False
++
+     try:
+-        print(f"> Full load successful!: {path}")
+-        state_dict = torch.load(path, map_location=get_device())
++        state_dict = torch.load(path, map_location=get_device(), weights_only=True)
+         model.load_state_dict(state_dict)
++        # Printed only *after* the load actually succeeds. This message used to be
++        # emitted before torch.load was even called, so the logs claimed success
++        # on runs that then fell through to the partial-load path -- or failed.
++        print(f"> Full load successful!: {path}")
+         return True
+-    except:
+-        print(f"> Could not load weights: {path}")
+-        print(f"> Attempting partial load")
+-    
+-        state_dict = torch.load(path, map_location=get_device())
+-        filtered_state_dict = {
+-            k: v for k, v in state_dict.items() 
+-            if not any(head_key in k for head_key in ['encoder_head', 'fc', 'classifier', 'head', 'vocab_projector'])
+-            }
+-        try:
+-            missing, unexpected = model.load_state_dict(filtered_state_dict, strict=False)
+-            print(f"> Partial load successful! Number of keys missing: {len(missing)}")
+-            return True
+-        except Exception as e:
+-            raise Exception(f"> Error loading weights: {e}")
+-    return False
++    except Exception as e:
++        # Was a bare `except:`, which also swallowed KeyboardInterrupt and
++        # SystemExit and hid the actual reason for the failure.
++        print(f"> Could not load weights: {type(e).__name__}: {e}")
++        print("> Attempting partial load")
++
++    state_dict = torch.load(path, map_location=get_device(), weights_only=True)
++    filtered_state_dict = {
++        k: v for k, v in state_dict.items()
++        if not any(head_key in k for head_key in ['encoder_head', 'fc', 'classifier', 'head', 'vocab_projector'])
++        }
++    try:
++        missing, unexpected = model.load_state_dict(filtered_state_dict, strict=False)
++        print(f"> Partial load successful! Missing keys: {len(missing)}, unexpected: {len(unexpected)}")
++        return True
++    except Exception as e:
++        raise RuntimeError(f"Error loading weights from {path}: {e}") from e
+               
+ def graph_losses_n_accs(losses, train_accs, test_accs):
+     _, axes = plt.subplots(1, 2, figsize=(12, 5))
+@@ -118,7 +134,13 @@ def print_dynamic_lambdas_statistics(trainer_instance):
+         print("Trainer instance does not have a 'lambda_history'.")
+         return
+ 
+-    lambda_types = ['CE lambda', 'PrC lambda', 'SnC lambda', 'FiC lambda']
++    # Order matters and was previously wrong. BaCPTrainer._combine_losses maps
++    # lambda1 -> PrC, lambda2 -> FiC, lambda3 -> SnC, lambda4 -> CE, and
++    # lambda_history is keyed lambda1..lambda4 in that order. The old labels read
++    # ['CE', 'PrC', 'SnC', 'FiC'], so every dynamic-lambda figure produced by this
++    # function had three of its four series mislabelled.
++    # Pinned by test_losses.py::test_lambda_to_loss_mapping.
++    lambda_types = ['PrC lambda', 'FiC lambda', 'SnC lambda', 'CE lambda']
+     lambda_history = trainer_instance.lambda_history
+ 
+     plt.figure(figsize=(10, 6))

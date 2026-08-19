@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from abc import abstractmethod, ABC
 from typing import Dict
@@ -12,18 +13,131 @@ import numpy as np
 import pandas as pd
 import math
 
+# Parameters the pruner never owns. Grouped by why, because the choice changes what
+# a reported sparsity figure means -- and at extreme sparsity these are not rounding
+# errors. A dense Linear(2048, 100) head is 204,800 weights; at 99% sparsity on
+# ResNet-50 the whole surviving budget is roughly 250,000.
+
+# EAST's DyReLU hyperfunctions. Correct to exclude: phasing removes them from the
+# forward pass by the end of training, so they are not part of the deployed model.
+_EXCLUDE_ACTIVATION = ('hyperfunction', 'relu')
+
+# The contrastive projection head. Not part of the task model at all -- it is
+# discarded after BaCP training.
+_EXCLUDE_PROJECTION = ('encoder_head',)
+
+# Token and position embeddings. Excluding these is not optional for language
+# models: DistilBERT and RoBERTa tie word_embeddings to the output projection, so
+# pruning the embedding matrix also prunes the LM head. On DistilBERT that single
+# tensor is 23.4M of 66M parameters, and including it made the prunable set 99.7%
+# of the model -- meaning a "99% sparsity" figure would be dominated by the
+# embedding table rather than describing the transformer blocks.
+_EXCLUDE_EMBEDDINGS = ('embedding',)
+
+# Task heads. Matches the protocol stated in the paper's appendix D.4 -- "the fc
+# layer was kept dense", "the final classifier.6 layer was kept dense",
+# "embeddings and classification heads were kept dense".
+_EXCLUDE_TASK_HEAD = (
+    'cls_head',                          # this project's replacement classifier
+    'vocab_projector', 'vocab_transform',  # DistilBERT MLM head
+    'lm_head',                           # RoBERTa MLM head
+    'classifier',                        # HF sequence-classification heads
+)
+
+# --- Prunable scope -------------------------------------------------------
+#
+# Whether the task head and the embeddings are prunable is a *choice*, and it has
+# to be the same choice for the pruner, check_model_sparsity and
+# check_sparsity_distribution -- otherwise the reported sparsity describes a
+# different set of weights than the one being pruned. Hence one module-level
+# setting rather than a per-call argument: a single source of truth.
+#
+# Set it once via set_prunable_scope(), which _initialize_pruner does before any
+# sparsity is measured.
+
+_PRUNE_TASK_HEAD = False
+_PRUNE_EMBEDDINGS = False
+
+
+def set_prunable_scope(prune_task_head=False, prune_embeddings=False, model=None):
+    """Declare which parameter groups the pruner owns.
+
+    prune_task_head:
+        Include the final classifier. The paper's appendix D.4 says heads were kept
+        dense ("the fc layer was kept dense"), but pruning everything is the
+        convention in dynamic sparse training, so both are legitimate -- just not
+        interchangeable. At 99% sparsity on ResNet-50/CIFAR-100 a dense
+        Linear(2048, 100) is 204,800 weights against a surviving budget of roughly
+        250,000, so this flag moves the headline number substantially. State which
+        convention you report.
+
+    prune_embeddings:
+        Include token and position embeddings. Off by default, and dangerous for
+        transformers: DistilBERT and RoBERTa tie word_embeddings to the output
+        projection, so pruning the embedding matrix also prunes the LM head. On
+        DistilBERT that single tensor is 23.4M of 66M parameters, which makes the
+        prunable set 99.7% of the model -- a "99% sparsity" figure would then be
+        describing the embedding table, not the transformer blocks.
+    """
+    global _PRUNE_TASK_HEAD, _PRUNE_EMBEDDINGS
+    _PRUNE_TASK_HEAD = bool(prune_task_head)
+    _PRUNE_EMBEDDINGS = bool(prune_embeddings)
+
+    scope = ['backbone']
+    if _PRUNE_TASK_HEAD:
+        scope.append('task head')
+    if _PRUNE_EMBEDDINGS:
+        scope.append('embeddings')
+    print(f"[SPARSITY SCOPE] Prunable: {', '.join(scope)}")
+
+    if _PRUNE_EMBEDDINGS and model is not None and _has_tied_embeddings(model):
+        print("  ! WARNING: this model ties its input embeddings to its output "
+              "projection. Pruning embeddings therefore also prunes the LM head, "
+              "and the embedding table will dominate the sparsity denominator.")
+
+
+def _has_tied_embeddings(model):
+    """True when input and output embeddings share storage."""
+    inner = getattr(model, 'model', model)
+    get_in = getattr(inner, 'get_input_embeddings', None)
+    get_out = getattr(inner, 'get_output_embeddings', None)
+    if not callable(get_in) or not callable(get_out):
+        return False
+    try:
+        emb_in, emb_out = get_in(), get_out()
+    except Exception:
+        return False
+    if emb_in is None or emb_out is None:
+        return False
+    w_in = getattr(emb_in, 'weight', None)
+    w_out = getattr(emb_out, 'weight', None)
+    return w_in is not None and w_out is not None and w_in.data_ptr() == w_out.data_ptr()
+
+
+def excluded_keywords():
+    """The keyword set layer_check currently excludes, given the active scope."""
+    excluded = _EXCLUDE_ACTIVATION + _EXCLUDE_PROJECTION
+    if not _PRUNE_EMBEDDINGS:
+        excluded += _EXCLUDE_EMBEDDINGS
+    if not _PRUNE_TASK_HEAD:
+        excluded += _EXCLUDE_TASK_HEAD
+    return excluded
+
+
 def layer_check(name, param):
+    """True if the pruner owns this parameter.
+
+    Always excludes 1-D tensors (norms and biases), frozen tensors, the DyReLU
+    hyperfunctions and the contrastive projection head. The task head and the
+    embeddings are governed by set_prunable_scope().
+    """
     if param is None:
         return False
     if param.dim() <= 1 or not param.requires_grad:
         return False
-    
-    exclusion_keywords = [
-        'hyperfunction', 'relu',
-        'encoder_head',
-    ]
 
-    if any(keyword in name.lower() for keyword in exclusion_keywords):
+    lowered = name.lower()
+    if any(keyword in lowered for keyword in excluded_keywords()):
         return False
     return True
 
@@ -65,11 +179,20 @@ class BasePruner(ABC):
         return masks
 
 
-    def calculate_erk_densities(self, model):
+    def calculate_erk_densities(self, model=None):
+        """Erdos-Renyi-Kernel per-layer densities for the current target sparsity.
+
+        `model` is optional and defaults to self.model. It has to accept both
+        forms: LocalMagnitudePrune calls it with no argument (which was a
+        TypeError, so that pruner never constructed) while EASTPruner passes the
+        model explicitly.
+        """
+        model = model if model is not None else self.model
+
         layer_names = []
-        layer_params = [] 
+        layer_params = []
         layer_mass = []
-        
+
         for name, param in model.named_parameters():
             if layer_check(name, param):
                 n_out = param.shape[0]
@@ -221,9 +344,42 @@ class GlobalMagnitudePruner(BasePruner):
 
 
 class LocalMagnitudePrune(BasePruner):
-    def __init__(self, model, total_epochs, target_sparsity, scheduler_type):
-        super().__init__(model, total_epochs, target_sparsity, scheduler_type)
-        self.erk_densities = self.calculate_erk_densities()
+    """Per-layer magnitude pruning under a declared layer-wise budget.
+
+    `layerwise_alloc` chooses *how the global budget is split across layers*, which
+    is a separate mechanism from *which weights within a layer are cut*:
+
+      'erk'     -- Erdos-Renyi-Kernel (Evci et al. 2020). Wide layers get lower
+                   density than narrow ones. The default, and what RigL and EAST
+                   both use, so it is the like-for-like setting.
+      'uniform' -- every layer at the same density, 1 - target_sparsity. This is
+                   the honest floor, and it is required to disentangle "ERK helps"
+                   from "ERK protects the small classifier layer": the two are
+                   confounded in a single rung, because under ERK the classifier's
+                   ER mass is large relative to its parameter count and it ends up
+                   near-dense whether or not it is nominally in the prunable scope.
+
+    See project/experiments/manifest.py rungs A1-A4, which run these as a 2x2
+    against prune_task_head for exactly that reason.
+    """
+
+    # BasePruner takes its settings as **kwargs. The old signature accepted
+    # scheduler_type positionally and forwarded it as a 4th positional argument,
+    # which was a TypeError -- so this pruner could never be constructed, and
+    # get_pruner would also have handed it a delta_T it had nowhere to put.
+    def __init__(self, model, total_epochs, target_sparsity, **kwargs):
+        super().__init__(model, total_epochs, target_sparsity, **kwargs)
+        self.layerwise_alloc = kwargs.get('layerwise_alloc') or 'erk'
+        if self.layerwise_alloc not in ('erk', 'uniform'):
+            raise ValueError(
+                f"layerwise_alloc must be 'erk' or 'uniform', got "
+                f"{self.layerwise_alloc!r}"
+            )
+        if self.layerwise_alloc == 'uniform':
+            flat = 1.0 - self.target_sparsity
+            self.erk_densities = {n: flat for n in self.prunable_params}
+        else:
+            self.erk_densities = self.calculate_erk_densities()
 
     def update_masks(self, epoch):
         if self.current_sparsity == 0: return
@@ -269,137 +425,248 @@ class SNIPPruner(BasePruner):
             self.masks[name] = (score > threshold).float()
 
 
-# class WandaPrune(Pruner):
-#     """Weight and Activation pruning."""
+class WandaPruner(BasePruner):
+    """Weight-and-activation pruning (Sun et al. 2023, arXiv 2306.11695).
 
-#     class WrappedLayer:
-#         def __init__(self, layer, name):
-#             self.layer = layer
-#             self.scaler_row = None
-#             self.nsamples = 0
+    Importance of weight W[i,j] is
 
-#             if hasattr(layer, 'weight'):
-#                 self.rows = layer.weight.shape[0]
-#                 self.cols = layer.weight.shape[1]
-#                 self.device = layer.weight.device
-#                 self.scaler_row = torch.zeros(self.cols, device=self.device)
+        S[i,j] = |W[i,j]| * ||X[:,j]||_2
 
-#         def add_batch(self, inp):
-#             if self.scaler_row is None: return
+    where ||X[:,j]||_2 is the L2 norm of the j-th input feature aggregated over a
+    calibration set. The insight is that magnitude alone mis-ranks weights whose
+    input channel is systematically small or large: a large weight on a dead
+    channel contributes nothing, and a small weight on a high-variance channel can
+    matter a great deal.
 
-#             if len(inp.shape) == 2: inp = inp.unsqueeze(0)
-#             tmp = inp.shape[0]
+    **The comparison group is a CHOICE here, and the citation does not settle it.**
+    Wanda ranks within each output row and reports that grouping as crucial -- but
+    only for LLMs. Its own Appendix A runs the same comparison on image
+    classifiers and finds the opposite: "we do not observe similar trend in image
+    classification models, suggesting that our observations regarding pruning per
+    output might be unique to LLMs", with layer-wise slightly better for both
+    ConvNeXt-B and DeiT-B. That text is in the ICLR 2024 camera-ready, not a
+    preprint artefact.
 
-#             if len(inp.shape) == 3: inp = inp.reshape((-1, inp.shape[-1]))
-#             elif len(inp.shape) == 4: inp = inp.permute(0, 2, 3, 1).reshape(-1, inp.shape[1])
+    This project prunes ResNet/VGG on CIFAR. So there is no Wanda evidence for
+    per-output ranking in our setting in either direction, and the only vision
+    evidence that exists points the other way. `group` therefore defaults to
+    'output' (Wanda's headline configuration, so the column means what its name
+    says) but is a first-class, recorded knob, and the paper must present the
+    choice as ours rather than lean on the citation. Cite Wanda for the metric
+    |W| * ||X||_2, which does transfer; do not cite it for the grouping.
 
-#             scaler = torch.norm(inp, p=2, dim=1) ** 2 / tmp
-#             self.scaler_row += scaler
-#             self.nsamples += 1
+      'output' -- rank within each row of W. Every output neuron keeps the same
+                  fraction of its inputs.
+      'layer'  -- one threshold for the whole layer, as this file's magnitude and
+                  SNIP pruners use. Wanda's vision experiments favour this.
 
+    **The activation norm is accumulated, not sampled.** scaler_row holds a running
+    mean of ||X[:,j]||^2 over calibration batches in incremental form, so the
+    statistic does not depend on how many batches happened to be available.
 
-#     def __init__(self, model, total_epochs, target_sparsity, scheduler_type):
-#         super().__init__(model, total_epochs, target_sparsity, scheduler_type)
-#         self.wrapped_layers = {}
-#         self._wrap_layers()
-#         self.hooks = self.register_hooks()
+    **The Conv2d convention is ours, not Wanda's.** Wanda's reference
+    implementation (lib/layerwrapper.py) handles nn.Linear only -- its reshape
+    branch is gated on isinstance(layer, nn.Linear) -- so there is no published
+    convention to follow for 4-D weights. We fold the kernel into the input
+    dimension: a weight of shape (out, in, kh, kw) is scored against F.unfold'd
+    input columns, giving the same [rows x columns] matrix Wanda scores for a
+    Linear layer. Scoring per (in, kh, kw) position against a per-channel norm
+    instead would ignore that different kernel positions see different input
+    statistics. Stated here because the paper has to state it.
 
+    Calibration is driven by set_calibration_loader(). Without it every norm falls
+    back to 1, which is *exactly magnitude pruning*. That fallback prints a warning
+    rather than passing silently, because an unnoticed fallback would put a "WANDA"
+    column in a table that actually contains magnitude numbers -- the most
+    misleading failure this class could have, and the reason the previous
+    commented-out draft was worse than no implementation at all.
+    """
 
-#     def _wrap_layers(self):
-#         check = False
-#         for name, module in self.model.named_modules():
-#             if name in self.prunable_params:
-#                 check = True
-#                 self.wrapped_layers[name] = self.WrappedLayer(module)
-#         if check: print("[Wanda] Layers are wrapped.")
-    
+    def __init__(self, model, total_epochs, target_sparsity, **kwargs):
+        super().__init__(model, total_epochs, target_sparsity, **kwargs)
+        self.calibration_loader = kwargs.get('calibration_loader')
+        self.calibration_batches = int(kwargs.get('calibration_batches') or 8)
+        self.group = kwargs.get('wanda_group') or 'output'
+        if self.group not in ('output', 'layer'):
+            raise ValueError(
+                f"wanda_group must be 'output' or 'layer', got {self.group!r}")
+        self.scaler_row = {}          # param name -> Tensor[in_features]
+        self._nsamples = {}
+        self._calibrated = False
+        self._calibration_step = None
+        self._fallback_layers = set()
+        self._modules = self._find_scored_modules()
 
-#     def activation_hook(self, name):
-#         def hook(_, inputs, outputs):
-#             if self.model.training:
-#                 input_tensor = inputs[0] if isinstance(inputs, tuple) else inputs
-#                 if name, wrapper in self.wrapped_layers.items():
-#                     wrapper.add_batch(input_tensor.data.to(self.device))
-#         return hook
+    def _find_scored_modules(self):
+        """param name -> (module name, module), for prunable Linear/Conv2d weights."""
+        out = {}
+        for mod_name, module in self.model.named_modules():
+            if not isinstance(module, (nn.Linear, nn.Conv2d)):
+                continue
+            param_name = f'{mod_name}.weight' if mod_name else 'weight'
+            if param_name in self.prunable_params:
+                out[param_name] = (mod_name, module)
+        return out
 
+    def set_calibration_loader(self, loader, batches=None):
+        self.calibration_loader = loader
+        if batches is not None:
+            self.calibration_batches = int(batches)
+        self._calibrated = False
 
-#     def register_hooks(self):
-#         print("[Wanda] Adding hooks")
-#         for name, wrapper in self.wrapped_layers.items():
-#             hook = wrapper.layer.register_forward_hook(
-#                 self.activation_hook(name)
-#             )
-#             self.hooks.append(hook) 
+    @torch.no_grad()
+    def calibrate(self, loader=None, device=None):
+        """Accumulate per-input-feature activation norms over a few batches.
 
+        Hooks only the scored modules, so this costs a handful of forward passes
+        and no backward pass.
+        """
+        loader = loader or self.calibration_loader
+        if loader is None:
+            print('  ! [WANDA] no calibration loader: activation norms default to '
+                  '1.0, which makes this EXACTLY magnitude pruning. Any table '
+                  'column produced from this run is mislabelled.')
+            self._calibrated = True
+            return False
 
-#     def remove_hooks(self):
-#         for hook in self.hooks: hook.remove()
-#         self.hooks = []
+        device = device or self.device
+        self.scaler_row = {}
+        self._nsamples = {}
 
+        def make_hook(param_name):
+            def hook(module, inputs, _output):
+                x = inputs[0].detach()
+                if isinstance(module, nn.Conv2d):
+                    # Fold the kernel into the input dimension so the scored
+                    # matrix matches the Linear case exactly.
+                    x = F.unfold(x, kernel_size=module.kernel_size,
+                                 dilation=module.dilation, padding=module.padding,
+                                 stride=module.stride)          # [B, C*kh*kw, L]
+                    x = x.transpose(1, 2).reshape(-1, x.shape[1])
+                else:
+                    x = x.reshape(-1, x.shape[-1])
+                x = x.float()
 
-#     def calibrate(self, loader, num_batches=100):
-#         from training_utils import _handle_data_to_device
+                n_new = x.shape[0]
+                n_old = self._nsamples.get(param_name, 0)
+                prev = self.scaler_row.get(param_name)
+                if prev is None:
+                    prev = torch.zeros(x.shape[1], device=x.device)
 
-#         print(f"[Wanda] Calibrating with {num_batches} batches.")
-#         model.eval()
+                # Incremental mean of squared column norms, so the statistic does
+                # not depend on the number of calibration batches available.
+                prev *= n_old / (n_old + n_new)
+                prev += x.pow(2).sum(dim=0) / (n_old + n_new)
+                self.scaler_row[param_name] = prev
+                self._nsamples[param_name] = n_old + n_new
+            return hook
 
-#         with torch.no_grad():
-#             for i, batch in enumerate(trainloader):
-#                 if i > num_calibration_batches: break
-#                 data, labels = _handle_data_to_device(self, batch)
+        handles = [module.register_forward_hook(make_hook(pname))
+                   for pname, (_, module) in self._modules.items()]
 
-#                 # Forward pass
-#                 if len(data) == 2:
-#                     for d in data:
-#                         _ = model(d, return_emb=True)
-#                 else:
-#                     _ = model(data)
+        was_training = self.model.training
+        self.model.eval()
+        seen = 0
+        try:
+            for i, batch in enumerate(loader):
+                if i >= self.calibration_batches:
+                    break
+                seen = i + 1
+                data = batch[0] if isinstance(batch, (list, tuple)) else batch
+                if isinstance(data, (list, tuple)):
+                    data = data[0]
+                if isinstance(data, dict):
+                    data = {k: v.to(device) for k, v in data.items()
+                            if hasattr(v, 'to')}
+                    # Positionally, NOT splatted. ClassificationAndEncoderNetwork
+                    # takes the whole batch as one argument and does the splatting
+                    # itself in _llm_forward. `self.model(**data)` raised
+                    # "unexpected keyword argument 'input_ids'" on every GLUE run
+                    # with --pruning_type wanda, at the first mask update.
+                    self.model(data)
+                else:
+                    self.model(data.to(device))
+        finally:
+            for h in handles:
+                h.remove()
+            if was_training:
+                self.model.train()
 
-#                 # Print progress every 10 batches
-#                 if (i + 1) % 10 == 0:
-#                     print(f"  > Calibration progress: {i+1}/{num_calibration_batches} batches")
-        
-#         self.remove_hooks()
-#         self.model.train()
-#         print("[Wanda] Calibration done.")
+        self._calibrated = True
+        print(f'  > [WANDA] calibrated on {seen} batch(es) over '
+              f'{len(self.scaler_row)} of {len(self.prunable_params)} prunable '
+              f'layer(s)')
+        return True
 
-    
-#     def update_masks(self, epoch):
-#         raise NotImplementedError()
+    def update_masks(self, epoch):
+        """Recompute the masks.
 
-#         # if self.current_sparsity == 0: return
+        Calibration is ONE-SHOT: it runs on the first mask update and is never
+        repeated, so under a gradual schedule the weights are re-read live while
+        the activation norms stay frozen at the first update. That is a protocol
+        decision, not an oversight -- re-calibrating every update would cost a
+        forward pass over the calibration set every delta_T steps -- but it is a
+        decision the paper has to state, so `calibration_step` is recorded and
+        pinned by a test rather than left implicit.
+        """
+        if self.current_sparsity == 0:
+            return
+        if not self._calibrated:
+            self._calibration_step = epoch
+            self.calibrate()
+            if self._fallback_layers:
+                pass  # populated below, after the first scoring pass
 
-#         # all_importances = []
-#         # importance_cache = {}
+        for name, param in self.prunable_params.items():
+            W = param.detach()
+            flat = W.reshape(W.shape[0], -1)            # [out, in*kh*kw]
 
-#         # for name in self.wrapped_layers:
-#         #     if self.wrapped_layers[name].scaler_row is None:
-#         #         continue
+            norms = self.scaler_row.get(name)
+            if norms is not None and norms.numel() == flat.shape[1]:
+                scale = norms.sqrt().to(flat.device).unsqueeze(0)
+            else:
+                # No statistic for this layer -> magnitude ranking FOR THAT LAYER,
+                # announced rather than silent. Grouped and depth-wise Conv2d hit
+                # this deterministically, because F.unfold is group-unaware and
+                # produces C_in*kh*kw columns where the weight has only
+                # (C_in/groups)*kh*kw -- so a ResNeXt-style backbone would have
+                # been magnitude-pruned throughout while reporting itself as WANDA.
+                self._fallback_layers.add(name)
+                scale = torch.ones(1, flat.shape[1], device=flat.device)
 
-#         #     W = self.main_layers[name].weight.data
-#         #     scaler_row = self.wrapped_layers[name].scaler_row.to(self.device).float()
-#         #     scaler_row = torch.clamp(torch.nan_to_num(scaler_row, nan=0.0, posinf=1e6, neginf=0.0), min=0.0)
+            scores = flat.abs() * scale
 
-#         #     if W.dim() == 4:
-#         #         scaler_row = scaler_row.reshape(1, -1, 1, 1)
-#         #     else: 
-#         #         scaler_row = scaler_row.reshape(1, -1)
+            if self.group == 'output':
+                # Rank within each output row: every neuron keeps the same
+                # fraction of its inputs. Wanda's headline configuration --
+                # established for LLMs, explicitly NOT established for vision.
+                k = int(flat.shape[1] * self.current_sparsity)
+                if k < 1:
+                    continue
+                k = min(k, flat.shape[1] - 1)
+                idx = torch.argsort(scores, dim=1)[:, :k]
+                mask = torch.ones_like(flat)
+                mask.scatter_(1, idx, 0.0)
+            else:
+                # One threshold for the whole layer. Rows may then lose very
+                # different fractions, up to and including a whole neuron -- which
+                # is the risk the per-output grouping exists to avoid, and the
+                # reason both are offered rather than one being assumed.
+                k = int(scores.numel() * self.current_sparsity)
+                if k < 1:
+                    continue
+                k = min(k, scores.numel() - 1)
+                threshold = torch.kthvalue(scores.reshape(-1), k).values
+                mask = (scores > threshold).to(flat.dtype)
+            self.masks[name] = mask.reshape(W.shape)
 
-#         #     # Calculating local importance and threshold
-#         #     importance = (torch.abs(W) * torch.sqrt(scaler_row + 1e-10))
-#         #     importance_cache[name] = importance
-#         #     all_importances.append(importance.view(-1))
-
-#         # # Calculating global importance and threshold
-#         # global_importances = torch.cat(all_importances)
-#         # total_weights = global_importances.numel()
-
-#         # k = max(0, min(total_weights, int(total_weights * self.s_curr)))
-#         # threshold = torch.kthvalue(global_importances, k).values.item()
-
-#         # # Updating masks
-#         # for name, importance in importance_cache.items():
-#         #     self.masks[name] = torch.gt(importance, threshold).float()
+        if self._fallback_layers and not getattr(self, '_warned_fallback', False):
+            self._warned_fallback = True
+            print(f'  ! [WANDA] {len(self._fallback_layers)} layer(s) had no '
+                  f'usable activation statistic and were MAGNITUDE-pruned: '
+                  f'{sorted(self._fallback_layers)[:5]}'
+                  f'{" ..." if len(self._fallback_layers) > 5 else ""}. '
+                  f'Any WANDA column covering these layers is mislabelled.')
 
 
 class RigLPruner(BasePruner):
@@ -457,11 +724,21 @@ class EASTPruner(BasePruner):
         super(EASTPruner, self).__init__(model, total_epochs, target_sparsity, **kwargs)
         self.s_max = target_sparsity
         self.delta_T = kwargs.get('delta_T', None)
-        self.prune_rate = kwargs.get('prune_rate', None)
-        self.Tc_ratio = kwargs.get('Tc_ratio', None)
-        
+
+        # `or default` rather than kwargs.get(k, default): _initialize_pruner
+        # passes these as an explicit None for every non-EAST pruner, so a plain
+        # .get() would return None even though the key is present.
+        self.prune_rate = kwargs.get('prune_rate') or 0.1
+        self.Tc_ratio = kwargs.get('Tc_ratio') or 0.5
+
+        # s_min must be assigned to self. update_masks reads it with
+        # getattr(self, 's_min', 0.05), which silently returned the 0.05 default
+        # on every run because nothing ever set the attribute -- so the s_min
+        # that callers passed had no effect at all.
+        self.s_min = kwargs.get('s_min') or 0.05
+
         # Use end_idx to determine Cycle length regardless of Epoch vs Step mode
-        self.Tc = int(self.end_idx * self.Tc_ratio) 
+        self.Tc = max(1, int(self.end_idx * self.Tc_ratio))
         
         self.erk_densities = self.calculate_erk_densities(model)
         self._init_sparse_masks()
@@ -474,15 +751,33 @@ class EASTPruner(BasePruner):
                 self.masks[n] = torch.bernoulli(torch.full_like(p, self.erk_densities[n]))
 
     def update_masks(self, current_idx):
-        if current_idx % self.delta_T != 0: return
+        # NOTE: no `current_idx % self.delta_T` gate here. There used to be one,
+        # and it made this method a permanent no-op: _step_pruning_step already
+        # gates on `step % delta_T == 0`, then BasePruner.step does
+        # `t = current_idx + 1` before calling update_masks(t). So this saw
+        # step + 1, and (step + 1) % delta_T is never 0 for any delta_T > 1.
+        # EAST's masks therefore never updated once, staying frozen at their
+        # Bernoulli ERK initialisation for the whole run.
         is_cyclic = current_idx <= self.Tc
-        
+
         if is_cyclic:
-            # 1. Calculate the global target sparsity (s_target) based on the cosine schedule
+            # 1. Global target sparsity from the cyclic cosine schedule.
+            #
+            # Phase matters. cos(0) = 1, so the naive
+            #   s_min + (s_max - s_min) * 0.5 * (1 - cos(2*pi*t/Tc))
+            # starts the cycle at s_min -- while _init_sparse_masks has just
+            # initialised the masks at s_max. At t=0 that reads as "grow from 99%
+            # sparse to 5% sparse", densifying the network to 95% density and
+            # abandoning the sparsity budget entirely.
+            #
+            # Anchored at s_max instead: the cycle starts and ends at s_max and
+            # dips to s_min at the half-cycle, which is the exploration behaviour
+            # EAST describes (Li et al. 2024, arXiv 2411.13545).
             norm_t = current_idx / self.Tc
-            s_min = getattr(self, 's_min', 0.05) # Define s_min, assuming it was passed in kwargs or has a default
-            s_target = s_min + (self.s_max - s_min) * 0.5 * (1 - math.cos(2 * math.pi * norm_t))
-            
+            s_min = self.s_min
+            s_target = self.s_max - (self.s_max - s_min) * 0.5 * (1 - math.cos(2 * math.pi * norm_t))
+
+
             # 2. Calculate current global sparsity (s_curr)
             total_active_global = sum(m.sum().item() for m in self.masks.values())
             total_params_global = sum(m.numel() for m in self.masks.values())
@@ -500,8 +795,8 @@ class EASTPruner(BasePruner):
             if param.grad is None: continue
             
             mask = self.masks[name]
-            numel = param.numel()
             active_params = mask.sum().item()
+            inactive_params = mask.numel() - active_params
 
             # Determine k for this specific layer
             if is_cyclic:
@@ -511,7 +806,7 @@ class EASTPruner(BasePruner):
                     target_active = active_params * ((1.0 - s_target) / (1.0 - s_curr))
                 else:
                     target_active = active_params
-                
+
                 if diff > 0: # Pruning phase (s_target > s_curr, so we need fewer active params)
                     k_prune = max(0, int(active_params - target_active))
                     k_grow = 0
@@ -523,6 +818,15 @@ class EASTPruner(BasePruner):
             else:
                 # Non-cyclic phase: drop and grow a flat percentage of currently active connections
                 k_prune = k_grow = int(active_params * self.prune_rate)
+
+            # Clamp to what this layer can actually supply. k is derived from the
+            # *global* sparsity ratio but spent per-layer, so a layer whose ERK
+            # density differs from the global average can be asked to prune more
+            # weights than it has active, or grow more than it has inactive --
+            # torch.topk then raises "selected index k out of range". Previously
+            # unreachable because update_masks always early-returned.
+            k_prune = int(min(k_prune, active_params))
+            k_grow = int(min(k_grow, inactive_params))
 
             if k_prune < 1 and k_grow < 1: continue
 
@@ -562,7 +866,7 @@ PRUNER_REGISTRY = {
     "snip": SNIPPruner,
     "rigl": RigLPruner,
     "east": EASTPruner,
-    # "wanda": WandaPruner
+    "wanda": WandaPruner,
 }
 
 def get_pruner(method_name, model, epochs, sparsity, **kwargs):
@@ -572,12 +876,44 @@ def get_pruner(method_name, model, epochs, sparsity, **kwargs):
 
 
 def check_model_sparsity(model):
+    """Fraction of prunable weights that are exactly zero.
+
+    Note this measures *values*, not the mask. Under dynamic sparse training the two
+    diverge: RigL and EAST zero-initialise regrown connections, so a freshly grown
+    weight is structurally active but numerically zero and is counted here as pruned.
+    Measured on a tiny ResNet, RigL's mask sparsity held at 0.8976 while this
+    function reported 0.9277 -- i.e. it *overstates* sparsity, the flattering
+    direction.
+
+    For monotone pruning (magnitude, SNIP) nothing regrows, so the two agree and
+    this is the right measure. When a pruner is present, prefer check_mask_sparsity.
+    """
     sum_zero, total_count = 0, 0
     for name, param in model.named_parameters():
         if layer_check(name, param):
             sum_zero += torch.sum(param == 0).item()
             total_count += param.numel()
     return (sum_zero / total_count) if total_count > 0 else 0.0
+
+
+def check_mask_sparsity(pruner):
+    """Fraction of prunable weights the mask has switched off.
+
+    The structural measure, and the correct one to report for dynamic sparse
+    training: it counts connections, so it is unaffected by a regrown weight
+    happening to sit at zero before its first update.
+    """
+    if pruner is None or not getattr(pruner, 'masks', None):
+        return None
+    active = sum(m.sum().item() for m in pruner.masks.values())
+    total = sum(m.numel() for m in pruner.masks.values())
+    return (1.0 - active / total) if total > 0 else 0.0
+
+
+def report_sparsity(model, pruner=None):
+    """The sparsity figure to report: mask-based when a pruner owns the masks."""
+    mask_sparsity = check_mask_sparsity(pruner)
+    return mask_sparsity if mask_sparsity is not None else check_model_sparsity(model)
 
 
 def check_sparsity_distribution(model, verbose=True):
@@ -634,7 +970,7 @@ def check_sparsity_distribution(model, verbose=True):
     # Plotting
     if names: # Only plot if we found backbone layers
         plt.figure(figsize=(10, 0.2 * len(names)))
-        bars = plt.barh(range(len(names)), sparsities, color='skyblue')
+        plt.barh(range(len(names)), sparsities, color='skyblue')
         plt.yticks(range(len(names)), names)
         plt.xlabel("Sparsity (Fraction of Zero Weights)")
         plt.title("Layer-wise Sparsity Distribution")

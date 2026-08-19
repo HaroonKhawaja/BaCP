@@ -3,12 +3,15 @@ import torchvision.transforms as T
 from torchvision.transforms import AutoAugment, AutoAugmentPolicy
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data import random_split
-from datasets import load_dataset 
-from transformers import DataCollatorForLanguageModeling
+import numpy as np
+import torch
 from utils import *
 from functools import lru_cache
-from datasets import get_dataset_config_names
 import inspect
+
+# `datasets` and `transformers` are imported lazily inside the text loaders below.
+# At module scope they cost ~4s of import time on every run -- including every
+# pytest session -- while being unused on the entire CV path.
 from copy import deepcopy
 
 
@@ -61,6 +64,36 @@ CV_DATASETS = {
 }
 
 GRAYSCALE_DATASETS = ["mnist", "fmnist", "emnist"]
+
+# Fixed seed for the train/val split, independent of --seed. See load_cv_datasets
+# for why this must not track the run seed.
+VAL_SPLIT_SEED = 1234
+
+# Text datasets. Kept separate from CV_DATASETS because they need a tokenizer and
+# a collator rather than an image transform.
+#   sst2      -- GLUE sentence-level sentiment, 2 classes
+#   wikitext2 -- masked language modelling; DataCollatorForLanguageModeling
+#                supplies the -100 label masking that Trainer._handle_metrics and
+#                BaCPTrainer._handle_metrics both branch on.
+TEXT_DATASETS = {
+    'sst2':      ('glue', 'sst2'),
+    'wikitext2': ('wikitext', 'wikitext-2-raw-v1'),
+}
+
+# Class counts, so --num_classes cannot silently disagree with the data. EMNIST is
+# loaded with split='balanced' (47 classes), matching "EMNIST (Balanced)" in the
+# paper. wikitext2 is absent on purpose: MLM predicts over the tokenizer vocab, so
+# there is no fixed class count.
+DATASET_NUM_CLASSES = {
+    'cifar10': 10,
+    'cifar100': 100,
+    'mnist': 10,
+    'fmnist': 10,
+    'emnist': 47,
+    'svhn': 10,
+    'imagenet': 1000,
+    'sst2': 2,
+}
 DATASET_STATS = {
     "cifar10": ([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]),
     "cifar100": ([0.5071, 0.4867, 0.4408], [0.2675, 0.2565, 0.2761]),
@@ -88,8 +121,13 @@ def normalize_data(dataset_name):
     mean, std = DATASET_STATS[dataset_name]
     if dataset_name in GRAYSCALE_DATASETS:
         return [
+            # T.Grayscale, not T.Lambda(lambda x: x.repeat(3, 1, 1)). A lambda
+            # closure cannot be pickled, so the transform could not be shipped to a
+            # DataLoader worker under spawn-based multiprocessing (Windows, macOS) --
+            # it only ever worked because the Databricks environment forks. Applied
+            # before ToTensor so it operates on the PIL image.
+            T.Grayscale(num_output_channels=3),
             T.ToTensor(),
-            T.Lambda(lambda x: x.repeat(3, 1, 1)),
             T.Normalize(mean*3, std*3)
         ]
     else:
@@ -137,8 +175,31 @@ def get_train_transform(dataset_name: str, t_type: str, size: int):
                 T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
             ]
     else:
-        raise ValueError(f"Unsupported dataset: {dataset_name}")
-        
+        # Everything else reuses the CIFAR-style recipe (resize + crop + flip, plus
+        # the SimCLR colour/blur stack for the contrastive variant). Previously this
+        # branch raised, which made five of the seven datasets registered in
+        # CV_DATASETS -- cifar100, svhn, mnist, fmnist, emnist -- unreachable, even
+        # though cifar100 is accepted by the CLI and the paper reports results on
+        # several of them.
+        if t_type == 'supervised':
+            transform = [
+                T.Resize((size, size)),
+                T.RandomCrop(size, padding=4),
+                T.RandomHorizontalFlip(),
+            ]
+        elif t_type == 'contrastive':
+            transform = [
+                T.Resize((size, size)),
+                T.RandomResizedCrop(size=size, scale=(0.2, 1.0)),
+                T.RandomHorizontalFlip(),
+                T.RandomApply([T.ColorJitter(0.8, 0.8, 0.8, 0.2)], p=0.8),
+                T.RandomGrayscale(p=0.2),
+                T.GaussianBlur(kernel_size=kernel_size, sigma=(0.1, 2.0)),
+            ]
+        else:
+            raise ValueError(f"Unsupported t_type: {t_type}")
+
+
     # Mean and STD normalization
     transform.extend(normalize_data(dataset_name))
     return T.Compose(transform)
@@ -240,6 +301,7 @@ def load_cv_datasets(
     size:           int,
     n_views:        int,
     cache_dir:      str = './cache',
+    val_split_seed: int = VAL_SPLIT_SEED,
     ):
 
     # Creating datasets
@@ -256,12 +318,27 @@ def load_cv_datasets(
         train_size = len(trainset)
         val_size = int(0.20 * train_size)
         train_size = train_size - val_size
-        trainset, valset = random_split(trainset, [train_size, val_size])
+
+        # Seeded, and deliberately NOT from args.seed. Two reasons:
+        #
+        #   1. Without an explicit generator this consumed the *global* torch RNG,
+        #      whose state at this point depends on how much randomness model
+        #      construction used upstream (_initialize_models runs before
+        #      _initialize_data_loaders). Changing the backbone therefore changed
+        #      the validation split.
+        #   2. Holding the split fixed across seeds is what makes a 3-seed error bar
+        #      mean "initialisation and data-order variance". If the split moved with
+        #      the seed, the spread would also contain split variance and early
+        #      stopping would be selecting on different images per seed.
+        #
+        # Pass val_split_seed explicitly only for a deliberate split-robustness check.
+        generator = torch.Generator().manual_seed(val_split_seed)
+        trainset, valset = random_split(trainset, [train_size, val_size], generator=generator)
 
         valset = deepcopy(valset)
         valset.dataset.transform = get_test_transform(dataset_name, size)
     else:
-        valset = None        
+        valset = None
 
     return {
         'train': trainset,
@@ -278,26 +355,32 @@ def load_cv_dataloaders(
     n_views:        int,
     num_workers:    int,
     cache_dir:      str = './cache',
+    val_split_seed: int = VAL_SPLIT_SEED,
+    seed:           int = 0,
     ):
     try:
-        datasets = load_cv_datasets(dataset_name, t_type, size, n_views, cache_dir)
-        loader_args = {
-            "batch_size": batch_size,
-            "num_workers": num_workers,
-            "pin_memory": True,
-            "persistent_workers": num_workers > 0,
-            "drop_last": True,
-        }
-        
-        # Creating dataloaders
-        trainloader = DataLoader(datasets["train"], shuffle=True, **loader_args)
-        testloader = DataLoader(datasets["test"], shuffle=False, **loader_args)
+        datasets = load_cv_datasets(dataset_name, t_type, size, n_views, cache_dir,
+                                    val_split_seed=val_split_seed)
+
+        # Creating dataloaders. drop_last differs by split, which is not incidental:
+        # it used to be True everywhere, so CIFAR-10's 10,000-image test set was
+        # evaluated over floor(10000/512)*512 = 9,728 images. 272 test images were
+        # silently never scored, and *which* 272 depended on the batch size -- so
+        # changing batch size changed the reported accuracy.
+        trainloader = DataLoader(datasets["train"], shuffle=True,
+                                 **_loader_args(batch_size, num_workers,
+                                                drop_last=True, seed=seed, salt=0))
+        testloader = DataLoader(datasets["test"], shuffle=False,
+                                **_loader_args(batch_size, num_workers,
+                                               drop_last=False, seed=seed, salt=1))
 
         if datasets["validation"] is not None:
-            valloader = DataLoader(datasets["validation"], shuffle=False, **loader_args)
+            valloader = DataLoader(datasets["validation"], shuffle=False,
+                                   **_loader_args(batch_size, num_workers,
+                                                  drop_last=False, seed=seed, salt=2))
         else:
             valloader = None
-        
+
         return {
             "trainloader": trainloader,
             "valloader": valloader,
@@ -309,22 +392,215 @@ def load_cv_dataloaders(
         raise e
 
 
-def get_dataloaders(args):
-    """Returns Dataloaders"""
+# --- Text datasets --------------------------------------------------------
+#
+# Salvaged from dataset_utils_old.py, which nothing imported -- so the SST-2 and
+# WikiText-2 halves of the results table had no reachable code path at all.
 
-    t_type = 'contrastive' if args.is_bacp else 'supervised'
+def _seed_worker(worker_id):
+    """Seed `random` and `numpy` inside each DataLoader worker.
+
+    PyTorch derives each worker's *torch* seed from the parent generator, but leaves
+    `random` and `numpy.random` unseeded. Any augmentation reaching for those is
+    therefore not reproducible, and `num_workers` defaults to `os.cpu_count()`, so
+    the number of workers -- and hence the sequence -- is machine-dependent.
+    """
+    import random as _random
+    worker_seed = torch.initial_seed() % 2 ** 32
+    np.random.seed(worker_seed)
+    _random.seed(worker_seed)
+
+
+def _loader_args(batch_size, num_workers, drop_last=True, seed=0, salt=0):
+    """DataLoader kwargs.
+
+    drop_last defaults True for the train loader's benefit, but callers MUST pass
+    drop_last=False for val and test: dropping a partial eval batch means never
+    scoring those samples, and which samples get dropped depends on the batch size.
+
+    The per-loader generator is salted so train/val/test do not share a shuffle
+    stream, while staying deterministic given (seed, salt).
+    """
+    generator = torch.Generator()
+    generator.manual_seed((int(seed) * 1000003) ^ int(salt))
+    return {
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "pin_memory": True,
+        "persistent_workers": num_workers > 0,
+        "drop_last": drop_last,
+        "worker_init_fn": _seed_worker,
+        "generator": generator,
+    }
+
+
+class TokenizedDataset(Dataset):
+    """Thin wrapper yielding the three keys the training loop expects.
+
+    Needed because _handle_data_to_device recognises a dict batch by its keys, and
+    the HF Dataset's own extra columns (idx, sentence, ...) would ride along.
+    """
+
+    def __init__(self, hf_split):
+        self.data = hf_split
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        example = self.data[idx]
+        return {
+            "input_ids": example["input_ids"],
+            "attention_mask": example["attention_mask"],
+            "labels": example["labels"],
+        }
+
+
+def get_tokenizer(model_name, cache_dir=None):
+    """Tokenizer for a registered language model.
+
+    Strips the '-mlm' suffix: 'roberta-base-mlm' and 'roberta-base' are the same
+    checkpoint with different heads, and only the former exists on the hub as
+    'roberta-base'.
+    """
+    from transformers import AutoTokenizer
+    checkpoint = model_name[:-4] if model_name.endswith('-mlm') else model_name
+    return AutoTokenizer.from_pretrained(checkpoint, cache_dir=cache_dir)
+
+
+def load_glue_dataloaders(tokenizer, task_name, batch_size, num_workers,
+                          cache_dir=None, max_length=128, seed=0):
+    """GLUE sequence classification. Only sst2 is used by this project."""
+    from datasets import load_dataset
+
+    if task_name not in ('sst2', 'mnli', 'qqp'):
+        raise ValueError(f"Unsupported GLUE task: {task_name}")
+
+    dataset = load_dataset('glue', task_name, cache_dir=cache_dir)
+
+    text_keys = {'sst2': ('sentence',),
+                 'mnli': ('premise', 'hypothesis'),
+                 'qqp': ('question1', 'question2')}[task_name]
+
+    def tokenize_fn(batch):
+        return tokenizer(*[batch[k] for k in text_keys], truncation=True,
+                         padding='max_length', max_length=max_length)
+
+    dataset = dataset.map(tokenize_fn, batched=True, batch_size=512)
+    dataset = dataset.rename_column('label', 'labels')
+    dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+
+    # GLUE test splits are unlabelled (label == -1), so validation is used for both
+    # validation and final evaluation -- which is also what every paper in this
+    # space reports, CAP included ("results on development sets").
+    # drop_last=False on the eval loader: SST-2's dev set is 872 examples, so at
+    # batch 32 a drop_last=True loader would score 864 and silently discard 8.
+    trainloader = DataLoader(TokenizedDataset(dataset['train']), shuffle=True,
+                             **_loader_args(batch_size, num_workers,
+                                            drop_last=True, seed=seed, salt=0))
+    valloader = DataLoader(TokenizedDataset(dataset['validation']), shuffle=False,
+                           **_loader_args(batch_size, num_workers,
+                                          drop_last=False, seed=seed, salt=2))
+
+    return {"trainloader": trainloader, "valloader": valloader, "testloader": valloader}
+
+
+def load_mlm_dataloaders(tokenizer, batch_size, num_workers, cache_dir=None,
+                         block_size=None, mlm_probability=0.15):
+    """WikiText-2 masked language modelling."""
+    from datasets import load_dataset
+    from transformers import DataCollatorForLanguageModeling
+
+    dataset = load_dataset('wikitext', 'wikitext-2-raw-v1', cache_dir=cache_dir)
+
+    # Cap the block size: tokenizer.model_max_length is 512 for RoBERTa but a
+    # sentinel ~1e30 for some tokenizers, which would make grouping allocate
+    # unboundedly.
+    limit = getattr(tokenizer, 'model_max_length', 512)
+    block_size = block_size or (limit if limit and limit < 4096 else 512)
+
+    def tokenize_fn(batch):
+        return tokenizer(batch['text'], truncation=False,
+                         return_special_tokens_mask=True)
+
+    def group_texts(batch):
+        joined = {k: sum(batch[k], []) for k in batch}
+        total = (len(joined['input_ids']) // block_size) * block_size
+        return {k: [v[i:i + block_size] for i in range(0, total, block_size)]
+                for k, v in joined.items()}
+
+    dataset = dataset.map(tokenize_fn, batched=True, batch_size=512,
+                          remove_columns=['text'])
+    dataset = dataset.map(group_texts, batched=True, batch_size=512)
+
+    collator = DataCollatorForLanguageModeling(tokenizer, mlm=True,
+                                              mlm_probability=mlm_probability)
+
+    def loader(split, shuffle, drop_last, salt):
+        return DataLoader(dataset[split], shuffle=shuffle, collate_fn=collator,
+                          **_loader_args(batch_size, num_workers,
+                                         drop_last=drop_last, seed=seed, salt=salt))
+
+    return {
+        "trainloader": loader('train', True, True, 0),
+        "valloader": loader('validation', False, False, 2),
+        "testloader": loader('test', False, False, 1),
+    }
+
+
+def load_text_dataloaders(model_name, dataset_name, batch_size, num_workers,
+                          cache_dir=None, seed=0):
+    if dataset_name not in TEXT_DATASETS:
+        raise ValueError(f"Unsupported text dataset: {dataset_name}. "
+                         f"Choices: {sorted(TEXT_DATASETS)}")
+
+    tokenizer = get_tokenizer(model_name, cache_dir)
+
+    if dataset_name == 'wikitext2':
+        return load_mlm_dataloaders(tokenizer, batch_size, num_workers, cache_dir, seed=seed)
+    return load_glue_dataloaders(tokenizer, dataset_name, batch_size, num_workers,
+                                 cache_dir, seed=seed)
+
+
+def get_dataloaders(args, supervised_override=False):
+    """Returns Dataloaders.
+
+    supervised_override forces the single-view supervised recipe regardless of
+    is_bacp. BaCPTrainer.finetune() needs that: it rebuilds loaders for the
+    supervised fine-tuning phase, and previously called load_cv_dataloaders
+    directly -- which raised for sst2/wikitext2, so BaCP plus a language model plus
+    --enable_finetune had no working code path at all.
+    """
+    is_bacp = getattr(args, 'is_bacp', False) and not supervised_override
+
     if args.model_type == 'cv':
         return load_cv_dataloaders(
-            dataset_name=args.dataset_name, 
-            t_type=t_type,
-            batch_size=args.batch_size, 
+            dataset_name=args.dataset_name,
+            t_type='contrastive' if is_bacp else 'supervised',
+            batch_size=args.batch_size,
             size=args.image_size,
-            n_views=args.n_views,
+            n_views=args.n_views if is_bacp else 1,
             num_workers=args.num_workers,
             cache_dir=args.cache_dir,
+            val_split_seed=getattr(args, 'val_split_seed', VAL_SPLIT_SEED),
+            seed=getattr(args, 'seed', 0),
             )
-    else:
-        raise ValueError(f"Unsupported model type: {args.model_type}")
+
+    if args.model_type == 'llm':
+        # No text augmentation, so there is no second view to build. That is not a
+        # gap: in CAP the two "views" of a text example are the same tokens seen
+        # through two different models, which is exactly what the cross-model
+        # contrastive term needs. BaCPTrainer duplicates the batch accordingly.
+        return load_text_dataloaders(
+            model_name=args.model_name,
+            dataset_name=args.dataset_name,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            cache_dir=args.cache_dir,
+            seed=getattr(args, 'seed', 0),
+            )
+
+    raise ValueError(f"Unsupported model type: {args.model_type!r}. Expected 'cv' or 'llm'.")
 
 
 
