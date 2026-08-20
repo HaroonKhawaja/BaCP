@@ -37,7 +37,19 @@ _EXCLUDE_EMBEDDINGS = ('embedding',)
 # Task heads. Matches the protocol stated in the paper's appendix D.4 -- "the fc
 # layer was kept dense", "the final classifier.6 layer was kept dense",
 # "embeddings and classification heads were kept dense".
-_EXCLUDE_TASK_HEAD = (
+#
+# 'classifier' is in the LLM set only. For HF models the module named
+# `classifier` IS the task head (DistilBERT's pre_classifier/classifier,
+# RoBERTa's classifier.dense/out_proj). But for VGG, `model.classifier.0` and
+# `.3` are the 102.8M + 16.8M BACKBONE Linears -- remove_last_layer strips only
+# the final layer and the replacement head is `cls_head` -- so excluding the
+# substring there exempted 92.8% of VGG-11 from the sparsity denominator
+# (defect M2). Which set applies is decided by the model handed to
+# set_prunable_scope; with no model we keep the conservative full set.
+_EXCLUDE_TASK_HEAD_CV = (
+    'cls_head',                          # this project's replacement classifier
+)
+_EXCLUDE_TASK_HEAD_LLM = (
     'cls_head',                          # this project's replacement classifier
     'vocab_projector', 'vocab_transform',  # DistilBERT MLM head
     'lm_head',                           # RoBERTa MLM head
@@ -57,6 +69,7 @@ _EXCLUDE_TASK_HEAD = (
 
 _PRUNE_TASK_HEAD = False
 _PRUNE_EMBEDDINGS = False
+_MODEL_TYPE = None      # 'cv' | 'llm' | None (unknown -> conservative LLM set)
 
 
 def set_prunable_scope(prune_task_head=False, prune_embeddings=False, model=None):
@@ -79,9 +92,13 @@ def set_prunable_scope(prune_task_head=False, prune_embeddings=False, model=None
         prunable set 99.7% of the model -- a "99% sparsity" figure would then be
         describing the embedding table, not the transformer blocks.
     """
-    global _PRUNE_TASK_HEAD, _PRUNE_EMBEDDINGS
+    global _PRUNE_TASK_HEAD, _PRUNE_EMBEDDINGS, _MODEL_TYPE
     _PRUNE_TASK_HEAD = bool(prune_task_head)
     _PRUNE_EMBEDDINGS = bool(prune_embeddings)
+    # Which task-head keyword set applies (see _EXCLUDE_TASK_HEAD_CV/_LLM).
+    # The wrapper carries model_type; with no model we leave it None and
+    # excluded_keywords() falls back to the conservative LLM set.
+    _MODEL_TYPE = getattr(model, 'model_type', None) if model is not None else None
 
     scope = ['backbone']
     if _PRUNE_TASK_HEAD:
@@ -120,7 +137,8 @@ def excluded_keywords():
     if not _PRUNE_EMBEDDINGS:
         excluded += _EXCLUDE_EMBEDDINGS
     if not _PRUNE_TASK_HEAD:
-        excluded += _EXCLUDE_TASK_HEAD
+        excluded += (_EXCLUDE_TASK_HEAD_CV if _MODEL_TYPE == 'cv'
+                     else _EXCLUDE_TASK_HEAD_LLM)
     return excluded
 
 

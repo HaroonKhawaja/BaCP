@@ -39,10 +39,26 @@ SESSION="${BACP_SESSION:-bacp}"
 # that interpreter directly and never create a venv. Resolving this in one place
 # keeps `start` and `status` from reaching for a venv that setup deliberately
 # did not create.
-if [ -x "${REPO}/.venv/bin/python" ]; then
+#
+# PATH is not a reliable way to find that interpreter. The Vast.ai image keeps
+# its CUDA torch in /venv/main, activated only for interactive login shells, so
+# under `ssh box ./run_remote.sh ...` -- and inside tmux -- `python3` resolves to
+# a bare /usr/bin/python3 with no torch at all. Probing candidates for an
+# importable torch, rather than trusting PATH, is what stops `setup` concluding
+# "no CUDA torch" on a box that has one and installing the requirements.txt pin
+# (torch 2.5.1, pre-Blackwell) over a working sm_120 build.
+#
+# BACP_PY overrides everything, for a box whose interpreter is somewhere else.
+if [ -n "${BACP_PY:-}" ]; then
+    PY="${BACP_PY}"
+elif [ -x "${REPO}/.venv/bin/python" ]; then
     PY="${REPO}/.venv/bin/python"
 else
     PY="$(command -v python3 || command -v python)"
+    for cand in /venv/main/bin/python /venv/main/bin/python3 /opt/conda/bin/python; do
+        [ -x "$cand" ] || continue
+        if "$cand" -c 'import torch' 2>/dev/null; then PY="$cand"; break; fi
+    done
 fi
 
 # /workspace is RunPod's persistent container volume: it survives a pod stop and
@@ -68,7 +84,7 @@ setup)
     # functioning setup with one that raises "no kernel image is available for
     # execution on the device". So the image's torch wins, and we install only
     # the packages around it.
-    if python3 -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
+    if "$PY" -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
         echo "== using the image's torch (CUDA available); NOT creating a venv"
         "$PY" -c "import torch;print(f'   torch {torch.__version__}  cuda {torch.version.cuda}  sm_{\"\".join(map(str,torch.cuda.get_device_capability(0)))}')"
         # Everything except torch/torchvision, which the image owns.
@@ -125,21 +141,25 @@ start)
     LOG="${BACP_RESULTS_DIR}/logs/sweep_t${tier}_$(date +%Y%m%d_%H%M%S).log"
 
     GPUS="${BACP_GPUS:-$("$PY" -c 'import torch;print(max(torch.cuda.device_count(),1))')}"
-    PERGPU="${BACP_PER_GPU:-1}"
 
-    # `resume` is the default and is what you want after any interruption. Use
-    # --no_resume ONLY when the code changed, so every cell shares one
+    # Cells per GPU and dataloader workers are constants at the top of
+    # project/experiments/pool.py. Edit them there.
+    #
+    # Restarting is the way to resume: a cell counts as done once it has a run
+    # record, so `start` after an interruption picks up what is missing. Delete
+    # the records instead when the code changed and every cell must share one
     # code_fingerprint.
     tmux new-session -d -s "$SESSION" \
         "cd '$REPO' && BACP_TIER=$tier '$PY' project/experiments/pool.py \
-         --tier $tier --gpus $GPUS --per-gpu $PERGPU 2>&1 | tee '$LOG'"
+         --tier $tier --gpus $GPUS 2>&1 | tee '$LOG'"
 
     # Snapshot the records every 5 minutes. They are ~1.5 MB, so this is free,
     # and it is the difference between losing a pod and losing the sweep.
     tmux new-session -d -s "${SESSION}-snap" \
         "while true; do '$REPO/run_remote.sh' snapshot >/dev/null 2>&1; sleep 300; done"
 
-    echo "started tier $tier on $GPUS GPU(s) x $PERGPU"
+    echo "started tier $tier on $GPUS GPU(s)"
+    echo "  order    : all dense cells, then one seed at a time"
     echo "  log      : $LOG"
     echo "  snapshots: ${BACP_RESULTS_DIR}/records_latest.tar.gz (every 5 min)"
     echo

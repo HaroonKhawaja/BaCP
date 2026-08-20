@@ -189,3 +189,44 @@ def test_sparsity_denominator_counts_shared_params_once(tiny_wrapper_shared):
 
     state_keys = list(tiny_wrapper_shared.state_dict())
     assert len(state_keys) == len(set(state_keys))
+
+
+def test_vgg_backbone_mlp_is_prunable_but_llm_classifier_is_not():
+    """Defect M2: the 'classifier' keyword must not exempt VGG's backbone MLP.
+
+    After remove_last_layer, a VGG wrapper keeps its two big Linears under
+    `model.classifier.0` / `.3` (102.8M + 16.8M params) and the real task head
+    is `cls_head`. Excluding the 'classifier' substring therefore removed 92.8%
+    of VGG-11 from the sparsity denominator. For HF language models the module
+    named `classifier` IS the task head and must stay excluded. The scope is
+    told which world it is in by the model's model_type.
+    """
+    from pruning_factory import set_prunable_scope
+
+    p = torch.nn.Parameter(torch.randn(8, 8))
+
+    # CV model: backbone MLP prunable, replacement head excluded.
+    set_prunable_scope(prune_task_head=False,
+                       model=SimpleNamespace(model_type='cv'))
+    assert layer_check('model.classifier.0.weight', p), \
+        "VGG backbone Linear must be in the prunable scope (defect M2)"
+    assert layer_check('model.classifier.3.weight', p)
+    assert not layer_check('cls_head.weight', p), \
+        "the replacement task head must stay excluded"
+    # prune_task_head=True brings the head into scope.
+    set_prunable_scope(prune_task_head=True,
+                       model=SimpleNamespace(model_type='cv'))
+    assert layer_check('cls_head.weight', p)
+
+    # LLM model: every classifier-head name stays excluded.
+    set_prunable_scope(prune_task_head=False,
+                       model=SimpleNamespace(model_type='llm'))
+    assert not layer_check('model.classifier.weight', p)          # DistilBERT
+    assert not layer_check('model.pre_classifier.weight', p)      # DistilBERT
+    assert not layer_check('model.classifier.dense.weight', p)    # RoBERTa
+    assert not layer_check('model.classifier.out_proj.weight', p)
+    assert not layer_check('model.lm_head.decoder.weight', p)     # RoBERTa MLM
+
+    # No model given: conservative old behaviour, 'classifier' excluded.
+    set_prunable_scope(prune_task_head=False, model=None)
+    assert not layer_check('model.classifier.0.weight', p)

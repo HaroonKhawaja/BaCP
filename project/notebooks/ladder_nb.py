@@ -153,7 +153,12 @@ _EPOCH = re.compile(r'Epoch \[(\d+)/(\d+)\]')
 
 
 def _field(name, line):
-    m = re.search(rf'{name}: (nan|-?[0-9.]+(?:[eE][-+]?\d+)?)', line)
+    # \b keeps 'loss:' from matching inside 'val_loss:' (underscore is a word
+    # char, so there is no boundary there), and IGNORECASE lets the same name
+    # hit both trainer formats: 'loss:'/'accuracy:' from Trainer and
+    # 'Total Loss:'/'Training Accuracy:' from BaCPTrainer.
+    m = re.search(rf'\b{name}: (nan|-?[0-9.]+(?:[eE][-+]?\d+)?)', line,
+                  re.IGNORECASE)
     if not m:
         return None
     try:
@@ -241,19 +246,22 @@ def plot(hist, first_nan=None, title=''):
 
 # --- running a whole stage -------------------------------------------------
 
-def run_stage(rungs, tier=1, gpus=4, per_gpu=2, seeds=None, timeout=None):
+def run_stage(rungs, tier=1, gpus=None, seeds=None):
     """Run a list of rungs across the GPUs, in process, printing as it goes.
 
     Dense cells run first as a hard barrier -- every sparse cell resolves a dense
     checkpoint of its own seed at execution time, so launching them together is
-    how 21 of 22 cells failed on the first attempt.
+    how 21 of 22 cells failed on the first attempt. The sparse cells then run one
+    seed at a time, so an interrupted sweep leaves whole seeds behind.
+
+    Cells per GPU and dataloader workers are constants in `pool.py`; edit them
+    there rather than passing them in.
 
     Idempotent: a cell counts as complete iff a record carrying its key exists,
     so re-running this skips what is done and picks up what is not.
     """
     import pool as P
-    return P.run_pool(tier, gpus=gpus, per_gpu=per_gpu, rungs=list(rungs),
-                      seeds=seeds, timeout=timeout, echo=True)
+    return P.run_pool(tier, gpus=gpus, rungs=list(rungs), seeds=seeds)
 
 
 def progress(tier=1):

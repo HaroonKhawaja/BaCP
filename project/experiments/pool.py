@@ -1,31 +1,26 @@
-"""Run ladder cells across several GPUs concurrently.
+"""Run ladder cells on every GPU at once.
 
-`runner.run_grid` executes one cell at a time, which leaves seven of eight cards
-idle. The cells are independent once the dense rung exists, so the work is
-embarrassingly parallel -- but three things have to be got right, and none of
-them is optional:
+A "cell" is one rung at one seed -- a single training run. Cells are
+independent, so we run several at the same time, one per GPU.
 
-  **Claiming must be atomic.** run_grid's resume check reads the run records,
-  which is correct for resuming and racy for concurrency: two workers listing
-  cells at the same moment both see a cell as incomplete and both run it. That
-  wastes a GPU-hour and writes two records for one cell. Claims here are
-  `os.open(..., O_CREAT | O_EXCL)`, which is atomic on POSIX and Windows alike --
-  exactly one worker can create a given file.
+Three rules keep that safe, and each has a function below:
 
-  **The dense rung is a barrier.** Every sparse cell resolves its starting
-  weights from a dense record MATCHING ITS SEED, at execution time. Launch
-  everything at once and the sparse cells race the dense ones and die on a
-  missing checkpoint -- which is precisely how 21 of 22 cells failed in the first
-  tier-0 run. So dense cells run first, to completion, and only then the rest.
+  Dense cells go first. Every sparse cell starts from a dense checkpoint of its
+  own seed, so the dense rung has to be finished before any sparse cell begins.
+  See run_dense_cells().
 
-  **A crashed worker must not hold its claim forever.** Claims carry a pid and a
-  timestamp and are reclaimed after `stale_after` seconds, so a killed process --
-  or a reclaimed spot instance -- does not strand a cell.
+  Seeds finish one at a time. All of seed 0, then all of seed 1, and so on.
+  Stop the sweep halfway and you have whole seeds you can average, instead of a
+  slice of every seed and nothing you can report. See run_sparse_cells().
 
-Concurrency is per GPU: `--per-gpu 2` runs two cells on each card. ResNet-34 at
-batch 128 on 32x32 inputs uses roughly 3 GB of 24 GB and nowhere near all the
-SMs, so packing 2-3 per card is usually a real throughput win. The limit is host
-CPU -- every cell spawns dataloader workers -- so measure before raising it.
+  Two workers never take the same cell. A worker creates a claim file before it
+  starts; whoever creates the file first owns the cell. See try_claim().
+
+Stopping and restarting is safe. A cell counts as done once it has a run
+record, so restarting picks up where you left off.
+
+All settings are the constants directly below. Change them here, not on the
+command line.
 """
 
 from __future__ import annotations
@@ -48,219 +43,276 @@ import manifest as M                                              # noqa: E402
 import runner as R                                                # noqa: E402
 
 
+# --- settings --------------------------------------------------------------
+
+# Dataloader worker processes for each cell. This is PER CELL, so the machine
+# runs NUM_WORKERS x CELLS_PER_GPU x (number of GPUs) worker processes in total.
+NUM_WORKERS = 24
+
+# How many cells share one GPU. ResNet-34 at batch 128 on 32x32 inputs uses
+# about 3 GB of 24 GB, so a card can hold more than one -- but every extra cell
+# also multiplies the worker processes above.
+CELLS_PER_GPU = 1
+
+# A claim older than this is treated as dead and taken over. Covers a crashed
+# worker or a reclaimed spot instance.
+CLAIM_EXPIRES_AFTER = 2 * 60 * 60
+
+
 # --- claims ----------------------------------------------------------------
 
-def _claims_dir(root=None) -> Path:
+def claim_path(key):
+    """The claim file for one cell."""
     from results import results_dir
-    d = results_dir(root) / 'claims'
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    folder = results_dir() / 'claims'
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / f'{key}.claim'
 
 
-def claim(key, root=None, stale_after=7200, worker=''):
-    """Try to take exclusive ownership of a cell. True if we got it.
+def try_claim(key, worker):
+    """Take exclusive ownership of a cell. True if we got it, False if taken.
 
-    O_CREAT|O_EXCL is the whole mechanism: the filesystem guarantees that exactly
-    one caller creates the file. No lock server, no database, and it works the
-    same on the shared volume of a rented box as it does locally.
+    O_CREAT | O_EXCL is the whole mechanism: the filesystem guarantees that
+    exactly one caller creates the file. No lock server and no database, and it
+    behaves the same on a rented box's shared volume as it does locally.
     """
-    path = _claims_dir(root) / f'{key}.claim'
-    payload = json.dumps({'pid': os.getpid(), 'worker': worker,
-                          'at': time.time()}).encode()
+    path = claim_path(key)
+    note = json.dumps({'pid': os.getpid(), 'worker': worker, 'at': time.time()})
     try:
         fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        with os.fdopen(fd, 'wb') as fh:
-            fh.write(payload)
+        with os.fdopen(fd, 'w') as fh:
+            fh.write(note)
         return True
     except FileExistsError:
         pass
 
-    # Reclaim a stale claim: a killed worker, or a spot instance that went away.
-    try:
-        age = time.time() - json.loads(path.read_text()).get('at', 0)
-    except Exception:                                              # noqa: BLE001
-        age = float('inf')
-    if age > stale_after:
-        try:
-            path.unlink()
-            print(f'  [pool] reclaimed stale claim on {key} (age {age/60:.0f} min)')
-            return claim(key, root, stale_after, worker)
-        except OSError:
-            pass
+    if claim_is_stale(path):
+        print(f'  [pool] taking over a stale claim on {key}')
+        release_claim(key)
+        return try_claim(key, worker)
     return False
 
 
-def release(key, root=None):
+def claim_is_stale(path):
+    """True if a claim file is older than CLAIM_EXPIRES_AFTER."""
     try:
-        (_claims_dir(root) / f'{key}.claim').unlink()
+        made_at = json.loads(path.read_text()).get('at', 0)
+    except Exception:                                              # noqa: BLE001
+        return True                       # unreadable claim: assume abandoned
+    return time.time() - made_at > CLAIM_EXPIRES_AFTER
+
+
+def release_claim(key):
+    """Give up ownership of a cell so it can be run again."""
+    try:
+        claim_path(key).unlink()
     except OSError:
         pass
 
 
-def clear_claims(root=None) -> int:
-    n = 0
-    for f in _claims_dir(root).glob('*.claim'):
+def clear_all_claims():
+    """Delete every claim file. Returns how many. Use after a crash, and never
+    while other workers are still running."""
+    folder = claim_path('x').parent
+    count = 0
+    for f in folder.glob('*.claim'):
         try:
             f.unlink()
-            n += 1
+            count += 1
         except OSError:
             pass
-    return n
+    return count
 
 
-# --- the pool --------------------------------------------------------------
+# --- running one cell ------------------------------------------------------
 
-def usable_cores():
-    """Cores this process may actually run on.
-
-    os.cpu_count() reports the HOST's cores inside a container and ignores cgroup
-    pinning, so it over-reports badly on a rented box -- 256 where the container
-    may have far fewer.
-    """
+def count_gpus():
+    """How many GPUs are visible. 1 if torch cannot tell us."""
     try:
-        return len(os.sched_getaffinity(0))          # Linux, respects cgroups
-    except AttributeError:
-        return os.cpu_count() or 4
+        import torch
+        return max(torch.cuda.device_count(), 1)
+    except Exception:                                              # noqa: BLE001
+        return 1
 
 
-def workers_per_cell(concurrency, cores=None):
-    """Dataloader workers for one cell, given how many cells share the machine.
+def run_one_cell(cell, gpu, worker):
+    """Claim a cell, train it on `gpu`, and return a result dict."""
+    if not try_claim(cell['key'], worker):
+        return {'key': cell['key'], 'status': 'claimed_elsewhere'}
 
-    Leaves two cores per cell for the training process itself and the main
-    thread. Without this each cell inherited os.cpu_count(): 256 workers per
-    cell, 1,024 processes across four concurrent cells, on 256 cores.
+    print(f'  [{worker}] start {cell["rung"]} seed{cell["seed"]}')
+    try:
+        result = R.run_cell(cell, echo=False,
+                            env={'CUDA_VISIBLE_DEVICES': str(gpu)})
+    except Exception as exc:                                       # noqa: BLE001
+        release_claim(cell['key'])
+        print(f'  [{worker}] ERROR {cell["rung"]}: {type(exc).__name__}: {exc}')
+        return {'key': cell['key'], 'status': 'error', 'error': str(exc)}
+
+    label = 'ok' if result['status'].startswith('ok') else result['status'].upper()
+    print(f'  [{worker}] {label} {cell["rung"]} seed{cell["seed"]} '
+          f'({result.get("elapsed_s", 0):.0f}s)')
+
+    # A failed cell keeps its claim so a restart does not spin on it forever.
+    # Delete its record when you want another attempt.
+    if not result['status'] == 'failed':
+        release_claim(cell['key'])
+    return result
+
+
+# --- running many cells ----------------------------------------------------
+
+def run_cells_together(cells, gpus, label):
+    """Run `cells` in parallel across `gpus` and wait for all of them.
+
+    One thread per GPU slot. Each thread pulls the next cell off a shared queue
+    until the queue is empty, so a slow cell does not hold up the others.
     """
-    cores = cores or usable_cores()
-    return max(2, cores // max(concurrency, 1) - 2)
+    print(f'\n== {label}: {len(cells)} cell(s)')
+    pending = queue.Queue()
+    for cell in cells:
+        pending.put(cell)
+
+    results = []
+    lock = threading.Lock()
+
+    def work_until_empty(gpu, worker):
+        while True:
+            try:
+                cell = pending.get_nowait()
+            except queue.Empty:
+                return
+            result = run_one_cell(cell, gpu, worker)
+            with lock:
+                results.append(result)
+
+    threads = []
+    for gpu in gpus:
+        for slot in range(CELLS_PER_GPU):
+            worker = f'g{gpu}.{slot}'
+            t = threading.Thread(target=work_until_empty, args=(gpu, worker),
+                                 daemon=True)
+            t.start()
+            threads.append(t)
+    for t in threads:
+        t.join()
+    return results
 
 
-def _worker(name, gpu, work, results, root, timeout, echo):
-    while True:
-        try:
-            cell = work.get_nowait()
-        except queue.Empty:
-            return
-        if not claim(cell['key'], root=root, worker=name):
-            results.append({'key': cell['key'], 'status': 'claimed_elsewhere'})
-            work.task_done()
-            continue
-        try:
-            if echo:
-                print(f'  [{name}] -> {cell["rung"]} seed{cell["seed"]}')
-            res = R.run_cell(cell, root=root, timeout=timeout, echo=False,
-                             env={'CUDA_VISIBLE_DEVICES': str(gpu)})
-            results.append(res)
-            if echo:
-                mark = 'ok' if res['status'].startswith('ok') else res['status'].upper()
-                print(f'  [{name}] {mark} {cell["rung"]} seed{cell["seed"]} '
-                      f'({res.get("elapsed_s", 0):.0f}s)')
-            # A failed cell keeps its claim, so a retry loop does not spin on it.
-            # Deleting its record is how you ask for another attempt.
-            if res['status'] == 'failed':
-                pass
-            else:
-                release(cell['key'], root=root)
-        except Exception as exc:                                   # noqa: BLE001
-            results.append({'key': cell['key'], 'status': 'error', 'error': str(exc)})
-            release(cell['key'], root=root)
-            if echo:
-                print(f'  [{name}] ERROR {cell["rung"]}: {type(exc).__name__}: {exc}')
-        finally:
-            work.task_done()
+def run_dense_cells(cells, gpus):
+    """Run every dense cell, on all GPUs at once.
+
+    This is a barrier: sparse cells load a dense checkpoint of their own seed,
+    so nothing sparse may start until this finishes. Running all seeds together
+    here keeps the whole box busy; doing it seed by seed would idle every card
+    but one at each barrier.
+    """
+    return run_cells_together(cells, gpus, 'dense (barrier, all seeds)')
 
 
-def run_pool(tier=None, *, gpus=None, per_gpu=1, root=None, timeout=None,
-             rungs=None, stages=None, seeds=None, echo=True):
-    """Run a tier across GPUs. Dense cells first, then everything else."""
-    gpus = list(range(gpus)) if isinstance(gpus, int) else (gpus or [0])
+def run_sparse_cells(cells, gpus):
+    """Run every sparse cell, one seed at a time.
 
-    # Size the dataloaders to the machine and the concurrency, before anything
-    # is scheduled. Every cell inherits this.
-    nw = workers_per_cell(len(gpus) * per_gpu)
-    print(f'  {usable_cores()} usable core(s) -> num_workers={nw} per cell')
+    Seed 0 finishes completely before seed 1 starts. If the sweep is cut short
+    you are left with a few complete seeds -- which you can average and report
+    -- rather than every seed part-finished, which you cannot.
+    """
+    results = []
+    seeds = sorted({c['seed'] for c in cells})
+    for position, seed in enumerate(seeds, start=1):
+        this_seed = [c for c in cells if c['seed'] == seed]
+        results += run_cells_together(
+            this_seed, gpus, f'sparse seed {seed}  [{position} of {len(seeds)}]')
+        print(f'-- seed {seed} finished. Safe to stop here.')
+    return results
 
-    grid = M.cells(tier, rungs=rungs)
-    for c in grid:
-        c['config'] = dict(c['config'], num_workers=nw)
+
+# --- the sweep -------------------------------------------------------------
+
+def cells_to_run(tier, rungs=None, stages=None, seeds=None):
+    """The cells of a tier that do not have a record yet, ready to run."""
+    cells = M.cells(tier, rungs=rungs)
     if stages:
-        grid = [c for c in grid if c['stage'] in set(stages)]
+        cells = [c for c in cells if c['stage'] in set(stages)]
     if seeds is not None:
-        grid = [c for c in grid if c['seed'] in set(seeds)]
+        cells = [c for c in cells if c['seed'] in set(seeds)]
+    for c in cells:
+        c['config'] = dict(c['config'], num_workers=NUM_WORKERS)
 
-    done = R.completed_keys(root)
-    todo = [c for c in grid if c['key'] not in done]
+    already_done = R.completed_keys()
+    todo = [c for c in cells if c['key'] not in already_done]
+    return cells, todo
 
-    # The barrier. Sparse cells resolve a dense checkpoint of the SAME SEED at
-    # execution time, so they cannot start until the dense rung has finished.
+
+def count_statuses(results):
+    """How many results are ok, and how many failed."""
+    ok = sum(1 for r in results if r['status'].startswith('ok'))
+    failed = sum(1 for r in results if r['status'] in ('failed', 'error'))
+    return ok, failed
+
+
+def run_pool(tier=None, gpus=None, rungs=None, stages=None, seeds=None):
+    """Run a tier: dense cells first, then the sparse cells one seed at a time.
+
+    Returns {'ok': n, 'failed': n, 'skipped': n, 'results': [...]} -- the shape
+    the stage notebooks print.
+    """
+    gpus = list(range(gpus if gpus else count_gpus()))
+    slots = len(gpus) * CELLS_PER_GPU
+
+    all_cells, todo = cells_to_run(tier, rungs, stages, seeds)
     dense = [c for c in todo if c['script'] == 'baseline']
     sparse = [c for c in todo if c['script'] != 'baseline']
+    skipped = len(all_cells) - len(todo)
 
-    print(f'tier {M.TIER if tier is None else tier}: {len(grid)} cells, '
-          f'{len(grid) - len(todo)} already done, {len(todo)} to run')
-    print(f'  {len(gpus)} GPU(s) x {per_gpu} concurrent = {len(gpus) * per_gpu} workers')
+    print(f'tier {M.TIER if tier is None else tier}: {len(all_cells)} cells, '
+          f'{skipped} already done, {len(todo)} to run')
+    print(f'  {len(gpus)} GPU(s) x {CELLS_PER_GPU} = {slots} cells at once, '
+          f'{NUM_WORKERS} dataloader workers each')
+    print(f'  order: all dense cells, then one seed at a time')
 
-    summary = {'ok': 0, 'failed': 0, 'skipped': len(grid) - len(todo), 'results': []}
+    def summarize(results):
+        ok, failed = count_statuses(results)
+        return {'ok': ok, 'failed': failed, 'skipped': skipped,
+                'results': results}
 
-    for phase, cells_ in (('dense (barrier)', dense), ('sparse', sparse)):
-        if not cells_:
-            continue
-        print(f'\n== {phase}: {len(cells_)} cell(s)')
-        work = queue.Queue()
-        for c in cells_:
-            work.put(c)
-        results, threads = [], []
-        for gi, gpu in enumerate(gpus):
-            for slot in range(per_gpu):
-                name = f'g{gpu}.{slot}'
-                t = threading.Thread(target=_worker, daemon=True, args=(
-                    name, gpu, work, results, root, timeout, echo))
-                t.start()
-                threads.append(t)
-        for t in threads:
-            t.join()
-        summary['results'].extend(results)
-        summary['ok'] += sum(1 for r in results if r['status'].startswith('ok'))
-        summary['failed'] += sum(1 for r in results
-                                 if r['status'] in ('failed', 'error'))
-        if phase.startswith('dense') and summary['failed']:
-            print('!! the dense rung failed; every sparse cell would fail to '
-                  'resolve its checkpoint. Stopping.')
-            return summary
+    results = []
+    if dense:
+        results += run_dense_cells(dense, gpus)
+        if count_statuses(results)[1]:
+            print('!! a dense cell failed. Every sparse cell would then fail to '
+                  'find its checkpoint, so stopping here.')
+            return summarize(results)
+    if sparse:
+        results += run_sparse_cells(sparse, gpus)
 
-    print(f"\n{summary['ok']} ok, {summary['failed']} failed, "
-          f"{summary['skipped']} skipped")
-    for r in summary['results']:
+    summary = summarize(results)
+    print(f"\n{summary['ok']} ok, {summary['failed']} failed, {skipped} skipped")
+    for r in results:
         if r['status'] in ('failed', 'error'):
             print(f"  FAILED {r['key']}: {r.get('error', r.get('returncode'))}")
     return summary
 
 
-if __name__ == '__main__':
-    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+def main():
+    ap = argparse.ArgumentParser(
+        description='Run ladder cells on every GPU at once.')
     ap.add_argument('--tier', type=int, default=None)
     ap.add_argument('--gpus', type=int, default=None,
-                    help='number of GPUs (default: all visible)')
-    ap.add_argument('--per-gpu', type=int, default=1,
-                    help='concurrent cells per GPU. 2-3 usually pays here; the '
-                         'limit is host CPU for dataloaders, so measure.')
+                    help='how many GPUs to use (default: all of them)')
     ap.add_argument('--rungs', nargs='*', default=None)
     ap.add_argument('--stages', nargs='*', default=None)
     ap.add_argument('--seeds', type=int, nargs='*', default=None)
-    ap.add_argument('--timeout', type=int, default=None)
     ap.add_argument('--clear-claims', action='store_true',
-                    help='drop every claim before starting. Use after a crash, '
-                         'never while other workers are live.')
+                    help='delete every claim before starting. Use after a '
+                         'crash, never while other workers are live.')
     a = ap.parse_args()
 
     if a.clear_claims:
-        print(f'cleared {clear_claims()} claim(s)')
+        print(f'cleared {clear_all_claims()} claim(s)')
 
-    n_gpus = a.gpus
-    if n_gpus is None:
-        try:
-            import torch
-            n_gpus = max(torch.cuda.device_count(), 1)
-        except Exception:                                          # noqa: BLE001
-            n_gpus = 1
-    run_pool(a.tier, gpus=n_gpus, per_gpu=a.per_gpu, timeout=a.timeout,
-             rungs=a.rungs, stages=a.stages, seeds=a.seeds)
+    run_pool(a.tier, gpus=a.gpus, rungs=a.rungs, stages=a.stages, seeds=a.seeds)
+
+
+if __name__ == '__main__':
+    main()
