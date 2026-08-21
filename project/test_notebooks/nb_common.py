@@ -161,12 +161,21 @@ _CV_BASE = dict(model_type='cv', dataset_name='cifar10', num_classes=10,
 
 _CNN_DENSE = dict(optimizer_type='sgd', learning_rate=0.01,
                   scheduler_type='linear_with_warmup', epochs=100, patience=20)
+# prune_task_head=True for the vision families: the published vision-line
+# comparators prune their output layers (Han et al. prune AlexNet's fc8; SNIP
+# thresholds globally over all weights; RigL/GraNet mask the classifier by
+# default -- see docs/citations.md section 4). The encoder/projection head
+# remains excluded unconditionally (frozen, discarded, never in the
+# denominator). LLM families keep heads dense -- the PLM convention of CAP
+# and WANDA-as-published.
 _CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
                   epochs=60, recovery_epochs=0,
-                  sparsity_scheduler='cubic', delta_T=88)
+                  sparsity_scheduler='cubic', delta_T=88,
+                  prune_task_head=True)
 _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
                  epochs=60, recovery_epochs=0,
                  sparsity_scheduler='cubic', delta_T=88,
+                 prune_task_head=True,
                  # tau=0.07: the ORIGINAL operative value. The appendix's
                  # temperature sweep labels 0.15 "current", but the sweep
                  # scripts never passed --tau, so the submission's runs used

@@ -124,6 +124,15 @@ head is `cls_head`; for LLMs it includes `classifier`/`lm_head` etc. VGG's
 backbone MLP is **in** scope (defect M2, fixed; pinned by
 `test_vgg_backbone_mlp_is_prunable_but_llm_classifier_is_not`).
 
+**Head convention by family** (set in `nb_common.FAMILIES`, recorded per run
+as `prune_task_head`): vision arms run with the classifier **pruned**
+(`prune_task_head=True`), matching the vision-line comparators (Han et al.
+prune the output fc; SNIP thresholds globally; RigL/GraNet mask the
+classifier — `docs/citations.md` §4). LLM arms keep heads and embeddings
+dense, the PLM convention of CAP. The scope is identical across I.P. and
+BaCP within every table. The contrastive projection head is excluded
+everywhere, unconditionally.
+
 **Reported sparsity** (`check_model_sparsity` `:955`,
 `check_mask_sparsity` `:976`): fraction of *prunable* weights that are zero
 (value-based) or masked (mask-based); `report_sparsity` prefers the mask when
