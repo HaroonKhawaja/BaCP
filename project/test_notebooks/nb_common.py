@@ -31,10 +31,19 @@ from pathlib import Path
 # --- repo bootstrap ---------------------------------------------------------
 
 def find_repo():
-    """Walk up from this file until we hit the directory that holds .git."""
+    """Walk up from this file to the repo root.
+
+    Prefer the directory holding .git. Fall back to the one holding
+    project/model_factory.py, because Databricks Git folders do NOT expose
+    .git through the workspace filesystem -- requiring it would crash this
+    module at import time on exactly the machine it is meant to run on.
+    """
     here = Path(__file__).resolve()
     for parent in here.parents:
         if (parent / '.git').exists():
+            return parent
+    for parent in here.parents:
+        if (parent / 'project' / 'model_factory.py').exists():
             return parent
     raise RuntimeError('could not find the repo root above ' + str(here))
 
