@@ -391,13 +391,17 @@ def preflight(model_name, num_classes):
 # --- building one test ------------------------------------------------------
 
 def make_cell(model_name, phase, seed=1, pruner=None, sparsity=None,
-              smoke=False, **overrides):
+              smoke=False, variant=None, **overrides):
     """One test as a runner-compatible cell dict.
 
     phase: 'dense' (baseline_script), 'prune' (pruning_script, the I.P.
     baseline) or 'bacp' (bacp_script). Sparse phases need `pruner` and
     `sparsity`. `smoke=True` shrinks everything to a 2-batch pipeline check.
     Any extra keyword overrides the config (e.g. epochs=3).
+
+    variant: optional key suffix (e.g. 'legacy') so an ablation arm's records
+    coexist with the main table's instead of silently satisfying its keys --
+    the same mechanism as the .smoke suffix.
     """
     if model_name not in FAMILIES:
         raise KeyError(f'{model_name!r} not in FAMILIES: {sorted(FAMILIES)}')
@@ -433,6 +437,8 @@ def make_cell(model_name, phase, seed=1, pruner=None, sparsity=None,
 
     dataset = config['dataset_name']
     key = f'static.{phase}.{model_name}.{dataset}.{tag}.seed{seed}'
+    if variant:
+        key += f'.{variant}'
     if smoke:
         key += '.smoke'
 
@@ -441,7 +447,7 @@ def make_cell(model_name, phase, seed=1, pruner=None, sparsity=None,
         'script': 'baseline' if phase == 'dense' else
                   ('pruning' if phase == 'prune' else 'bacp'),
         'rung': f'static-{phase}',
-        'label': f'{model_name} {phase} {tag}',
+        'label': f'{model_name} {phase} {tag}' + (f' [{variant}]' if variant else ''),
         'changes': '',
         'stage': 'static',
         'seed': seed,
