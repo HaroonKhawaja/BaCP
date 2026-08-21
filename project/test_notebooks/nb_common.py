@@ -167,7 +167,11 @@ _CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
 _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
                  epochs=60, recovery_epochs=0,
                  sparsity_scheduler='cubic', delta_T=88,
-                 tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                 # tau=0.07: the ORIGINAL operative value. The appendix's
+                 # temperature sweep labels 0.15 "current", but the sweep
+                 # scripts never passed --tau, so the submission's runs used
+                 # the parser default 0.07. 0.07 also peaked in that sweep.
+                 tau=0.07, lambdas=(0.25, 0.25, 0.25, 0.25),
                  enable_finetune=True, optimizer_type_ft='adamw',
                  learning_rate_ft=1e-4, epochs_ft=50)
 
@@ -214,7 +218,7 @@ FAMILIES = {
         bacp=dict(optimizer_type='adamw', learning_rate=5e-5,
                   epochs=15, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=1052,
-                  tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                  tau=0.07, lambdas=(0.25, 0.25, 0.25, 0.25),
                   enable_finetune=True, optimizer_type_ft='adamw',
                   learning_rate_ft=1e-4, epochs_ft=10)),
     'roberta-base': dict(
@@ -227,7 +231,7 @@ FAMILIES = {
         bacp=dict(optimizer_type='adamw', learning_rate=1e-5,
                   epochs=15, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=1052,
-                  tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                  tau=0.07, lambdas=(0.25, 0.25, 0.25, 0.25),
                   enable_finetune=True, optimizer_type_ft='adamw',
                   learning_rate_ft=1e-4, epochs_ft=10)),
 }
