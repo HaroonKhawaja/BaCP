@@ -1,0 +1,924 @@
+diff --git a/project/experiments/pool.py b/project/experiments/pool.py
+index 009d2dc..0a54d0a 100644
+--- a/project/experiments/pool.py
++++ b/project/experiments/pool.py
+@@ -1,31 +1,26 @@
+-"""Run ladder cells across several GPUs concurrently.
+-
+-`runner.run_grid` executes one cell at a time, which leaves seven of eight cards
+-idle. The cells are independent once the dense rung exists, so the work is
+-embarrassingly parallel -- but three things have to be got right, and none of
+-them is optional:
+-
+-  **Claiming must be atomic.** run_grid's resume check reads the run records,
+-  which is correct for resuming and racy for concurrency: two workers listing
+-  cells at the same moment both see a cell as incomplete and both run it. That
+-  wastes a GPU-hour and writes two records for one cell. Claims here are
+-  `os.open(..., O_CREAT | O_EXCL)`, which is atomic on POSIX and Windows alike --
+-  exactly one worker can create a given file.
+-
+-  **The dense rung is a barrier.** Every sparse cell resolves its starting
+-  weights from a dense record MATCHING ITS SEED, at execution time. Launch
+-  everything at once and the sparse cells race the dense ones and die on a
+-  missing checkpoint -- which is precisely how 21 of 22 cells failed in the first
+-  tier-0 run. So dense cells run first, to completion, and only then the rest.
+-
+-  **A crashed worker must not hold its claim forever.** Claims carry a pid and a
+-  timestamp and are reclaimed after `stale_after` seconds, so a killed process --
+-  or a reclaimed spot instance -- does not strand a cell.
+-
+-Concurrency is per GPU: `--per-gpu 2` runs two cells on each card. ResNet-34 at
+-batch 128 on 32x32 inputs uses roughly 3 GB of 24 GB and nowhere near all the
+-SMs, so packing 2-3 per card is usually a real throughput win. The limit is host
+-CPU -- every cell spawns dataloader workers -- so measure before raising it.
++"""Run ladder cells on every GPU at once.
++
++A "cell" is one rung at one seed -- a single training run. Cells are
++independent, so we run several at the same time, one per GPU.
++
++Three rules keep that safe, and each has a function below:
++
++  Dense cells go first. Every sparse cell starts from a dense checkpoint of its
++  own seed, so the dense rung has to be finished before any sparse cell begins.
++  See run_dense_cells().
++
++  Seeds finish one at a time. All of seed 0, then all of seed 1, and so on.
++  Stop the sweep halfway and you have whole seeds you can average, instead of a
++  slice of every seed and nothing you can report. See run_sparse_cells().
++
++  Two workers never take the same cell. A worker creates a claim file before it
++  starts; whoever creates the file first owns the cell. See try_claim().
++
++Stopping and restarting is safe. A cell counts as done once it has a run
++record, so restarting picks up where you left off.
++
++All settings are the constants directly below. Change them here, not on the
++command line.
+ """
+ 
+ from __future__ import annotations
+@@ -48,219 +43,276 @@ import manifest as M                                              # noqa: E402
+ import runner as R                                                # noqa: E402
+ 
+ 
++# --- settings --------------------------------------------------------------
++
++# Dataloader worker processes for each cell. This is PER CELL, so the machine
++# runs NUM_WORKERS x CELLS_PER_GPU x (number of GPUs) worker processes in total.
++NUM_WORKERS = 24
++
++# How many cells share one GPU. ResNet-34 at batch 128 on 32x32 inputs uses
++# about 3 GB of 24 GB, so a card can hold more than one -- but every extra cell
++# also multiplies the worker processes above.
++CELLS_PER_GPU = 1
++
++# A claim older than this is treated as dead and taken over. Covers a crashed
++# worker or a reclaimed spot instance.
++CLAIM_EXPIRES_AFTER = 2 * 60 * 60
++
++
+ # --- claims ----------------------------------------------------------------
+ 
+-def _claims_dir(root=None) -> Path:
++def claim_path(key):
++    """The claim file for one cell."""
+     from results import results_dir
+-    d = results_dir(root) / 'claims'
+-    d.mkdir(parents=True, exist_ok=True)
+-    return d
++    folder = results_dir() / 'claims'
++    folder.mkdir(parents=True, exist_ok=True)
++    return folder / f'{key}.claim'
+ 
+ 
+-def claim(key, root=None, stale_after=7200, worker=''):
+-    """Try to take exclusive ownership of a cell. True if we got it.
++def try_claim(key, worker):
++    """Take exclusive ownership of a cell. True if we got it, False if taken.
+ 
+-    O_CREAT|O_EXCL is the whole mechanism: the filesystem guarantees that exactly
+-    one caller creates the file. No lock server, no database, and it works the
+-    same on the shared volume of a rented box as it does locally.
++    O_CREAT | O_EXCL is the whole mechanism: the filesystem guarantees that
++    exactly one caller creates the file. No lock server and no database, and it
++    behaves the same on a rented box's shared volume as it does locally.
+     """
+-    path = _claims_dir(root) / f'{key}.claim'
+-    payload = json.dumps({'pid': os.getpid(), 'worker': worker,
+-                          'at': time.time()}).encode()
++    path = claim_path(key)
++    note = json.dumps({'pid': os.getpid(), 'worker': worker, 'at': time.time()})
+     try:
+         fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+-        with os.fdopen(fd, 'wb') as fh:
+-            fh.write(payload)
++        with os.fdopen(fd, 'w') as fh:
++            fh.write(note)
+         return True
+     except FileExistsError:
+         pass
+ 
+-    # Reclaim a stale claim: a killed worker, or a spot instance that went away.
++    if claim_is_stale(path):
++        print(f'  [pool] taking over a stale claim on {key}')
++        release_claim(key)
++        return try_claim(key, worker)
++    return False
++
++
++def claim_is_stale(path):
++    """True if a claim file is older than CLAIM_EXPIRES_AFTER."""
+     try:
+-        age = time.time() - json.loads(path.read_text()).get('at', 0)
++        made_at = json.loads(path.read_text()).get('at', 0)
+     except Exception:                                              # noqa: BLE001
+-        age = float('inf')
+-    if age > stale_after:
+-        try:
+-            path.unlink()
+-            print(f'  [pool] reclaimed stale claim on {key} (age {age/60:.0f} min)')
+-            return claim(key, root, stale_after, worker)
+-        except OSError:
+-            pass
+-    return False
++        return True                       # unreadable claim: assume abandoned
++    return time.time() - made_at > CLAIM_EXPIRES_AFTER
+ 
+ 
+-def release(key, root=None):
++def release_claim(key):
++    """Give up ownership of a cell so it can be run again."""
+     try:
+-        (_claims_dir(root) / f'{key}.claim').unlink()
++        claim_path(key).unlink()
+     except OSError:
+         pass
+ 
+ 
+-def clear_claims(root=None) -> int:
+-    n = 0
+-    for f in _claims_dir(root).glob('*.claim'):
++def clear_all_claims():
++    """Delete every claim file. Returns how many. Use after a crash, and never
++    while other workers are still running."""
++    folder = claim_path('x').parent
++    count = 0
++    for f in folder.glob('*.claim'):
+         try:
+             f.unlink()
+-            n += 1
++            count += 1
+         except OSError:
+             pass
+-    return n
++    return count
++
++
++# --- running one cell ------------------------------------------------------
+ 
++def count_gpus():
++    """How many GPUs are visible. 1 if torch cannot tell us."""
++    try:
++        import torch
++        return max(torch.cuda.device_count(), 1)
++    except Exception:                                              # noqa: BLE001
++        return 1
+ 
+-# --- the pool --------------------------------------------------------------
+ 
+-def usable_cores():
+-    """Cores this process may actually run on.
++def run_one_cell(cell, gpu, worker):
++    """Claim a cell, train it on `gpu`, and return a result dict."""
++    if not try_claim(cell['key'], worker):
++        return {'key': cell['key'], 'status': 'claimed_elsewhere'}
+ 
+-    os.cpu_count() reports the HOST's cores inside a container and ignores cgroup
+-    pinning, so it over-reports badly on a rented box -- 256 where the container
+-    may have far fewer.
+-    """
++    print(f'  [{worker}] start {cell["rung"]} seed{cell["seed"]}')
+     try:
+-        return len(os.sched_getaffinity(0))          # Linux, respects cgroups
+-    except AttributeError:
+-        return os.cpu_count() or 4
++        result = R.run_cell(cell, echo=False,
++                            env={'CUDA_VISIBLE_DEVICES': str(gpu)})
++    except Exception as exc:                                       # noqa: BLE001
++        release_claim(cell['key'])
++        print(f'  [{worker}] ERROR {cell["rung"]}: {type(exc).__name__}: {exc}')
++        return {'key': cell['key'], 'status': 'error', 'error': str(exc)}
+ 
++    label = 'ok' if result['status'].startswith('ok') else result['status'].upper()
++    print(f'  [{worker}] {label} {cell["rung"]} seed{cell["seed"]} '
++          f'({result.get("elapsed_s", 0):.0f}s)')
+ 
+-def workers_per_cell(concurrency, cores=None):
+-    """Dataloader workers for one cell, given how many cells share the machine.
++    # A failed cell keeps its claim so a restart does not spin on it forever.
++    # Delete its record when you want another attempt.
++    if not result['status'] == 'failed':
++        release_claim(cell['key'])
++    return result
+ 
+-    Leaves two cores per cell for the training process itself and the main
+-    thread. Without this each cell inherited os.cpu_count(): 256 workers per
+-    cell, 1,024 processes across four concurrent cells, on 256 cores.
++
++# --- running many cells ----------------------------------------------------
++
++def run_cells_together(cells, gpus, label):
++    """Run `cells` in parallel across `gpus` and wait for all of them.
++
++    One thread per GPU slot. Each thread pulls the next cell off a shared queue
++    until the queue is empty, so a slow cell does not hold up the others.
+     """
+-    cores = cores or usable_cores()
+-    return max(2, cores // max(concurrency, 1) - 2)
++    print(f'\n== {label}: {len(cells)} cell(s)')
++    pending = queue.Queue()
++    for cell in cells:
++        pending.put(cell)
++
++    results = []
++    lock = threading.Lock()
++
++    def work_until_empty(gpu, worker):
++        while True:
++            try:
++                cell = pending.get_nowait()
++            except queue.Empty:
++                return
++            result = run_one_cell(cell, gpu, worker)
++            with lock:
++                results.append(result)
++
++    threads = []
++    for gpu in gpus:
++        for slot in range(CELLS_PER_GPU):
++            worker = f'g{gpu}.{slot}'
++            t = threading.Thread(target=work_until_empty, args=(gpu, worker),
++                                 daemon=True)
++            t.start()
++            threads.append(t)
++    for t in threads:
++        t.join()
++    return results
++
++
++def run_dense_cells(cells, gpus):
++    """Run every dense cell, on all GPUs at once.
++
++    This is a barrier: sparse cells load a dense checkpoint of their own seed,
++    so nothing sparse may start until this finishes. Running all seeds together
++    here keeps the whole box busy; doing it seed by seed would idle every card
++    but one at each barrier.
++    """
++    return run_cells_together(cells, gpus, 'dense (barrier, all seeds)')
+ 
+ 
+-def _worker(name, gpu, work, results, root, timeout, echo):
+-    while True:
+-        try:
+-            cell = work.get_nowait()
+-        except queue.Empty:
+-            return
+-        if not claim(cell['key'], root=root, worker=name):
+-            results.append({'key': cell['key'], 'status': 'claimed_elsewhere'})
+-            work.task_done()
+-            continue
+-        try:
+-            if echo:
+-                print(f'  [{name}] -> {cell["rung"]} seed{cell["seed"]}')
+-            res = R.run_cell(cell, root=root, timeout=timeout, echo=False,
+-                             env={'CUDA_VISIBLE_DEVICES': str(gpu)})
+-            results.append(res)
+-            if echo:
+-                mark = 'ok' if res['status'].startswith('ok') else res['status'].upper()
+-                print(f'  [{name}] {mark} {cell["rung"]} seed{cell["seed"]} '
+-                      f'({res.get("elapsed_s", 0):.0f}s)')
+-            # A failed cell keeps its claim, so a retry loop does not spin on it.
+-            # Deleting its record is how you ask for another attempt.
+-            if res['status'] == 'failed':
+-                pass
+-            else:
+-                release(cell['key'], root=root)
+-        except Exception as exc:                                   # noqa: BLE001
+-            results.append({'key': cell['key'], 'status': 'error', 'error': str(exc)})
+-            release(cell['key'], root=root)
+-            if echo:
+-                print(f'  [{name}] ERROR {cell["rung"]}: {type(exc).__name__}: {exc}')
+-        finally:
+-            work.task_done()
+-
+-
+-def run_pool(tier=None, *, gpus=None, per_gpu=1, root=None, timeout=None,
+-             rungs=None, stages=None, seeds=None, echo=True):
+-    """Run a tier across GPUs. Dense cells first, then everything else."""
+-    gpus = list(range(gpus)) if isinstance(gpus, int) else (gpus or [0])
+-
+-    # Size the dataloaders to the machine and the concurrency, before anything
+-    # is scheduled. Every cell inherits this.
+-    nw = workers_per_cell(len(gpus) * per_gpu)
+-    print(f'  {usable_cores()} usable core(s) -> num_workers={nw} per cell')
+-
+-    grid = M.cells(tier, rungs=rungs)
+-    for c in grid:
+-        c['config'] = dict(c['config'], num_workers=nw)
++def run_sparse_cells(cells, gpus):
++    """Run every sparse cell, one seed at a time.
++
++    Seed 0 finishes completely before seed 1 starts. If the sweep is cut short
++    you are left with a few complete seeds -- which you can average and report
++    -- rather than every seed part-finished, which you cannot.
++    """
++    results = []
++    seeds = sorted({c['seed'] for c in cells})
++    for position, seed in enumerate(seeds, start=1):
++        this_seed = [c for c in cells if c['seed'] == seed]
++        results += run_cells_together(
++            this_seed, gpus, f'sparse seed {seed}  [{position} of {len(seeds)}]')
++        print(f'-- seed {seed} finished. Safe to stop here.')
++    return results
++
++
++# --- the sweep -------------------------------------------------------------
++
++def cells_to_run(tier, rungs=None, stages=None, seeds=None):
++    """The cells of a tier that do not have a record yet, ready to run."""
++    cells = M.cells(tier, rungs=rungs)
+     if stages:
+-        grid = [c for c in grid if c['stage'] in set(stages)]
++        cells = [c for c in cells if c['stage'] in set(stages)]
+     if seeds is not None:
+-        grid = [c for c in grid if c['seed'] in set(seeds)]
++        cells = [c for c in cells if c['seed'] in set(seeds)]
++    for c in cells:
++        c['config'] = dict(c['config'], num_workers=NUM_WORKERS)
++
++    already_done = R.completed_keys()
++    todo = [c for c in cells if c['key'] not in already_done]
++    return cells, todo
+ 
+-    done = R.completed_keys(root)
+-    todo = [c for c in grid if c['key'] not in done]
+ 
+-    # The barrier. Sparse cells resolve a dense checkpoint of the SAME SEED at
+-    # execution time, so they cannot start until the dense rung has finished.
++def count_statuses(results):
++    """How many results are ok, and how many failed."""
++    ok = sum(1 for r in results if r['status'].startswith('ok'))
++    failed = sum(1 for r in results if r['status'] in ('failed', 'error'))
++    return ok, failed
++
++
++def run_pool(tier=None, gpus=None, rungs=None, stages=None, seeds=None):
++    """Run a tier: dense cells first, then the sparse cells one seed at a time.
++
++    Returns {'ok': n, 'failed': n, 'skipped': n, 'results': [...]} -- the shape
++    the stage notebooks print.
++    """
++    gpus = list(range(gpus if gpus else count_gpus()))
++    slots = len(gpus) * CELLS_PER_GPU
++
++    all_cells, todo = cells_to_run(tier, rungs, stages, seeds)
+     dense = [c for c in todo if c['script'] == 'baseline']
+     sparse = [c for c in todo if c['script'] != 'baseline']
+-
+-    print(f'tier {M.TIER if tier is None else tier}: {len(grid)} cells, '
+-          f'{len(grid) - len(todo)} already done, {len(todo)} to run')
+-    print(f'  {len(gpus)} GPU(s) x {per_gpu} concurrent = {len(gpus) * per_gpu} workers')
+-
+-    summary = {'ok': 0, 'failed': 0, 'skipped': len(grid) - len(todo), 'results': []}
+-
+-    for phase, cells_ in (('dense (barrier)', dense), ('sparse', sparse)):
+-        if not cells_:
+-            continue
+-        print(f'\n== {phase}: {len(cells_)} cell(s)')
+-        work = queue.Queue()
+-        for c in cells_:
+-            work.put(c)
+-        results, threads = [], []
+-        for gi, gpu in enumerate(gpus):
+-            for slot in range(per_gpu):
+-                name = f'g{gpu}.{slot}'
+-                t = threading.Thread(target=_worker, daemon=True, args=(
+-                    name, gpu, work, results, root, timeout, echo))
+-                t.start()
+-                threads.append(t)
+-        for t in threads:
+-            t.join()
+-        summary['results'].extend(results)
+-        summary['ok'] += sum(1 for r in results if r['status'].startswith('ok'))
+-        summary['failed'] += sum(1 for r in results
+-                                 if r['status'] in ('failed', 'error'))
+-        if phase.startswith('dense') and summary['failed']:
+-            print('!! the dense rung failed; every sparse cell would fail to '
+-                  'resolve its checkpoint. Stopping.')
+-            return summary
+-
+-    print(f"\n{summary['ok']} ok, {summary['failed']} failed, "
+-          f"{summary['skipped']} skipped")
+-    for r in summary['results']:
++    skipped = len(all_cells) - len(todo)
++
++    print(f'tier {M.TIER if tier is None else tier}: {len(all_cells)} cells, '
++          f'{skipped} already done, {len(todo)} to run')
++    print(f'  {len(gpus)} GPU(s) x {CELLS_PER_GPU} = {slots} cells at once, '
++          f'{NUM_WORKERS} dataloader workers each')
++    print(f'  order: all dense cells, then one seed at a time')
++
++    def summarize(results):
++        ok, failed = count_statuses(results)
++        return {'ok': ok, 'failed': failed, 'skipped': skipped,
++                'results': results}
++
++    results = []
++    if dense:
++        results += run_dense_cells(dense, gpus)
++        if count_statuses(results)[1]:
++            print('!! a dense cell failed. Every sparse cell would then fail to '
++                  'find its checkpoint, so stopping here.')
++            return summarize(results)
++    if sparse:
++        results += run_sparse_cells(sparse, gpus)
++
++    summary = summarize(results)
++    print(f"\n{summary['ok']} ok, {summary['failed']} failed, {skipped} skipped")
++    for r in results:
+         if r['status'] in ('failed', 'error'):
+             print(f"  FAILED {r['key']}: {r.get('error', r.get('returncode'))}")
+     return summary
+ 
+ 
+-if __name__ == '__main__':
+-    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
++def main():
++    ap = argparse.ArgumentParser(
++        description='Run ladder cells on every GPU at once.')
+     ap.add_argument('--tier', type=int, default=None)
+     ap.add_argument('--gpus', type=int, default=None,
+-                    help='number of GPUs (default: all visible)')
+-    ap.add_argument('--per-gpu', type=int, default=1,
+-                    help='concurrent cells per GPU. 2-3 usually pays here; the '
+-                         'limit is host CPU for dataloaders, so measure.')
++                    help='how many GPUs to use (default: all of them)')
+     ap.add_argument('--rungs', nargs='*', default=None)
+     ap.add_argument('--stages', nargs='*', default=None)
+     ap.add_argument('--seeds', type=int, nargs='*', default=None)
+-    ap.add_argument('--timeout', type=int, default=None)
+     ap.add_argument('--clear-claims', action='store_true',
+-                    help='drop every claim before starting. Use after a crash, '
+-                         'never while other workers are live.')
++                    help='delete every claim before starting. Use after a '
++                         'crash, never while other workers are live.')
+     a = ap.parse_args()
+ 
+     if a.clear_claims:
+-        print(f'cleared {clear_claims()} claim(s)')
++        print(f'cleared {clear_all_claims()} claim(s)')
+ 
+-    n_gpus = a.gpus
+-    if n_gpus is None:
+-        try:
+-            import torch
+-            n_gpus = max(torch.cuda.device_count(), 1)
+-        except Exception:                                          # noqa: BLE001
+-            n_gpus = 1
+-    run_pool(a.tier, gpus=n_gpus, per_gpu=a.per_gpu, timeout=a.timeout,
+-             rungs=a.rungs, stages=a.stages, seeds=a.seeds)
++    run_pool(a.tier, gpus=a.gpus, rungs=a.rungs, stages=a.stages, seeds=a.seeds)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/project/notebooks/01_stage_a_substrate.ipynb b/project/notebooks/01_stage_a_substrate.ipynb
+index 551c5c6..9900717 100644
+--- a/project/notebooks/01_stage_a_substrate.ipynb
++++ b/project/notebooks/01_stage_a_substrate.ipynb
+@@ -52,7 +52,7 @@
+    "source": [
+     "## Configure\n",
+     "\n",
+-    "`TIER` 1 is the spine (5 seeds). `PER_GPU` 2 saturates a card at this model size - one cell per GPU leaves it at ~53% utilisation, and each cell only needs about 815 MB.\n"
++    "`TIER` 1 is the spine (5 seeds). Cells per GPU and dataloader workers are constants at the top of `pool.py`.\n"
+    ]
+   },
+   {
+@@ -63,7 +63,6 @@
+    "source": [
+     "TIER    = 1\n",
+     "GPUS    = info['gpus'] or 1\n",
+-    "PER_GPU = 2\n",
+     "SEEDS   = None          # None = every seed the tier schedules\n",
+     "\n",
+     "RUNGS = ['A0', 'A2', 'A3', 'A4', 'A5', 'A6']\n",
+@@ -91,7 +90,7 @@
+    "metadata": {},
+    "outputs": [],
+    "source": [
+-    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, per_gpu=PER_GPU, seeds=SEEDS)\n",
++    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, seeds=SEEDS)\n",
+     "print(summary['ok'], 'ok,', summary['failed'], 'failed,', summary['skipped'], 'skipped')\n"
+    ]
+   },
+@@ -163,4 +162,4 @@
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+-}
+\ No newline at end of file
++}
+diff --git a/project/notebooks/02_stage_b_architecture.ipynb b/project/notebooks/02_stage_b_architecture.ipynb
+index a8700ef..82173e5 100644
+--- a/project/notebooks/02_stage_b_architecture.ipynb
++++ b/project/notebooks/02_stage_b_architecture.ipynb
+@@ -42,7 +42,7 @@
+    "source": [
+     "## Configure\n",
+     "\n",
+-    "`TIER` 1 is the spine (5 seeds). `PER_GPU` 2 saturates a card at this model size - one cell per GPU leaves it at ~53% utilisation, and each cell only needs about 815 MB.\n"
++    "`TIER` 1 is the spine (5 seeds). Cells per GPU and dataloader workers are constants at the top of `pool.py`.\n"
+    ]
+   },
+   {
+@@ -53,7 +53,6 @@
+    "source": [
+     "TIER    = 1\n",
+     "GPUS    = info['gpus'] or 1\n",
+-    "PER_GPU = 2\n",
+     "SEEDS   = None          # None = every seed the tier schedules\n",
+     "\n",
+     "RUNGS = ['B1', 'B2', 'B3']\n",
+@@ -81,7 +80,7 @@
+    "metadata": {},
+    "outputs": [],
+    "source": [
+-    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, per_gpu=PER_GPU, seeds=SEEDS)\n",
++    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, seeds=SEEDS)\n",
+     "print(summary['ok'], 'ok,', summary['failed'], 'failed,', summary['skipped'], 'skipped')\n"
+    ]
+   },
+@@ -153,4 +152,4 @@
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+-}
+\ No newline at end of file
++}
+diff --git a/project/notebooks/03_stage_c_controls.ipynb b/project/notebooks/03_stage_c_controls.ipynb
+index 15f3b1d..a5b50e6 100644
+--- a/project/notebooks/03_stage_c_controls.ipynb
++++ b/project/notebooks/03_stage_c_controls.ipynb
+@@ -56,7 +56,7 @@
+    "source": [
+     "## Configure\n",
+     "\n",
+-    "`TIER` 1 is the spine (5 seeds). `PER_GPU` 2 saturates a card at this model size - one cell per GPU leaves it at ~53% utilisation, and each cell only needs about 815 MB.\n"
++    "`TIER` 1 is the spine (5 seeds). Cells per GPU and dataloader workers are constants at the top of `pool.py`.\n"
+    ]
+   },
+   {
+@@ -67,7 +67,6 @@
+    "source": [
+     "TIER    = 1\n",
+     "GPUS    = info['gpus'] or 1\n",
+-    "PER_GPU = 2\n",
+     "SEEDS   = None          # None = every seed the tier schedules\n",
+     "\n",
+     "RUNGS = ['C-null', 'C0', 'C0b', 'C1', 'C2', 'C3']\n",
+@@ -95,7 +94,7 @@
+    "metadata": {},
+    "outputs": [],
+    "source": [
+-    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, per_gpu=PER_GPU, seeds=SEEDS)\n",
++    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, seeds=SEEDS)\n",
+     "print(summary['ok'], 'ok,', summary['failed'], 'failed,', summary['skipped'], 'skipped')\n"
+    ]
+   },
+@@ -167,4 +166,4 @@
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+-}
+\ No newline at end of file
++}
+diff --git a/project/notebooks/04_stage_d_teachers.ipynb b/project/notebooks/04_stage_d_teachers.ipynb
+index fac7f99..c42a3b8 100644
+--- a/project/notebooks/04_stage_d_teachers.ipynb
++++ b/project/notebooks/04_stage_d_teachers.ipynb
+@@ -46,7 +46,7 @@
+    "source": [
+     "## Configure\n",
+     "\n",
+-    "`TIER` 1 is the spine (5 seeds). `PER_GPU` 2 saturates a card at this model size - one cell per GPU leaves it at ~53% utilisation, and each cell only needs about 815 MB.\n"
++    "`TIER` 1 is the spine (5 seeds). Cells per GPU and dataloader workers are constants at the top of `pool.py`.\n"
+    ]
+   },
+   {
+@@ -57,7 +57,6 @@
+    "source": [
+     "TIER    = 1\n",
+     "GPUS    = info['gpus'] or 1\n",
+-    "PER_GPU = 2\n",
+     "SEEDS   = None          # None = every seed the tier schedules\n",
+     "\n",
+     "RUNGS = ['D1', 'D2']\n",
+@@ -85,7 +84,7 @@
+    "metadata": {},
+    "outputs": [],
+    "source": [
+-    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, per_gpu=PER_GPU, seeds=SEEDS)\n",
++    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, seeds=SEEDS)\n",
+     "print(summary['ok'], 'ok,', summary['failed'], 'failed,', summary['skipped'], 'skipped')\n"
+    ]
+   },
+@@ -157,4 +156,4 @@
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+-}
+\ No newline at end of file
++}
+diff --git a/project/notebooks/05_stage_d4_backward.ipynb b/project/notebooks/05_stage_d4_backward.ipynb
+index 1b74b39..62949fc 100644
+--- a/project/notebooks/05_stage_d4_backward.ipynb
++++ b/project/notebooks/05_stage_d4_backward.ipynb
+@@ -57,7 +57,7 @@
+    "source": [
+     "## Configure\n",
+     "\n",
+-    "`TIER` 1 is the spine (5 seeds). `PER_GPU` 2 saturates a card at this model size - one cell per GPU leaves it at ~53% utilisation, and each cell only needs about 815 MB.\n"
++    "`TIER` 1 is the spine (5 seeds). Cells per GPU and dataloader workers are constants at the top of `pool.py`.\n"
+    ]
+   },
+   {
+@@ -68,7 +68,6 @@
+    "source": [
+     "TIER    = 1\n",
+     "GPUS    = info['gpus'] or 1\n",
+-    "PER_GPU = 2\n",
+     "SEEDS   = None          # None = every seed the tier schedules\n",
+     "\n",
+     "RUNGS = ['D4-noPrC', 'D4-noFiC', 'D4-noSnC', 'D4-noCE']\n",
+@@ -96,7 +95,7 @@
+    "metadata": {},
+    "outputs": [],
+    "source": [
+-    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, per_gpu=PER_GPU, seeds=SEEDS)\n",
++    "summary = nb.run_stage(RUNGS, tier=TIER, gpus=GPUS, seeds=SEEDS)\n",
+     "print(summary['ok'], 'ok,', summary['failed'], 'failed,', summary['skipped'], 'skipped')\n"
+    ]
+   },
+@@ -168,4 +167,4 @@
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+-}
+\ No newline at end of file
++}
+diff --git a/project/notebooks/ladder_nb.py b/project/notebooks/ladder_nb.py
+index f7170b2..776e76c 100644
+--- a/project/notebooks/ladder_nb.py
++++ b/project/notebooks/ladder_nb.py
+@@ -153,7 +153,12 @@ _EPOCH = re.compile(r'Epoch \[(\d+)/(\d+)\]')
+ 
+ 
+ def _field(name, line):
+-    m = re.search(rf'{name}: (nan|-?[0-9.]+(?:[eE][-+]?\d+)?)', line)
++    # \b keeps 'loss:' from matching inside 'val_loss:' (underscore is a word
++    # char, so there is no boundary there), and IGNORECASE lets the same name
++    # hit both trainer formats: 'loss:'/'accuracy:' from Trainer and
++    # 'Total Loss:'/'Training Accuracy:' from BaCPTrainer.
++    m = re.search(rf'\b{name}: (nan|-?[0-9.]+(?:[eE][-+]?\d+)?)', line,
++                  re.IGNORECASE)
+     if not m:
+         return None
+     try:
+@@ -241,19 +246,22 @@ def plot(hist, first_nan=None, title=''):
+ 
+ # --- running a whole stage -------------------------------------------------
+ 
+-def run_stage(rungs, tier=1, gpus=4, per_gpu=2, seeds=None, timeout=None):
++def run_stage(rungs, tier=1, gpus=None, seeds=None):
+     """Run a list of rungs across the GPUs, in process, printing as it goes.
+ 
+     Dense cells run first as a hard barrier -- every sparse cell resolves a dense
+     checkpoint of its own seed at execution time, so launching them together is
+-    how 21 of 22 cells failed on the first attempt.
++    how 21 of 22 cells failed on the first attempt. The sparse cells then run one
++    seed at a time, so an interrupted sweep leaves whole seeds behind.
++
++    Cells per GPU and dataloader workers are constants in `pool.py`; edit them
++    there rather than passing them in.
+ 
+     Idempotent: a cell counts as complete iff a record carrying its key exists,
+     so re-running this skips what is done and picks up what is not.
+     """
+     import pool as P
+-    return P.run_pool(tier, gpus=gpus, per_gpu=per_gpu, rungs=list(rungs),
+-                      seeds=seeds, timeout=timeout, echo=True)
++    return P.run_pool(tier, gpus=gpus, rungs=list(rungs), seeds=seeds)
+ 
+ 
+ def progress(tier=1):
+diff --git a/project/pruning_factory.py b/project/pruning_factory.py
+index dfc29df..3e73208 100644
+--- a/project/pruning_factory.py
++++ b/project/pruning_factory.py
+@@ -37,7 +37,19 @@ _EXCLUDE_EMBEDDINGS = ('embedding',)
+ # Task heads. Matches the protocol stated in the paper's appendix D.4 -- "the fc
+ # layer was kept dense", "the final classifier.6 layer was kept dense",
+ # "embeddings and classification heads were kept dense".
+-_EXCLUDE_TASK_HEAD = (
++#
++# 'classifier' is in the LLM set only. For HF models the module named
++# `classifier` IS the task head (DistilBERT's pre_classifier/classifier,
++# RoBERTa's classifier.dense/out_proj). But for VGG, `model.classifier.0` and
++# `.3` are the 102.8M + 16.8M BACKBONE Linears -- remove_last_layer strips only
++# the final layer and the replacement head is `cls_head` -- so excluding the
++# substring there exempted 92.8% of VGG-11 from the sparsity denominator
++# (defect M2). Which set applies is decided by the model handed to
++# set_prunable_scope; with no model we keep the conservative full set.
++_EXCLUDE_TASK_HEAD_CV = (
++    'cls_head',                          # this project's replacement classifier
++)
++_EXCLUDE_TASK_HEAD_LLM = (
+     'cls_head',                          # this project's replacement classifier
+     'vocab_projector', 'vocab_transform',  # DistilBERT MLM head
+     'lm_head',                           # RoBERTa MLM head
+@@ -57,6 +69,7 @@ _EXCLUDE_TASK_HEAD = (
+ 
+ _PRUNE_TASK_HEAD = False
+ _PRUNE_EMBEDDINGS = False
++_MODEL_TYPE = None      # 'cv' | 'llm' | None (unknown -> conservative LLM set)
+ 
+ 
+ def set_prunable_scope(prune_task_head=False, prune_embeddings=False, model=None):
+@@ -79,9 +92,13 @@ def set_prunable_scope(prune_task_head=False, prune_embeddings=False, model=None
+         prunable set 99.7% of the model -- a "99% sparsity" figure would then be
+         describing the embedding table, not the transformer blocks.
+     """
+-    global _PRUNE_TASK_HEAD, _PRUNE_EMBEDDINGS
++    global _PRUNE_TASK_HEAD, _PRUNE_EMBEDDINGS, _MODEL_TYPE
+     _PRUNE_TASK_HEAD = bool(prune_task_head)
+     _PRUNE_EMBEDDINGS = bool(prune_embeddings)
++    # Which task-head keyword set applies (see _EXCLUDE_TASK_HEAD_CV/_LLM).
++    # The wrapper carries model_type; with no model we leave it None and
++    # excluded_keywords() falls back to the conservative LLM set.
++    _MODEL_TYPE = getattr(model, 'model_type', None) if model is not None else None
+ 
+     scope = ['backbone']
+     if _PRUNE_TASK_HEAD:
+@@ -120,7 +137,8 @@ def excluded_keywords():
+     if not _PRUNE_EMBEDDINGS:
+         excluded += _EXCLUDE_EMBEDDINGS
+     if not _PRUNE_TASK_HEAD:
+-        excluded += _EXCLUDE_TASK_HEAD
++        excluded += (_EXCLUDE_TASK_HEAD_CV if _MODEL_TYPE == 'cv'
++                     else _EXCLUDE_TASK_HEAD_LLM)
+     return excluded
+ 
+ 
+diff --git a/project/tests/test_sparsity_accounting.py b/project/tests/test_sparsity_accounting.py
+index 1e76781..9029b4e 100644
+--- a/project/tests/test_sparsity_accounting.py
++++ b/project/tests/test_sparsity_accounting.py
+@@ -189,3 +189,44 @@ def test_sparsity_denominator_counts_shared_params_once(tiny_wrapper_shared):
+ 
+     state_keys = list(tiny_wrapper_shared.state_dict())
+     assert len(state_keys) == len(set(state_keys))
++
++
++def test_vgg_backbone_mlp_is_prunable_but_llm_classifier_is_not():
++    """Defect M2: the 'classifier' keyword must not exempt VGG's backbone MLP.
++
++    After remove_last_layer, a VGG wrapper keeps its two big Linears under
++    `model.classifier.0` / `.3` (102.8M + 16.8M params) and the real task head
++    is `cls_head`. Excluding the 'classifier' substring therefore removed 92.8%
++    of VGG-11 from the sparsity denominator. For HF language models the module
++    named `classifier` IS the task head and must stay excluded. The scope is
++    told which world it is in by the model's model_type.
++    """
++    from pruning_factory import set_prunable_scope
++
++    p = torch.nn.Parameter(torch.randn(8, 8))
++
++    # CV model: backbone MLP prunable, replacement head excluded.
++    set_prunable_scope(prune_task_head=False,
++                       model=SimpleNamespace(model_type='cv'))
++    assert layer_check('model.classifier.0.weight', p), \
++        "VGG backbone Linear must be in the prunable scope (defect M2)"
++    assert layer_check('model.classifier.3.weight', p)
++    assert not layer_check('cls_head.weight', p), \
++        "the replacement task head must stay excluded"
++    # prune_task_head=True brings the head into scope.
++    set_prunable_scope(prune_task_head=True,
++                       model=SimpleNamespace(model_type='cv'))
++    assert layer_check('cls_head.weight', p)
++
++    # LLM model: every classifier-head name stays excluded.
++    set_prunable_scope(prune_task_head=False,
++                       model=SimpleNamespace(model_type='llm'))
++    assert not layer_check('model.classifier.weight', p)          # DistilBERT
++    assert not layer_check('model.pre_classifier.weight', p)      # DistilBERT
++    assert not layer_check('model.classifier.dense.weight', p)    # RoBERTa
++    assert not layer_check('model.classifier.out_proj.weight', p)
++    assert not layer_check('model.lm_head.decoder.weight', p)     # RoBERTa MLM
++
++    # No model given: conservative old behaviour, 'classifier' excluded.
++    set_prunable_scope(prune_task_head=False, model=None)
++    assert not layer_check('model.classifier.0.weight', p)
+diff --git a/results/runs.csv b/results/runs.csv
+index 82eb0b3..027ac94 100644
+--- a/results/runs.csv
++++ b/results/runs.csv
+@@ -9,6 +9,7 @@ resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174934__finetune,resnet34_cifar
+ resnet34_cifar10_ce_only+rigl_s0.999_seed1_20260819_173755__finetune,resnet34_cifar10_ce_only+rigl_s0.999_seed1_20260819_173755,finetune,ok,t0.C-null.resnet34.cifar10.s0.999.seed1,resnet34,cifar10,ce_only+rigl,0.999,1,True,9.375,9.375,2.3077046871185303,10.051327216394396,0.9989989225532478,0.9989989225532478,0.9989989225532478,1,ladder-C,,,2026-08-19T12:37:56.273264+00:00,2026-08-19T12:38:45.619940+00:00,51.605,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\bacp_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type rigl --layerwise_alloc erk --prune_task_head --lambdas 0.0 0.0 0.0 1.0 --num_snapshots 0 --n_views 1 --contrastive_mode cap --proj_mode tied_frozen --enable_finetune --optimizer_type_ft adamw --learning_rate_ft 0.0001 --epochs_ft 2 --distill_mode none --lambda_kd 0.0 --experiment_type ladder-C --trained_weights C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1,bdf9d105215d6b005907ebb494caff57cf8e51e2,main,True,39,13,0afbe55d7d648cb74697923113af3b5031269e47,b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc,Haroon-Zbook,Windows-11-10.0.26200-SP0,3.12.10,2.5.1+cpu,0.20.1+cpu,4.46.3,1.26.4,,,,0,,True,False,False,args,1234,resnet,cv,classification,True,random,10,32,1,32,0,True,2,2,test,64,0,512,128,21347786,21282122,21265088,82698,102766,21288,21265088,True,,,rigl,True,cap,tied_frozen,"[0.0, 0.0, 0.0, 1.0]",False,0.07,0,0,none,0.0,False,False,False,0.999,cubic,1,,,,0.3,erk,output,True,False,backbone+head,2.8215260618719285e-07,sgd,0.1,0.0005,cosine,2,0,0,2,adamw,0.0001,4,,2,False,2,2,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_rigl_0.999_ladder-C_20260819_173755_finetune.pt,acf620c35652ce851ce8861df9816017166035f61a53c3add158ddce0b17cfa6,85543930,7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb,2.296875,9.943061828613281,True,,0.0,0.9951861050134192,51.605,0.942,11.905,3.533,,,,,,,,
+ resnet34_cifar10_ce_only+rigl_s0.999_seed1_20260819_173949__finetune,resnet34_cifar10_ce_only+rigl_s0.999_seed1_20260819_173949,finetune,ok,t0.C0b.resnet34.cifar10.s0.999.seed1,resnet34,cifar10,ce_only+rigl,0.999,1,True,4.6875,4.6875,2.3047815561294556,10.02198877127654,0.9989989225532478,0.9989989225532478,0.9989989225532478,1,ladder-C,,,2026-08-19T12:39:49.431102+00:00,2026-08-19T12:40:37.892825+00:00,50.328,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\bacp_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type rigl --layerwise_alloc erk --prune_task_head --lambdas 0.0 0.0 0.0 1.0 --num_snapshots 0 --n_views 2 --contrastive_mode cap --proj_mode tied_frozen --enable_finetune --optimizer_type_ft adamw --learning_rate_ft 0.0001 --epochs_ft 2 --distill_mode none --lambda_kd 0.0 --experiment_type ladder-C --trained_weights C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1,bdf9d105215d6b005907ebb494caff57cf8e51e2,main,True,39,13,0afbe55d7d648cb74697923113af3b5031269e47,b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc,Haroon-Zbook,Windows-11-10.0.26200-SP0,3.12.10,2.5.1+cpu,0.20.1+cpu,4.46.3,1.26.4,,,,0,,True,False,False,args,1234,resnet,cv,classification,True,random,10,32,2,32,0,True,2,2,test,64,0,512,128,21347786,21282122,21265088,82698,102726,21288,21265088,True,,,rigl,True,cap,tied_frozen,"[0.0, 0.0, 0.0, 1.0]",False,0.07,0,0,none,0.0,False,False,False,0.999,cubic,1,,,,0.3,erk,output,True,False,backbone+head,2.8215260618719285e-07,sgd,0.1,0.0005,cosine,2,0,0,2,adamw,0.0001,4,,2,False,2,2,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_rigl_0.999_ladder-C_20260819_173949_finetune.pt,b7426dd8f68afaf4b767de4fd58cc13fd19f440a47db42530db1e230b54db529,85543930,7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb,2.296875,9.943061828613281,True,,0.0,0.9951879787440252,50.328,0.687,11.78,2.188,,,,,,,,
+ resnet34_cifar10_dense_seed1_20260819_173107__dense,resnet34_cifar10_dense_seed1_20260819_173107,dense,ok,t0.A0.resnet34.cifar10.sdense.seed1,resnet34,cifar10,dense,,1,True,10.9375,10.9375,200138.109375,inf,0.0,,0.0,1,ladder-A,,,2026-08-19T12:31:08.025181+00:00,2026-08-19T12:31:20.963433+00:00,14.368,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\baseline_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --experiment_type ladder-A --seed 1,bdf9d105215d6b005907ebb494caff57cf8e51e2,main,True,39,13,0afbe55d7d648cb74697923113af3b5031269e47,b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc,Haroon-Zbook,Windows-11-10.0.26200-SP0,3.12.10,2.5.1+cpu,0.20.1+cpu,4.46.3,1.26.4,,,,0,,True,False,False,args,1234,resnet,cv,classification,True,random,10,32,1,32,0,True,2,2,test,64,0,512,,21282122,21282122,21259968,22154,21282122,21259968,,,,,,False,,,,,,,,,,False,False,False,,,100,,,,,erk,output,False,False,backbone,1.4111027824689105e-07,sgd,0.1,0.0005,cosine,2,0,0,,,,4,,2,False,2,2,,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt,7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb,85277358,,200192.0,inf,True,8.300391912460327,,0.0,14.368,0.681,5.63,0.228,,,,,,,,
++resnet34_cifar10_dense_seed1_20260821_011901__dense,resnet34_cifar10_dense_seed1_20260821_011901,dense,ok,static.dense.resnet34.cifar10.dense.seed1.smoke,resnet34,cifar10,dense,,1,True,12.20703125,12.20703125,2.5774885416030884,13.164035681359898,0.0,,0.0,1,static-dense,,,2026-08-20T20:19:02.059160+00:00,2026-08-20T20:21:46.224636+00:00,172.526,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\baseline_script.py --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --batch_size 512 --num_workers 0 --optimizer_type sgd --learning_rate 0.01 --scheduler_type linear_with_warmup --epochs 2 --patience 20 --model_name resnet34 --experiment_type static-dense --limit_train_batches 2 --limit_eval_batches 2 --seed 1,bd98f7559d07b35de4e50b2c0db3e7e884825d5f,main,True,14,4,03d9cbc5e849a1d5d699677bad230c5c0f6b6953,4740afde94f025a9f07972926c0d80d737a8d5b411a2a29ba88a325201bc2a6f,Haroon-Zbook,Windows-11-10.0.26200-SP0,3.12.10,2.5.1+cpu,0.20.1+cpu,4.46.3,1.26.4,,,,0,,True,False,False,args,1234,resnet,cv,classification,True,imagenet_checkpoint,10,32,1,512,0,True,2,2,test,1024,0,512,,21282122,21282122,21259968,22154,21282122,21259968,,,,,,False,,,,,,,,,,False,False,False,,,100,,,,,erk,output,False,False,backbone,0.0,sgd,0.01,0.0005,linear_with_warmup,2,0,20,,,,4,0,2,False,2,2,,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260821\resnet34_cifar10_dense_static-dense_20260821_011901.pt,dd0e735d2085e2df32afed2fcdb96f5b6b440301ecd8a421723f7b19d8bd53dc,85278246,,2.5625,12.969780445098877,True,2.501550793647766,,0.0,172.526,6.528,73.238,2.315,,,,,,,,
+ resnet34_cifar10_east_s0.9983_seed1_20260819_173703__prune,resnet34_cifar10_east_s0.9983_seed1_20260819_173703,prune,ok,t0.B3.resnet34.cifar10.s0.999.seed1,resnet34,cifar10,east,0.999,1,True,9.375,9.375,2.314391851425171,10.11876733324501,0.9982989608353445,0.9982989608353445,0.9982989608353445,1,ladder-B,,,2026-08-19T12:37:03.782025+00:00,2026-08-19T12:37:31.335407+00:00,29.995,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\pruning_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type east --layerwise_alloc erk --prune_task_head --dyrelu_en --dyrelu_phasing_en --weight_sharing_en --experiment_type ladder-B --trained_weights C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1,bdf9d105215d6b005907ebb494caff57cf8e51e2,main,True,39,13,0afbe55d7d648cb74697923113af3b5031269e47,b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc,Haroon-Zbook,Windows-11-10.0.26200-SP0,3.12.10,2.5.1+cpu,0.20.1+cpu,4.46.3,1.26.4,,,,0,,True,False,False,args,1234,resnet,cv,classification,True,random,10,32,1,32,0,True,2,2,test,64,0,512,,14362570,14362570,11164352,3198218,3217209,18991,11164352,True,24458160,14357440,east,False,,,,,,,,,,True,True,True,0.9983,cubic,1,0.05,0.1,0.5,,erk,output,True,False,backbone+head,0.0,sgd,0.1,0.0005,cosine,2,0,0,,,,4,,2,False,2,2,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_east_0.9983_ladder-B_20260819_173703.pt,0779223a54ac746fccc3ab94283de9ae7437695aed225f78011874d01bb1979d,57694550,7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb,2.3046875,10.02135181427002,True,2.3935904502868652,0.0,0.7760004650978203,29.995,1.118,12.185,0.581,,,,,,,,
+ resnet34_cifar10_east_s0.999_seed1_20260819_173433__prune,resnet34_cifar10_east_s0.999_seed1_20260819_173433,prune,ok,t0.A6.resnet34.cifar10.s0.999.seed1,resnet34,cifar10,east,0.999,1,True,9.375,9.375,2.3215216398239136,10.191169803625874,0.9990008505960568,0.9990008505960568,0.9990008505960568,1,ladder-A,,,2026-08-19T12:34:34.950555+00:00,2026-08-19T12:35:00.908454+00:00,27.626,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\pruning_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type east --layerwise_alloc erk --prune_task_head --experiment_type ladder-A --trained_weights C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1,bdf9d105215d6b005907ebb494caff57cf8e51e2,main,True,39,13,0afbe55d7d648cb74697923113af3b5031269e47,b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc,Haroon-Zbook,Windows-11-10.0.26200-SP0,3.12.10,2.5.1+cpu,0.20.1+cpu,4.46.3,1.26.4,,,,0,,True,False,False,args,1234,resnet,cv,classification,True,random,10,32,1,32,0,True,2,2,test,64,0,512,,21282122,21282122,21265088,17034,38281,21247,21265088,True,,,east,False,,,,,,,,,,False,False,False,0.999,cubic,1,0.05,0.1,0.5,,erk,output,True,False,backbone+head,0.0,sgd,0.1,0.0005,cosine,2,0,0,,,,4,,2,False,2,2,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_east_0.999_ladder-A_20260819_173433.pt,6dd5d32bf85f94519ae6d021a5e5e153b5021be9d510cbcbff17d1f42283b63c,85278468,7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb,2.3203125,10.179165363311768,True,2.3115603923797607,0.0,0.9982012601938848,27.626,0.711,12.229,2.852,,,,,,,,
+ resnet34_cifar10_east_s0.999_seed1_20260819_173521__prune,resnet34_cifar10_east_s0.999_seed1_20260819_173521,prune,ok,t0.B1.resnet34.cifar10.s0.999.seed1,resnet34,cifar10,east,0.999,1,True,9.375,9.375,2.31110155582428,10.08552831069409,0.9989989225532478,0.9989989225532478,0.9989989225532478,1,ladder-B,,,2026-08-19T12:35:21.691239+00:00,2026-08-19T12:35:46.486132+00:00,26.975,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\pruning_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type east --layerwise_alloc erk --prune_task_head --dyrelu_en --experiment_type ladder-B --trained_weights C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1,bdf9d105215d6b005907ebb494caff57cf8e51e2,main,True,39,13,0afbe55d7d648cb74697923113af3b5031269e47,b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc,Haroon-Zbook,Windows-11-10.0.26200-SP0,3.12.10,2.5.1+cpu,0.20.1+cpu,4.46.3,1.26.4,,,,0,,True,False,False,args,1234,resnet,cv,classification,True,random,10,32,1,32,0,True,2,2,test,64,0,512,,24463290,24463290,21265088,3198202,3219490,21288,21265088,True,,,east,False,,,,,,,,,,True,False,False,0.999,cubic,1,0.05,0.1,0.5,,erk,output,True,False,backbone+head,0.0,sgd,0.1,0.0005,cosine,2,0,0,,,,4,,2,False,2,2,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_dense_ladder-A_20260819_173107.pt,C:\Users\haroo\OneDrive\projects\Research\BaCP\project\scripts\research\bacp\resnet34\cifar10\20260819\resnet34_cifar10_east_0.999_ladder-B_20260819_173521.pt,c4128fed98ece15b36817ca6ca465e8969a23ea2fe619b2ec0ca19bac935433f,98095697,7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb,2.3203125,10.179165363311768,True,2.300901770591736,0.0,0.8683950523416923,26.975,0.947,11.32,0.267,,,,,,,,
+diff --git a/results/runs.jsonl b/results/runs.jsonl
+index 6f19df6..163a5a3 100644
+--- a/results/runs.jsonl
++++ b/results/runs.jsonl
+@@ -74,3 +74,4 @@
+ {"schema_version": 1, "record_id": "resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174731__finetune", "run_id": "resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174731", "phase": "finetune", "experiment_group": "t0.D4-noFiC.resnet34.cifar10.s0.999.seed1", "experiment_type": "ladder-D4", "status": "ok", "error": null, "notes": "", "started_at": "2026-08-19T12:47:31.488231+00:00", "ended_at": "2026-08-19T12:48:07.725701+00:00", "duration_s": 37.878, "cmdline": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\bacp_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type rigl --layerwise_alloc erk --prune_task_head --lambdas 0.3333333333333333 0.0 0.3333333333333333 0.3333333333333333 --num_snapshots 2 --n_views 2 --distill_mode none --lambda_kd 0.0 --contrastive_mode cap --proj_mode tied_frozen --enable_finetune --optimizer_type_ft adamw --learning_rate_ft 0.0001 --epochs_ft 2 --experiment_type ladder-D4 --trained_weights C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1", "git_sha": "bdf9d105215d6b005907ebb494caff57cf8e51e2", "git_branch": "main", "git_dirty": true, "git_n_dirty": 39, "git_untracked": 13, "git_patch_sha1": "0afbe55d7d648cb74697923113af3b5031269e47", "code_fingerprint": "b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc", "hostname": "Haroon-Zbook", "platform": "Windows-11-10.0.26200-SP0", "python_version": "3.12.10", "torch_version": "2.5.1+cpu", "torchvision_version": "0.20.1+cpu", "transformers_version": "4.46.3", "numpy_version": "1.26.4", "cuda_version": null, "cudnn_version": null, "gpu_name": null, "gpu_count": 0, "gpu_mem_total_gb": null, "cudnn_deterministic": true, "cudnn_benchmark": false, "deterministic_algorithms": false, "seed": 1, "seed_source": "args", "val_split_seed": 1234, "model_name": "resnet34", "model_family": "resnet", "model_type": "cv", "model_task": "classification", "pretrained": true, "init_source": "random", "dataset_name": "cifar10", "num_classes": 10, "image_size": 32, "n_views": 2, "batch_size": 32, "num_workers": 0, "amp_enabled": true, "train_batches": 2, "eval_batches": 2, "eval_split": "test", "eval_samples_seen": 64, "eval_samples_dropped": 0, "embedded_dim": 512, "num_out_features": 128, "total_params": 21347786, "trainable_params": 21282122, "prunable_params": 21265088, "nonprunable_params": 82698, "nonzero_all_params": 103252, "active_prunable_params": 21288, "mask_total": 21265088, "mask_covers_prunable": true, "shared_params_total": null, "shared_params_unique": null, "method": "bacp+rigl", "pruner": "rigl", "is_bacp": true, "contrastive_mode": "cap", "proj_mode": "tied_frozen", "lambdas_json": "[0.3333333333333333, 0.0, 0.3333333333333333, 0.3333333333333333]", "learnable_lambdas": false, "tau": 0.07, "num_snapshots": 2, "n_snapshots_used": 1, "distill_mode": "none", "lambda_kd": 0.0, "dyrelu_en": false, "dyrelu_phasing_en": false, "weight_sharing_en": false, "sparsity_requested": 0.999, "sparsity_target_adjusted": 0.999, "sparsity_scheduler": "cubic", "delta_T": 1, "east_s_min": null, "east_prune_rate": null, "east_Tc_ratio": null, "rigl_alpha": 0.3, "layerwise_alloc": "erk", "wanda_group": "output", "prune_task_head": true, "prune_embeddings": false, "scope_key": "backbone+head", "initial_sparsity": 2.8215260618719285e-07, "optimizer_type": "sgd", "learning_rate": 0.1, "weight_decay": 0.0005, "scheduler_type": "cosine", "epochs": 2, "recovery_epochs": 0, "patience": 0, "epochs_ft": 2, "optimizer_type_ft": "adamw", "learning_rate_ft": 0.0001, "total_steps": 4, "warmup_steps": null, "epochs_completed": 2, "early_stopped": false, "limit_train_batches": 2, "limit_eval_batches": 2, "is_smoke": true, "trained_weights": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt", "save_path": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_rigl_0.999_ladder-D4_20260819_174731_finetune.pt", "checkpoint_sha256": "bdda0129bc178b25d78c1c988b963f584f922917d98d70ca9588067919b37c14", "checkpoint_bytes": 85545306, "trained_weights_sha256": "7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb", "test_acc_pct": 4.6875, "test_loss": 2.296875, "test_ppl": 9.943061828613281, "test_acc_exact_pct": 4.6875, "test_loss_exact": 2.3064855337142944, "test_ppl_exact": 10.039080573386581, "metrics_are_batch_means": true, "final_train_loss": null, "sparsity_reported": 0.9989989225532478, "sparsity_mask": 0.9989989225532478, "sparsity_value": 0.9989989225532478, "sparsity_gap": 0.0, "sparsity_all_params": 0.9951633391865554, "wall_total_s": 37.878, "wall_eval_s": 0.574, "s_per_epoch_mean": 8.696, "s_per_epoch_std": 0.327, "peak_gpu_mem_gb": null, "latency_ms_bs1": null, "latency_ms_batch": null, "throughput_samples_s": null, "gflops_dense": null, "gflops_sparse_est": null, "flops_method": null, "inference_dtype": null}
+ {"schema_version": 1, "record_id": "resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174830__finetune", "run_id": "resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174830", "phase": "finetune", "experiment_group": "t0.D4-noPrC.resnet34.cifar10.s0.999.seed1", "experiment_type": "ladder-D4", "status": "ok", "error": null, "notes": "", "started_at": "2026-08-19T12:48:30.907844+00:00", "ended_at": "2026-08-19T12:49:10.341592+00:00", "duration_s": 41.72, "cmdline": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\bacp_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type rigl --layerwise_alloc erk --prune_task_head --lambdas 0.0 0.3333333333333333 0.3333333333333333 0.3333333333333333 --num_snapshots 2 --n_views 2 --distill_mode none --lambda_kd 0.0 --contrastive_mode cap --proj_mode tied_frozen --enable_finetune --optimizer_type_ft adamw --learning_rate_ft 0.0001 --epochs_ft 2 --experiment_type ladder-D4 --trained_weights C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1", "git_sha": "bdf9d105215d6b005907ebb494caff57cf8e51e2", "git_branch": "main", "git_dirty": true, "git_n_dirty": 39, "git_untracked": 13, "git_patch_sha1": "0afbe55d7d648cb74697923113af3b5031269e47", "code_fingerprint": "b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc", "hostname": "Haroon-Zbook", "platform": "Windows-11-10.0.26200-SP0", "python_version": "3.12.10", "torch_version": "2.5.1+cpu", "torchvision_version": "0.20.1+cpu", "transformers_version": "4.46.3", "numpy_version": "1.26.4", "cuda_version": null, "cudnn_version": null, "gpu_name": null, "gpu_count": 0, "gpu_mem_total_gb": null, "cudnn_deterministic": true, "cudnn_benchmark": false, "deterministic_algorithms": false, "seed": 1, "seed_source": "args", "val_split_seed": 1234, "model_name": "resnet34", "model_family": "resnet", "model_type": "cv", "model_task": "classification", "pretrained": true, "init_source": "random", "dataset_name": "cifar10", "num_classes": 10, "image_size": 32, "n_views": 2, "batch_size": 32, "num_workers": 0, "amp_enabled": true, "train_batches": 2, "eval_batches": 2, "eval_split": "test", "eval_samples_seen": 64, "eval_samples_dropped": 0, "embedded_dim": 512, "num_out_features": 128, "total_params": 21347786, "trainable_params": 21282122, "prunable_params": 21265088, "nonprunable_params": 82698, "nonzero_all_params": 103247, "active_prunable_params": 21288, "mask_total": 21265088, "mask_covers_prunable": true, "shared_params_total": null, "shared_params_unique": null, "method": "bacp+rigl", "pruner": "rigl", "is_bacp": true, "contrastive_mode": "cap", "proj_mode": "tied_frozen", "lambdas_json": "[0.0, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333]", "learnable_lambdas": false, "tau": 0.07, "num_snapshots": 2, "n_snapshots_used": 1, "distill_mode": "none", "lambda_kd": 0.0, "dyrelu_en": false, "dyrelu_phasing_en": false, "weight_sharing_en": false, "sparsity_requested": 0.999, "sparsity_target_adjusted": 0.999, "sparsity_scheduler": "cubic", "delta_T": 1, "east_s_min": null, "east_prune_rate": null, "east_Tc_ratio": null, "rigl_alpha": 0.3, "layerwise_alloc": "erk", "wanda_group": "output", "prune_task_head": true, "prune_embeddings": false, "scope_key": "backbone+head", "initial_sparsity": 2.8215260618719285e-07, "optimizer_type": "sgd", "learning_rate": 0.1, "weight_decay": 0.0005, "scheduler_type": "cosine", "epochs": 2, "recovery_epochs": 0, "patience": 0, "epochs_ft": 2, "optimizer_type_ft": "adamw", "learning_rate_ft": 0.0001, "total_steps": 4, "warmup_steps": null, "epochs_completed": 2, "early_stopped": false, "limit_train_batches": 2, "limit_eval_batches": 2, "is_smoke": true, "trained_weights": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt", "save_path": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_rigl_0.999_ladder-D4_20260819_174830_finetune.pt", "checkpoint_sha256": "2a31db73711decae094f8b1b90990caa684f1f3f5e060142f1ff883240c73632", "checkpoint_bytes": 85545306, "trained_weights_sha256": "7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb", "test_acc_pct": 9.375, "test_loss": 2.296875, "test_ppl": 9.943061828613281, "test_acc_exact_pct": 9.375, "test_loss_exact": 2.3074363470077515, "test_ppl_exact": 10.048630403983328, "metrics_are_batch_means": true, "final_train_loss": null, "sparsity_reported": 0.9989989225532478, "sparsity_mask": 0.9989989225532478, "sparsity_value": 0.9989989225532478, "sparsity_gap": 0.0, "sparsity_all_params": 0.9951635734028812, "wall_total_s": 41.72, "wall_eval_s": 1.267, "s_per_epoch_mean": 9.526, "s_per_epoch_std": 2.618, "peak_gpu_mem_gb": null, "latency_ms_bs1": null, "latency_ms_batch": null, "throughput_samples_s": null, "gflops_dense": null, "gflops_sparse_est": null, "flops_method": null, "inference_dtype": null}
+ {"schema_version": 1, "record_id": "resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174934__finetune", "run_id": "resnet34_cifar10_bacp+rigl_s0.999_seed1_20260819_174934", "phase": "finetune", "experiment_group": "t0.D4-noSnC.resnet34.cifar10.s0.999.seed1", "experiment_type": "ladder-D4", "status": "ok", "error": null, "notes": "", "started_at": "2026-08-19T12:49:35.625210+00:00", "ended_at": "2026-08-19T12:50:18.153207+00:00", "duration_s": 44.046, "cmdline": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\bacp_script.py --model_name resnet34 --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --epochs 2 --batch_size 32 --optimizer_type sgd --learning_rate 0.1 --scheduler_type cosine --patience 0 --limit_train_batches 2 --limit_eval_batches 2 --num_workers 0 --target_sparsity 0.999 --sparsity_scheduler cubic --recovery_epochs 0 --delta_T 1 --pruning_type rigl --layerwise_alloc erk --prune_task_head --lambdas 0.3333333333333333 0.3333333333333333 0.0 0.3333333333333333 --num_snapshots 2 --n_views 2 --distill_mode none --lambda_kd 0.0 --contrastive_mode cap --proj_mode tied_frozen --enable_finetune --optimizer_type_ft adamw --learning_rate_ft 0.0001 --epochs_ft 2 --experiment_type ladder-D4 --trained_weights C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt --seed 1", "git_sha": "bdf9d105215d6b005907ebb494caff57cf8e51e2", "git_branch": "main", "git_dirty": true, "git_n_dirty": 39, "git_untracked": 13, "git_patch_sha1": "0afbe55d7d648cb74697923113af3b5031269e47", "code_fingerprint": "b700ed0ce138b18a70f8edde306d85b1cbaf008f0099565d538697f6c015f0fc", "hostname": "Haroon-Zbook", "platform": "Windows-11-10.0.26200-SP0", "python_version": "3.12.10", "torch_version": "2.5.1+cpu", "torchvision_version": "0.20.1+cpu", "transformers_version": "4.46.3", "numpy_version": "1.26.4", "cuda_version": null, "cudnn_version": null, "gpu_name": null, "gpu_count": 0, "gpu_mem_total_gb": null, "cudnn_deterministic": true, "cudnn_benchmark": false, "deterministic_algorithms": false, "seed": 1, "seed_source": "args", "val_split_seed": 1234, "model_name": "resnet34", "model_family": "resnet", "model_type": "cv", "model_task": "classification", "pretrained": true, "init_source": "random", "dataset_name": "cifar10", "num_classes": 10, "image_size": 32, "n_views": 2, "batch_size": 32, "num_workers": 0, "amp_enabled": true, "train_batches": 2, "eval_batches": 2, "eval_split": "test", "eval_samples_seen": 64, "eval_samples_dropped": 0, "embedded_dim": 512, "num_out_features": 128, "total_params": 21347786, "trainable_params": 21282122, "prunable_params": 21265088, "nonprunable_params": 82698, "nonzero_all_params": 103247, "active_prunable_params": 21288, "mask_total": 21265088, "mask_covers_prunable": true, "shared_params_total": null, "shared_params_unique": null, "method": "bacp+rigl", "pruner": "rigl", "is_bacp": true, "contrastive_mode": "cap", "proj_mode": "tied_frozen", "lambdas_json": "[0.3333333333333333, 0.3333333333333333, 0.0, 0.3333333333333333]", "learnable_lambdas": false, "tau": 0.07, "num_snapshots": 2, "n_snapshots_used": 1, "distill_mode": "none", "lambda_kd": 0.0, "dyrelu_en": false, "dyrelu_phasing_en": false, "weight_sharing_en": false, "sparsity_requested": 0.999, "sparsity_target_adjusted": 0.999, "sparsity_scheduler": "cubic", "delta_T": 1, "east_s_min": null, "east_prune_rate": null, "east_Tc_ratio": null, "rigl_alpha": 0.3, "layerwise_alloc": "erk", "wanda_group": "output", "prune_task_head": true, "prune_embeddings": false, "scope_key": "backbone+head", "initial_sparsity": 2.8215260618719285e-07, "optimizer_type": "sgd", "learning_rate": 0.1, "weight_decay": 0.0005, "scheduler_type": "cosine", "epochs": 2, "recovery_epochs": 0, "patience": 0, "epochs_ft": 2, "optimizer_type_ft": "adamw", "learning_rate_ft": 0.0001, "total_steps": 4, "warmup_steps": null, "epochs_completed": 2, "early_stopped": false, "limit_train_batches": 2, "limit_eval_batches": 2, "is_smoke": true, "trained_weights": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_dense_ladder-A_20260819_173107.pt", "save_path": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260819\\resnet34_cifar10_rigl_0.999_ladder-D4_20260819_174934_finetune.pt", "checkpoint_sha256": "bf4293508b1abf8c5444b8f28279df738ce8fe6dcf7db9ad98167234eeeb6a0b", "checkpoint_bytes": 85545306, "trained_weights_sha256": "7d7f6120836bf99d448c5aba14d581068e1ac645f5d238d427d87a5feaf3ebeb", "test_acc_pct": 9.375, "test_loss": 2.296875, "test_ppl": 9.943061828613281, "test_acc_exact_pct": 9.375, "test_loss_exact": 2.3064801692962646, "test_ppl_exact": 10.039026719706198, "metrics_are_batch_means": true, "final_train_loss": null, "sparsity_reported": 0.9989989225532478, "sparsity_mask": 0.9989989225532478, "sparsity_value": 0.9989989225532478, "sparsity_gap": 0.0, "sparsity_all_params": 0.9951635734028812, "wall_total_s": 44.046, "wall_eval_s": 0.551, "s_per_epoch_mean": 10.245, "s_per_epoch_std": 2.324, "peak_gpu_mem_gb": null, "latency_ms_bs1": null, "latency_ms_batch": null, "throughput_samples_s": null, "gflops_dense": null, "gflops_sparse_est": null, "flops_method": null, "inference_dtype": null}
++{"schema_version": 1, "record_id": "resnet34_cifar10_dense_seed1_20260821_011901__dense", "run_id": "resnet34_cifar10_dense_seed1_20260821_011901", "phase": "dense", "experiment_group": "static.dense.resnet34.cifar10.dense.seed1.smoke", "experiment_type": "static-dense", "status": "ok", "error": null, "notes": "", "started_at": "2026-08-20T20:19:02.059160+00:00", "ended_at": "2026-08-20T20:21:46.224636+00:00", "duration_s": 172.526, "cmdline": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\baseline_script.py --model_type cv --dataset_name cifar10 --num_classes 10 --image_size 32 --batch_size 512 --num_workers 0 --optimizer_type sgd --learning_rate 0.01 --scheduler_type linear_with_warmup --epochs 2 --patience 20 --model_name resnet34 --experiment_type static-dense --limit_train_batches 2 --limit_eval_batches 2 --seed 1", "git_sha": "bd98f7559d07b35de4e50b2c0db3e7e884825d5f", "git_branch": "main", "git_dirty": true, "git_n_dirty": 14, "git_untracked": 4, "git_patch_sha1": "03d9cbc5e849a1d5d699677bad230c5c0f6b6953", "code_fingerprint": "4740afde94f025a9f07972926c0d80d737a8d5b411a2a29ba88a325201bc2a6f", "hostname": "Haroon-Zbook", "platform": "Windows-11-10.0.26200-SP0", "python_version": "3.12.10", "torch_version": "2.5.1+cpu", "torchvision_version": "0.20.1+cpu", "transformers_version": "4.46.3", "numpy_version": "1.26.4", "cuda_version": null, "cudnn_version": null, "gpu_name": null, "gpu_count": 0, "gpu_mem_total_gb": null, "cudnn_deterministic": true, "cudnn_benchmark": false, "deterministic_algorithms": false, "seed": 1, "seed_source": "args", "val_split_seed": 1234, "model_name": "resnet34", "model_family": "resnet", "model_type": "cv", "model_task": "classification", "pretrained": true, "init_source": "imagenet_checkpoint", "dataset_name": "cifar10", "num_classes": 10, "image_size": 32, "n_views": 1, "batch_size": 512, "num_workers": 0, "amp_enabled": true, "train_batches": 2, "eval_batches": 2, "eval_split": "test", "eval_samples_seen": 1024, "eval_samples_dropped": 0, "embedded_dim": 512, "num_out_features": null, "total_params": 21282122, "trainable_params": 21282122, "prunable_params": 21259968, "nonprunable_params": 22154, "nonzero_all_params": 21282122, "active_prunable_params": 21259968, "mask_total": null, "mask_covers_prunable": null, "shared_params_total": null, "shared_params_unique": null, "method": "dense", "pruner": null, "is_bacp": false, "contrastive_mode": null, "proj_mode": null, "lambdas_json": null, "learnable_lambdas": null, "tau": null, "num_snapshots": null, "n_snapshots_used": null, "distill_mode": null, "lambda_kd": null, "dyrelu_en": false, "dyrelu_phasing_en": false, "weight_sharing_en": false, "sparsity_requested": null, "sparsity_target_adjusted": null, "sparsity_scheduler": null, "delta_T": 100, "east_s_min": null, "east_prune_rate": null, "east_Tc_ratio": null, "rigl_alpha": null, "layerwise_alloc": "erk", "wanda_group": "output", "prune_task_head": false, "prune_embeddings": false, "scope_key": "backbone", "initial_sparsity": 0.0, "optimizer_type": "sgd", "learning_rate": 0.01, "weight_decay": 0.0005, "scheduler_type": "linear_with_warmup", "epochs": 2, "recovery_epochs": 0, "patience": 20, "epochs_ft": null, "optimizer_type_ft": null, "learning_rate_ft": null, "total_steps": 4, "warmup_steps": 0, "epochs_completed": 2, "early_stopped": false, "limit_train_batches": 2, "limit_eval_batches": 2, "is_smoke": true, "trained_weights": null, "save_path": "C:\\Users\\haroo\\OneDrive\\projects\\Research\\BaCP\\project\\scripts\\research\\bacp\\resnet34\\cifar10\\20260821\\resnet34_cifar10_dense_static-dense_20260821_011901.pt", "checkpoint_sha256": "dd0e735d2085e2df32afed2fcdb96f5b6b440301ecd8a421723f7b19d8bd53dc", "checkpoint_bytes": 85278246, "trained_weights_sha256": null, "test_acc_pct": 12.20703125, "test_loss": 2.5625, "test_ppl": 12.969780445098877, "test_acc_exact_pct": 12.20703125, "test_loss_exact": 2.5774885416030884, "test_ppl_exact": 13.164035681359898, "metrics_are_batch_means": true, "final_train_loss": 2.501550793647766, "sparsity_reported": 0.0, "sparsity_mask": null, "sparsity_value": 0.0, "sparsity_gap": null, "sparsity_all_params": 0.0, "wall_total_s": 172.526, "wall_eval_s": 6.528, "s_per_epoch_mean": 73.238, "s_per_epoch_std": 2.315, "peak_gpu_mem_gb": null, "latency_ms_bs1": null, "latency_ms_batch": null, "throughput_samples_s": null, "gflops_dense": null, "gflops_sparse_est": null, "flops_method": null, "inference_dtype": null}
+diff --git a/run_remote.sh b/run_remote.sh
+index 8e9340e..de77e01 100644
+--- a/run_remote.sh
++++ b/run_remote.sh
+@@ -39,10 +39,26 @@ SESSION="${BACP_SESSION:-bacp}"
+ # that interpreter directly and never create a venv. Resolving this in one place
+ # keeps `start` and `status` from reaching for a venv that setup deliberately
+ # did not create.
+-if [ -x "${REPO}/.venv/bin/python" ]; then
++#
++# PATH is not a reliable way to find that interpreter. The Vast.ai image keeps
++# its CUDA torch in /venv/main, activated only for interactive login shells, so
++# under `ssh box ./run_remote.sh ...` -- and inside tmux -- `python3` resolves to
++# a bare /usr/bin/python3 with no torch at all. Probing candidates for an
++# importable torch, rather than trusting PATH, is what stops `setup` concluding
++# "no CUDA torch" on a box that has one and installing the requirements.txt pin
++# (torch 2.5.1, pre-Blackwell) over a working sm_120 build.
++#
++# BACP_PY overrides everything, for a box whose interpreter is somewhere else.
++if [ -n "${BACP_PY:-}" ]; then
++    PY="${BACP_PY}"
++elif [ -x "${REPO}/.venv/bin/python" ]; then
+     PY="${REPO}/.venv/bin/python"
+ else
+     PY="$(command -v python3 || command -v python)"
++    for cand in /venv/main/bin/python /venv/main/bin/python3 /opt/conda/bin/python; do
++        [ -x "$cand" ] || continue
++        if "$cand" -c 'import torch' 2>/dev/null; then PY="$cand"; break; fi
++    done
+ fi
+ 
+ # /workspace is RunPod's persistent container volume: it survives a pod stop and
+@@ -68,7 +84,7 @@ setup)
+     # functioning setup with one that raises "no kernel image is available for
+     # execution on the device". So the image's torch wins, and we install only
+     # the packages around it.
+-    if python3 -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
++    if "$PY" -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
+         echo "== using the image's torch (CUDA available); NOT creating a venv"
+         "$PY" -c "import torch;print(f'   torch {torch.__version__}  cuda {torch.version.cuda}  sm_{\"\".join(map(str,torch.cuda.get_device_capability(0)))}')"
+         # Everything except torch/torchvision, which the image owns.
+@@ -125,21 +141,25 @@ start)
+     LOG="${BACP_RESULTS_DIR}/logs/sweep_t${tier}_$(date +%Y%m%d_%H%M%S).log"
+ 
+     GPUS="${BACP_GPUS:-$("$PY" -c 'import torch;print(max(torch.cuda.device_count(),1))')}"
+-    PERGPU="${BACP_PER_GPU:-1}"
+ 
+-    # `resume` is the default and is what you want after any interruption. Use
+-    # --no_resume ONLY when the code changed, so every cell shares one
++    # Cells per GPU and dataloader workers are constants at the top of
++    # project/experiments/pool.py. Edit them there.
++    #
++    # Restarting is the way to resume: a cell counts as done once it has a run
++    # record, so `start` after an interruption picks up what is missing. Delete
++    # the records instead when the code changed and every cell must share one
+     # code_fingerprint.
+     tmux new-session -d -s "$SESSION" \
+         "cd '$REPO' && BACP_TIER=$tier '$PY' project/experiments/pool.py \
+-         --tier $tier --gpus $GPUS --per-gpu $PERGPU 2>&1 | tee '$LOG'"
++         --tier $tier --gpus $GPUS 2>&1 | tee '$LOG'"
+ 
+     # Snapshot the records every 5 minutes. They are ~1.5 MB, so this is free,
+     # and it is the difference between losing a pod and losing the sweep.
+     tmux new-session -d -s "${SESSION}-snap" \
+         "while true; do '$REPO/run_remote.sh' snapshot >/dev/null 2>&1; sleep 300; done"
+ 
+-    echo "started tier $tier on $GPUS GPU(s) x $PERGPU"
++    echo "started tier $tier on $GPUS GPU(s)"
++    echo "  order    : all dense cells, then one seed at a time"
+     echo "  log      : $LOG"
+     echo "  snapshots: ${BACP_RESULTS_DIR}/records_latest.tar.gz (every 5 min)"
+     echo
