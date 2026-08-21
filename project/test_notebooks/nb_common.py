@@ -171,11 +171,16 @@ _CNN_DENSE = dict(optimizer_type='sgd', learning_rate=0.01,
 _CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
                   epochs=60, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=88,
-                  prune_task_head=True)
+                  prune_task_head=True,
+                  # wanda_group='global': the project's original adaptation --
+                  # Wanda's metric under the same global-threshold allocation
+                  # as magnitude and SNIP, so the columns differ only in
+                  # score. Ignored by the other pruners.
+                  wanda_group='global')
 _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
                  epochs=60, recovery_epochs=0,
                  sparsity_scheduler='cubic', delta_T=88,
-                 prune_task_head=True,
+                 prune_task_head=True, wanda_group='global',
                  # tau=0.15. Measured under the corrected rectangular CAP
                  # loss: 0.15 beats 0.07 at every sparsity, in both the
                  # head-dense and head-pruned scopes (ResNet-50/CIFAR-10

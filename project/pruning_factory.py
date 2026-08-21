@@ -520,8 +520,18 @@ class WandaPruner(BasePruner):
 
       'output' -- rank within each row of W. Every output neuron keeps the same
                   fraction of its inputs.
-      'layer'  -- one threshold for the whole layer, as this file's magnitude and
-                  SNIP pruners use. Wanda's vision experiments favour this.
+      'layer'  -- one threshold within each layer. Wanda's own vision
+                  experiments favour this over 'output'.
+      'global' -- ONE threshold across all prunable layers, so sparsity
+                  self-allocates exactly as this file's magnitude and SNIP
+                  pruners do. This is the project's ORIGINAL adaptation (the
+                  draft at git 5749ce5): Wanda's importance metric under the
+                  same allocation policy as the other columns, which keeps
+                  the three criteria comparable -- they differ only in score.
+                  'output'/'layer' apply the target uniformly to every layer
+                  (Wanda's published protocol, built for ~50% one-shot LLM
+                  pruning); at 95-99% on a CNN that starves the small early
+                  layers, which is exactly what the uniform modes measure.
 
     **The activation norm is accumulated, not sampled.** scaler_row holds a running
     mean of ||X[:,j]||^2 over calibration batches in incremental form, so the
@@ -550,9 +560,10 @@ class WandaPruner(BasePruner):
         self.calibration_loader = kwargs.get('calibration_loader')
         self.calibration_batches = int(kwargs.get('calibration_batches') or 8)
         self.group = kwargs.get('wanda_group') or 'output'
-        if self.group not in ('output', 'layer'):
+        if self.group not in ('output', 'layer', 'global'):
             raise ValueError(
-                f"wanda_group must be 'output' or 'layer', got {self.group!r}")
+                f"wanda_group must be 'output', 'layer' or 'global', "
+                f"got {self.group!r}")
         self.scaler_row = {}          # param name -> Tensor[in_features]
         self._nsamples = {}
         self._calibrated = False
@@ -679,6 +690,30 @@ class WandaPruner(BasePruner):
             self.calibrate()
             if self._fallback_layers:
                 pass  # populated below, after the first scoring pass
+
+        if self.group == 'global':
+            # The original global-threshold adaptation: score every layer with
+            # |W| * sqrt(norm), concatenate, cut once. Mirrors
+            # GlobalMagnitudePruner so the wanda column shares its allocation.
+            scored = {}
+            for name, param in self.prunable_params.items():
+                W = param.detach()
+                flat = W.reshape(W.shape[0], -1)
+                norms = self.scaler_row.get(name)
+                if norms is not None and norms.numel() == flat.shape[1]:
+                    scale = norms.sqrt().to(flat.device).unsqueeze(0)
+                else:
+                    self._fallback_layers.add(name)
+                    scale = torch.ones(1, flat.shape[1], device=flat.device)
+                scored[name] = (flat.abs() * scale, W.shape)
+            all_scores = torch.cat([sc.reshape(-1) for sc, _ in scored.values()])
+            k = int(all_scores.numel() * self.current_sparsity)
+            if k < 1:
+                return
+            threshold = torch.kthvalue(all_scores, k).values
+            for name, (sc, shape) in scored.items():
+                self.masks[name] = (sc > threshold).to(sc.dtype).reshape(shape)
+            return
 
         for name, param in self.prunable_params.items():
             W = param.detach()

@@ -355,4 +355,22 @@ def test_layer_wise_group_is_available_and_differs_from_per_output():
 def test_unknown_group_raises():
     with pytest.raises(ValueError, match='wanda_group'):
         WandaPruner(TinyNet(), 2, 0.5, scheduler_type='one_shot', delta_T=1,
-                    total_steps=4, wanda_group='global')
+                    total_steps=4, wanda_group='rowwise')
+
+
+def test_global_group_self_allocates_and_hits_target():
+    """'global' -- the project's original adaptation (git 5749ce5 draft):
+    one threshold across all prunable layers, like GlobalMagnitudePruner.
+    Overall sparsity hits the target exactly while per-layer sparsity is
+    free to differ, which is the property the uniform modes lack."""
+    pruner = WandaPruner(TinyNet(), 2, 0.5, scheduler_type='one_shot',
+                         delta_T=1, total_steps=4, wanda_group='global')
+    pruner.current_sparsity = 0.5
+    pruner._calibrated = True          # unit norms -> pure |W| ranking
+    pruner.update_masks(0)
+    total = sum(m.numel() for m in pruner.masks.values())
+    zeros = sum((m == 0).sum().item() for m in pruner.masks.values())
+    assert abs(zeros / total - 0.5) < 0.02
+    per_layer = [(m == 0).float().mean().item() for m in pruner.masks.values()]
+    assert max(per_layer) - min(per_layer) > 0.0, \
+        'global allocation should not be forced uniform across layers'

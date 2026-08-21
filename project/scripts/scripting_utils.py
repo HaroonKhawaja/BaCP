@@ -95,7 +95,7 @@ def build_baseline_parser():
                         help="Truncate the val/test loaders to N batches (0 = all).")
 
     parser.add_argument('--wanda_group', type=str, default='output',
-                        choices=['output', 'layer'],
+                        choices=['output', 'layer', 'global'],
                         help="WANDA's comparison group. 'output' ranks within each "
                              "output neuron (WANDA's headline setting); 'layer' uses "
                              "one threshold per layer. WANDA establishes 'output' for "
@@ -185,7 +185,7 @@ def build_pruning_parser():
                         help="Truncate the val/test loaders to N batches (0 = all).")
 
     parser.add_argument('--wanda_group', type=str, default='output',
-                        choices=['output', 'layer'],
+                        choices=['output', 'layer', 'global'],
                         help="WANDA's comparison group. 'output' ranks within each "
                              "output neuron (WANDA's headline setting); 'layer' uses "
                              "one threshold per layer. WANDA establishes 'output' for "
@@ -334,7 +334,7 @@ def build_bacp_parser():
                         help="Truncate the val/test loaders to N batches (0 = all).")
 
     parser.add_argument('--wanda_group', type=str, default='output',
-                        choices=['output', 'layer'],
+                        choices=['output', 'layer', 'global'],
                         help="WANDA's comparison group. 'output' ranks within each "
                              "output neuron (WANDA's headline setting); 'layer' uses "
                              "one threshold per layer. WANDA establishes 'output' for "
