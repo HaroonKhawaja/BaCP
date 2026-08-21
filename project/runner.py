@@ -1,4 +1,8 @@
-"""Execute manifest cells as subprocesses, idempotently.
+"""Execute experiment cells as subprocesses, idempotently.
+
+A "cell" is one training run described by a dict: a unique key, a script name
+(baseline | pruning | bacp) and a config of CLI values. test_notebooks/nb_common
+builds them; this module turns them into argv, runs them, and checks records.
 
 Three properties matter here and each is deliberate:
 
@@ -32,13 +36,10 @@ import sys
 import time
 from pathlib import Path
 
-_HERE = Path(__file__).resolve().parent
-_PROJECT = _HERE.parent
+_PROJECT = Path(__file__).resolve().parent
 for _p in (str(_PROJECT), str(_PROJECT / 'scripts')):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-
-import manifest as M                                              # noqa: E402
 
 
 SCRIPTS = {
@@ -77,11 +78,11 @@ def parser_spec(script: str) -> dict:
 
 
 def build_command(cell: dict, *, python=None, extra=None) -> list[str]:
-    """Manifest config -> argv.
+    """Cell config -> argv.
 
     Raises on any config key the target script's parser does not define. That is
     the desired behaviour: a silently-dropped flag means the run executed a
-    different experiment than the manifest says it did, and the record would
+    different experiment than its cell config says it did, and the record would
     still look clean.
     """
     script = cell['script']
@@ -92,7 +93,7 @@ def build_command(cell: dict, *, python=None, extra=None) -> list[str]:
     unknown = sorted(set(cfg) - set(spec))
     if unknown:
         raise KeyError(
-            f'manifest rung {cell["rung"]!r} sets {unknown}, which '
+            f'cell {cell["rung"]!r} sets {unknown}, which '
             f'{SCRIPTS[script].name} does not accept. Either add the argument to '
             f'the parser or remove it from the rung -- do not let it be dropped.')
 
@@ -146,7 +147,7 @@ def attach_checkpoint(cell, *, root=None, same_seed=True, allow_missing=False):
     """Point a sparse rung at the dense checkpoint it starts from.
 
     This is what replaces hardcoded /dbfs paths. `same_seed=True` keeps the whole
-    ladder chained to the dense run of the *same* seed, so a paired comparison is
+    run chained to the dense run of the *same* seed, so a paired comparison is
     paired all the way down to initialisation rather than only from the pruning
     step onward.
     """
@@ -194,7 +195,7 @@ def run_cell(cell, *, root=None, dry_run=False, python=None, echo=True,
 
     # Scheduling errors become rows, exactly like execution errors. Previously
     # a missing dense checkpoint raised FileNotFoundError out of run_cell, past
-    # run_grid and past run_ladder.main -- aborting the whole sweep mid-loop with
+    # the calling loop -- aborting a whole sweep mid-loop with
     # no failure record, no summary, no table and not even a log file, since the
     # log is opened further down. And that is the DEFAULT first run: every sparse
     # cell needs a dense checkpoint that only rung A0 produces.
@@ -219,7 +220,7 @@ def run_cell(cell, *, root=None, dry_run=False, python=None, echo=True,
 
     run_env = dict(os.environ)
     # _finalize_run reads this and stamps it onto the record. It is the only
-    # link between a manifest cell and its result, so it is set here and nowhere
+    # link between a cell and its result, so it is set here and nowhere
     # else.
     run_env['BACP_EXPERIMENT_GROUP'] = cell['key']
     run_env.setdefault('PYTHONUNBUFFERED', '1')
@@ -270,79 +271,3 @@ def run_cell(cell, *, root=None, dry_run=False, python=None, echo=True,
         print(f'   ok in {elapsed}s' + ('' if wrote else '  [!] exited 0 but wrote no record'))
     return {'key': cell['key'], 'status': 'ok' if wrote else 'ok_no_record',
             'returncode': 0, 'elapsed_s': elapsed, 'log': str(log_path), 'cmd': argv}
-
-
-def run_grid(tier=None, *, rungs=None, stages=None, priorities=None, seeds=None,
-             root=None, dry_run=False, resume=True, python=None, timeout=None,
-             stop_on_fail=False, echo=True):
-    """Run every cell in a tier that is not already complete.
-
-    Returns a summary dict. Ordering is by stage then rung then seed, which is
-    also the dependency order: dense before sparse, and the gate rungs (C-null,
-    C0) before anything that is measured against them.
-    """
-    grid = M.cells(tier, rungs=rungs)
-    if stages:
-        grid = [c for c in grid if c['stage'] in set(stages)]
-    if priorities:
-        grid = [c for c in grid if c['priority'] in set(priorities)]
-    if seeds is not None:
-        grid = [c for c in grid if c['seed'] in set(seeds)]
-
-    order = {s: i for i, s in enumerate(['A', 'B', 'C', 'D', 'D4'])}
-    grid.sort(key=lambda c: (order.get(c['stage'], 99), c['rung'], c['seed']))
-
-    done = completed_keys(root) if resume else set()
-    todo = [c for c in grid if c['key'] not in done]
-
-    if echo:
-        print(f'Tier {M.TIER if tier is None else tier}: {len(grid)} cells, '
-              f'{len(grid) - len(todo)} already recorded, {len(todo)} to run.')
-
-    results, failures = [], []
-    for i, cell in enumerate(todo, 1):
-        if echo:
-            print(f'[{i}/{len(todo)}]', end=' ')
-        res = run_cell(cell, root=root, dry_run=dry_run, python=python,
-                       timeout=timeout, echo=echo)
-        results.append(res)
-        if res['status'] == 'failed':
-            failures.append(res)
-            if stop_on_fail:
-                print('stopping: stop_on_fail is set')
-                break
-
-    summary = {
-        'tier': M.TIER if tier is None else tier,
-        'planned': len(grid),
-        'skipped': len(grid) - len(todo),
-        'attempted': len(results),
-        'ok': sum(1 for r in results if r['status'] == 'ok'),
-        'ok_no_record': sum(1 for r in results if r['status'] == 'ok_no_record'),
-        'failed': len(failures),
-        'failures': [f['key'] for f in failures],
-        'results': results,
-    }
-    if echo:
-        print(f"\n{summary['ok']} ok, {summary['failed']} failed, "
-              f"{summary['skipped']} skipped.")
-        for key in summary['failures']:
-            print(f'  FAILED  {key}')
-    return summary
-
-
-if __name__ == '__main__':
-    import argparse
-    ap = argparse.ArgumentParser(description='Run manifest cells.')
-    ap.add_argument('--tier', type=int, default=None)
-    ap.add_argument('--rungs', nargs='*', default=None)
-    ap.add_argument('--stages', nargs='*', default=None)
-    ap.add_argument('--seeds', type=int, nargs='*', default=None)
-    ap.add_argument('--dry_run', action='store_true')
-    ap.add_argument('--no_resume', action='store_true')
-    ap.add_argument('--stop_on_fail', action='store_true')
-    ap.add_argument('--timeout', type=int, default=None)
-    a = ap.parse_args()
-    run_grid(a.tier, rungs=a.rungs, stages=a.stages, seeds=a.seeds,
-             dry_run=a.dry_run, resume=not a.no_resume,
-             stop_on_fail=a.stop_on_fail, timeout=a.timeout)

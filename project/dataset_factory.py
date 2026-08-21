@@ -75,6 +75,17 @@ VAL_SPLIT_SEED = 1234
 #   wikitext2 -- masked language modelling; DataCollatorForLanguageModeling
 #                supplies the -100 label masking that Trainer._handle_metrics and
 #                BaCPTrainer._handle_metrics both branch on.
+# Dataset sources:
+#   CIFAR-10/100  Krizhevsky, "Learning Multiple Layers of Features from Tiny
+#                 Images", 2009 (tech report). Via torchvision.
+#   MNIST         LeCun et al. 1998; FashionMNIST Xiao et al. 2017
+#                 (arXiv 1708.07747); EMNIST Cohen et al. 2017
+#                 (arXiv 1702.05373); SVHN Netzer et al. 2011. Via torchvision.
+#   SST-2         Socher et al. 2013 (EMNLP), distributed as part of GLUE
+#                 (Wang et al. 2019, ICLR, arXiv 1804.07461). NOTE: GLUE's test
+#                 split is unlabelled, so the "test" loader below is the
+#                 validation set -- state that wherever accuracy is reported.
+#   WikiText-2    Merity et al. 2017 (ICLR, arXiv 1609.07843).
 TEXT_DATASETS = {
     'sst2':      ('glue', 'sst2'),
     'wikitext2': ('wikitext', 'wikitext-2-raw-v1'),

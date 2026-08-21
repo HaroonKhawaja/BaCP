@@ -82,8 +82,18 @@ def load_weights(model, path):
         }
     try:
         missing, unexpected = model.load_state_dict(filtered_state_dict, strict=False)
-        print(f"> Partial load successful! Missing keys: {len(missing)}, unexpected: {len(unexpected)}")
-        return True
+        # `strict=False` tolerates ANY number of missing keys, so an unguarded
+        # `return True` here let a checkpoint that matched zero tensors report
+        # init_source='imagenet_checkpoint' on an effectively random model --
+        # the same provenance lie the full-load path was fixed to prevent.
+        # Require that at least half the model's tensors were actually loaded.
+        n_model = len(model.state_dict())
+        n_loaded = n_model - len(missing)
+        ok = n_loaded >= 0.5 * n_model
+        print(f"> Partial load: {n_loaded}/{n_model} tensors loaded "
+              f"(missing: {len(missing)}, unexpected: {len(unexpected)}) -> "
+              f"{'accepted' if ok else 'REJECTED (below half); treating as not loaded'}")
+        return ok
     except Exception as e:
         raise RuntimeError(f"Error loading weights from {path}: {e}") from e
               

@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 
 _PROJECT = Path(__file__).resolve().parents[1]
-for _p in (str(_PROJECT), str(_PROJECT / 'experiments')):
+for _p in (str(_PROJECT),):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 

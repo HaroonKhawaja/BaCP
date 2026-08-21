@@ -1,3 +1,20 @@
+"""ResNet (He, Zhang, Ren & Sun, "Deep Residual Learning for Image
+Recognition", CVPR 2016, arXiv 1512.03385).
+
+resnet34 = ResNet(BasicBlock, [3,4,6,3]), resnet50/101 = ResNet(Bottleneck,
+[3,4,6,3]/[3,4,23,3]) -- the depths of He et al. Table 1. State-dict keys and
+shapes match torchvision's implementations exactly (verified tensor-for-tensor),
+which is what lets torchvision's ImageNet checkpoints load directly. For CIFAR
+(32x32) the 7x7/stride-2 stem conv is replaced by a 3x3/stride-1 conv downstream
+(model_factory.adapt_resnet_for_small_images). NOTE: the stride-2 maxpool is
+KEPT, unlike the full CIFAR-ResNet convention which also drops it, so final
+feature maps are 2x2 rather than 4x4. This matches the code that produced the
+paper's numbers; changing it would change every comparison against them.
+
+The optional DyReLU arguments (Chen et al. 2020, arXiv 2003.10027, via
+dyrelu_adapter) are off by default and unused in the static pipeline.
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

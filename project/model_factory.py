@@ -87,6 +87,17 @@ def _reject_dyrelu(checkpoint, dyrelu_en, dyrelu_phasing_en):
 
 
 MODELS = {
+    # Architecture sources:
+    #   ResNet      He et al., CVPR 2016, arXiv 1512.03385 (models/resnet.py)
+    #   VGG         Simonyan & Zisserman, ICLR 2015, arXiv 1409.1556 (models/vgg.py)
+    #   ViT         Dosovitskiy et al., ICLR 2021, arXiv 2010.11929. The
+    #               Tiny/Small widths come from DeiT (Touvron et al. 2021,
+    #               arXiv 2012.12877); the WinKawaks checkpoints are timm
+    #               conversions whose training recipe this project has NOT
+    #               verified -- check the model card before citing it
+    #   DistilBERT  Sanh, Debut, Chaumond & Wolf, 2019, arXiv 1910.01108
+    #   RoBERTa     Liu et al., 2019, arXiv 1907.11692
+
     # --- Vision: this project's own backbones (DyReLU-capable) ---
     'resnet34':   ModelSpec(_local_vision(resnet34),   '/dbfs/research/bacp/resnet34_imagenet.pth',  'resnet', 'cv'),
     'resnet50':   ModelSpec(_local_vision(resnet50),   '/dbfs/research/bacp/resnet50_imagenet.pth',  'resnet', 'cv'),

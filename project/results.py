@@ -85,9 +85,15 @@ def _ensure_dirs(root: Path) -> None:
 # --- provenance -----------------------------------------------------------
 
 def _git(*args, cwd=None):
+    # encoding is explicit because git emits UTF-8 while Windows' locale codec
+    # is cp1252: without it, a diff containing any non-cp1252 byte kills the
+    # reader thread and the patch hash silently degrades to None -- a dirty
+    # tree with no patch hash, which is exactly what capture_git exists to
+    # prevent.
     try:
         out = subprocess.run(['git', *args], cwd=str(cwd or repo_root()),
-                             capture_output=True, text=True, timeout=15)
+                             capture_output=True, text=True, timeout=15,
+                             encoding='utf-8', errors='replace')
         return out.stdout.strip() if out.returncode == 0 else None
     except Exception:                                             # noqa: BLE001
         return None

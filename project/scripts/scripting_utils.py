@@ -41,9 +41,9 @@ datasets = [
 
 
 # The parsers are built and parsed in two steps. `build_*_parser()` returns the
-# parser without consuming sys.argv, so project/experiments/runner.py can
+# parser without consuming sys.argv, so project/runner.py can
 # introspect it -- which option strings exist, which are store_true flags -- and
-# construct command lines from the manifest without duplicating the CLI contract
+# construct command lines from cell configs without duplicating the CLI contract
 # in a second place. A duplicated contract is how a sweep ends up silently
 # dropping a flag the script never learned about.
 
@@ -85,7 +85,7 @@ def build_baseline_parser():
                         help="How the global sparsity budget is split across layers. "
                              "'erk' (default) matches RigL/EAST; 'uniform' gives every "
                              "layer the same density and is the floor arm of the "
-                             "manifest's A1-A4 2x2. Only LocalMagnitudePrune reads it.")
+                             "uniform-vs-ERK comparison. Only LocalMagnitudePrune reads it.")
 
     parser.add_argument('--limit_train_batches', type=int, default=0,
                         help="Truncate the train loader to N batches (0 = all). Tier-0 "
@@ -175,7 +175,7 @@ def build_pruning_parser():
                         help="How the global sparsity budget is split across layers. "
                              "'erk' (default) matches RigL/EAST; 'uniform' gives every "
                              "layer the same density and is the floor arm of the "
-                             "manifest's A1-A4 2x2. Only LocalMagnitudePrune reads it.")
+                             "uniform-vs-ERK comparison. Only LocalMagnitudePrune reads it.")
 
     parser.add_argument('--limit_train_batches', type=int, default=0,
                         help="Truncate the train loader to N batches (0 = all). Tier-0 "
@@ -275,7 +275,7 @@ def build_bacp_parser():
     parser.add_argument('--learnable_lambdas',   action='store_true',
                         help="Make the four loss weights learnable parameters.")
 
-    # Distillation controls (manifest rungs C1/C2). Not part of BaCP -- these are
+    # Distillation controls (the KD comparison arms). Not part of BaCP -- these are
     # the arms that make its claim falsifiable, by asking whether ANY dense-teacher
     # signal helps in this regime before asking whether the contrastive one does.
     parser.add_argument('--distill_mode',   type=str, default='none',
@@ -324,7 +324,7 @@ def build_bacp_parser():
                         help="How the global sparsity budget is split across layers. "
                              "'erk' (default) matches RigL/EAST; 'uniform' gives every "
                              "layer the same density and is the floor arm of the "
-                             "manifest's A1-A4 2x2. Only LocalMagnitudePrune reads it.")
+                             "uniform-vs-ERK comparison. Only LocalMagnitudePrune reads it.")
 
     parser.add_argument('--limit_train_batches', type=int, default=0,
                         help="Truncate the train loader to N batches (0 = all). Tier-0 "

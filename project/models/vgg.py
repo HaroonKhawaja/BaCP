@@ -1,3 +1,14 @@
+"""VGG (Simonyan & Zisserman, "Very Deep Convolutional Networks for
+Large-Scale Image Recognition", ICLR 2015, arXiv 1409.1556).
+
+vgg11/vgg19 are configurations A and E of their Table 1. State-dict keys match
+torchvision's VGG exactly, so torchvision's ImageNet checkpoints load directly.
+The three-layer classifier MLP (2x 4096 + output) is part of the architecture;
+after the task head swap only its final layer is replaced, and the two 4096
+Linears remain backbone weights in the prunable scope (see pruning_factory,
+defect M2).
+"""
+
 import torch.nn as nn
 import torch
 from typing import Any, cast, Optional, Union

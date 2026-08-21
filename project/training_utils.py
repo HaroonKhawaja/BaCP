@@ -792,7 +792,7 @@ def _finalize_run(args, metrics, phase=None, experiment_group=None):
     # script afterwards -- so every BaCP cell wrote two identical 'finetune'
     # records and paid for a second full evaluation. At tier 1 that is 65
     # redundant test-set passes. The duplicate was invisible in the table because
-    # load_ladder keeps the newest record per cell.
+    # readers keep the newest record per cell.
     seen = getattr(args, '_finalized_phases', None)
     if seen is None:
         seen = set()

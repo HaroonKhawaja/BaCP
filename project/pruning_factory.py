@@ -278,6 +278,13 @@ class BasePruner(ABC):
 
 
     def step(self, current_idx, optimizer=None):
+        # 'cubic' is the gradual pruning schedule of Zhu & Gupta,
+        # "To prune, or not to prune" (2017, arXiv 1710.01878), Eq. 1 with
+        # initial sparsity s_i = 0 and start step t_0 = 0:
+        #     s_t = s_f * (1 - (1 - t/T)^3)
+        # Sparsity rises fast while the network is redundant and flattens as it
+        # approaches the target; the final (final_idx - end_idx) steps hold the
+        # mask fixed, which is their recovery period.
         t = current_idx + 1
         T = self.end_idx
         s_final = self.target_sparsity
@@ -339,6 +346,17 @@ class BasePruner(ABC):
 
 
 class GlobalMagnitudePruner(BasePruner):
+    """Iterative magnitude pruning with a single global threshold.
+
+    Score is |W| (Han, Pool, Tran & Dally, "Learning both Weights and
+    Connections for Efficient Neural Networks", NeurIPS 2015,
+    arXiv 1506.02626); the smallest-magnitude weights across ALL prunable
+    layers are cut together. Applied gradually along the cubic schedule of
+    BasePruner.step (Zhu & Gupta 2017) rather than one-shot, i.e. the
+    prune-retrain iteration Han et al. Sec. 3.3 report is what recovers
+    accuracy.
+    """
+
     def update_masks(self, epoch):
         if self.current_sparsity == 0: return
 
@@ -373,12 +391,14 @@ class LocalMagnitudePrune(BasePruner):
       'uniform' -- every layer at the same density, 1 - target_sparsity. This is
                    the honest floor, and it is required to disentangle "ERK helps"
                    from "ERK protects the small classifier layer": the two are
-                   confounded in a single rung, because under ERK the classifier's
+                   confounded in a single experiment, because under ERK the classifier's
                    ER mass is large relative to its parameter count and it ends up
                    near-dense whether or not it is nominally in the prunable scope.
 
-    See project/experiments/manifest.py rungs A1-A4, which run these as a 2x2
-    against prune_task_head for exactly that reason.
+    References: magnitude criterion Han et al. 2015 (arXiv 1506.02626); ERK
+    allocation Evci et al. 2020, "Rigging the Lottery" (arXiv 1911.11134),
+    which scales the Erdos-Renyi scheme of Mocanu et al. 2018 (Nature
+    Communications 9:2383) by kernel dimensions.
     """
 
     # BasePruner takes its settings as **kwargs. The old signature accepted
@@ -416,7 +436,22 @@ class LocalMagnitudePrune(BasePruner):
 
 
 class SNIPPruner(BasePruner):
-    """Prunes based on Connection Sensitivity (Weight * Gradient)."""
+    """Prunes by connection sensitivity |W * dL/dW|, applied iteratively.
+
+    The score is SNIP's connection sensitivity (Lee, Ajanthan & Torr,
+    "SNIP: Single-shot Network Pruning based on Connection Sensitivity",
+    ICLR 2019, arXiv 1810.02340): |g_j(w; D)| = |w_j * dL/dw_j|, their Eq. 6
+    with the normalization constant dropped (it cancels under a global
+    threshold).
+
+    APPLIED ITERATIVELY, NOT SINGLE-SHOT. Lee et al. prune once at
+    initialization; here the criterion is re-evaluated every delta_T steps at
+    a growing sparsity along the cubic schedule, from a pretrained model.
+    That iterative re-application is SNIP-it (Verdenius, Stol & Forre,
+    "Pruning via Iterative Ranking of Sensitivity Statistics", 2020,
+    arXiv 2006.00896), and "SNIP-it" is what the paper's tables call this
+    baseline.
+    """
 
     def update_masks(self, epoch):
         if self.current_sparsity == 0: return
@@ -437,14 +472,24 @@ class SNIPPruner(BasePruner):
         if k == 0: return
         threshold = torch.kthvalue(global_scores, k).values.item()
 
-        # Updating masks
+        # Updating masks. Skip params that had no gradient this step -- they
+        # were skipped when scoring too, and indexing all_scores for them was
+        # a KeyError (any prunable layer an epoch's forward never touched).
         for name, param in self.prunable_params.items():
+            if name not in all_scores:
+                continue
             score = all_scores[name]
             self.masks[name] = (score > threshold).float()
 
 
 class WandaPruner(BasePruner):
     """Weight-and-activation pruning (Sun et al. 2023, arXiv 2306.11695).
+
+    NOTE on extreme sparsity with group='output': every output row keeps at
+    least one weight, so a layer cannot exceed (fan_in - 1)/fan_in sparsity.
+    A 3x3x3 stem conv (fan_in 27) caps at 0.963 -- above a 0.95 target, below
+    0.97/0.99. The record's sparsity_reported carries the achieved value,
+    which must be quoted alongside the nominal target.
 
     Importance of weight W[i,j] is
 
@@ -688,6 +733,19 @@ class WandaPruner(BasePruner):
 
 
 class RigLPruner(BasePruner):
+    """Dynamic sparse training: drop-and-regrow (Evci et al. 2020).
+
+    Reference: Evci, Gale, Menick, Castro & Elsen, "Rigging the Lottery:
+    Making All Tickets Winners", ICML 2020, arXiv 1911.11134. Magnitude drop
+    + gradient-magnitude regrow at a cosine-decayed update fraction, ERK
+    layer allocation.
+
+    NOT part of the static pipeline. Retained as a tested reference
+    implementation only; the paper's comparisons use magnitude / SNIP-it /
+    WANDA (static) and cite RigL's published numbers rather than re-running
+    it.
+    """
+
     def __init__(self, model, total_epochs, target_sparsity, alpha=0.3, **kwargs):
         super(RigLPruner, self).__init__(model, total_epochs, target_sparsity, **kwargs)
         self.alpha = alpha
@@ -738,6 +796,17 @@ class RigLPruner(BasePruner):
                 
            
 class EASTPruner(BasePruner):
+    """Dynamic sparse training with cyclic sparsity (EAST, Li et al.).
+
+    Reference: Li, Durrant, Markovic, Huang, Kundu, Chen, Yin & Leontidis,
+    "Pushing the Limits of Sparsity: A Bag of Tricks for Extreme Pruning",
+    TMLR 2025, arXiv 2411.13545. Cyclic sparsity oscillation on top of a
+    RigL-style drop-and-regrow.
+
+    NOT part of the static pipeline. Retained as a tested reference
+    implementation only; EAST's published numbers are cited, not re-run.
+    """
+
     def __init__(self, model, total_epochs, target_sparsity, **kwargs):
         super(EASTPruner, self).__init__(model, total_epochs, target_sparsity, **kwargs)
         self.s_max = target_sparsity
@@ -790,7 +859,7 @@ class EASTPruner(BasePruner):
             #
             # Anchored at s_max instead: the cycle starts and ends at s_max and
             # dips to s_min at the half-cycle, which is the exploration behaviour
-            # EAST describes (Li et al. 2024, arXiv 2411.13545).
+            # EAST describes (Li et al., TMLR 2025, arXiv 2411.13545).
             norm_t = current_idx / self.Tc
             s_min = self.s_min
             s_target = self.s_max - (self.s_max - s_min) * 0.5 * (1 - math.cos(2 * math.pi * norm_t))

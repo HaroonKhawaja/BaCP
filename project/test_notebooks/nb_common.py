@@ -50,12 +50,34 @@ def find_repo():
 
 REPO = find_repo()
 
-for _p in (REPO / 'project',
-           REPO / 'project' / 'experiments',
-           REPO / 'project' / 'scripts',
-           REPO / 'project' / 'notebooks'):
+for _p in (REPO / 'project', REPO / 'project' / 'scripts'):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
+
+
+# --- parsing training output ------------------------------------------------
+
+# Matches "Epoch [3/50]" and the prefixed variants "Recovery Epoch [1/10]" /
+# "Fine-tuning Epoch [2/50]" that trainer.py and bacp.py print each epoch.
+_EPOCH = re.compile(r'Epoch \[(\d+)/(\d+)\]')
+
+
+def _field(name, line):
+    """Pull 'name: <number>' out of a log line, or None.
+
+    \\b keeps 'loss:' from matching inside 'val_loss:' (underscore is a word
+    char, so there is no boundary there), and IGNORECASE lets the same name
+    hit both trainer formats: 'loss:'/'accuracy:' from Trainer and
+    'Total Loss:'/'Training Accuracy:' from BaCPTrainer.
+    """
+    m = re.search(rf'\b{name}: (nan|-?[0-9.]+(?:[eE][-+]?\d+)?)', line,
+                  re.IGNORECASE)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return float('nan')
 
 
 def on_databricks():
@@ -410,7 +432,6 @@ def run(cell, gpu=0):
     Ctrl-C / interrupt kills the training subprocess cleanly.
     """
     import runner as R
-    from ladder_nb import _EPOCH, _field
 
     if cell['key'] in R.completed_keys():
         print(f"SKIP {cell['key']} -- already recorded. "
@@ -489,6 +510,16 @@ def run(cell, gpu=0):
         print(f"!! exited 0 but wrote no record -- check "
               f"results/logs/{cell['key']}.log")
     else:
+        # A failure is a row, on this path too: without the record, a crashed
+        # run is indistinguishable from one that was never scheduled.
+        try:
+            from results import record_failure
+            tail = _log_path(cell['key']).read_text(encoding='utf-8',
+                                                    errors='replace')[-4000:]
+            record_failure(cell, returncode=proc.returncode, log_tail=tail,
+                           experiment_group=cell['key'])
+        except Exception as exc:                                   # noqa: BLE001
+            print(f'(could not write the failure record: {exc})')
         print(f"FAILED rc={proc.returncode} -- see "
               f"results/logs/{cell['key']}.log")
     return hist, first_nan

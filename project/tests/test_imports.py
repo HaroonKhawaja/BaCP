@@ -36,6 +36,8 @@ MODULES = [
     "loss_functions",
     "model_factory",
     "pruning_factory",
+    "results",
+    "runner",
     "trainer",
     "training_utils",
     "utils",

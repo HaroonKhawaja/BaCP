@@ -147,8 +147,26 @@ def test_load_weights_partial_load_reports_key_counts(tmp_path, tiny_wrapper, ca
 
     assert load_weights(tiny_wrapper, str(path)) is True
     out = capsys.readouterr().out
-    assert "Partial load successful" in out
-    assert "Missing keys" in out
+    assert "Partial load" in out
+    assert "tensors loaded" in out and "missing" in out
+    assert "accepted" in out
+
+
+def test_load_weights_rejects_a_barely_matching_checkpoint(tmp_path, tiny_wrapper, capsys):
+    """A checkpoint that matches almost nothing must NOT count as loaded.
+
+    strict=False tolerates any number of missing keys, so an unguarded True
+    here recorded init_source='imagenet_checkpoint' on an effectively random
+    model. Below half the model's tensors, load_weights now returns False.
+    """
+    one_key = next(iter(tiny_wrapper.state_dict()))
+    state = {one_key: tiny_wrapper.state_dict()[one_key]}
+    path = tmp_path / "nearly_empty.pt"
+    torch.save(state, path)
+
+    assert load_weights(tiny_wrapper, str(path)) is False
+    out = capsys.readouterr().out
+    assert "REJECTED" in out
 
 
 # --- Documented constraint ----------------------------------------------

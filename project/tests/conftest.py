@@ -21,12 +21,6 @@ PROJECT = Path(__file__).resolve().parents[1]
 if str(PROJECT) not in sys.path:
     sys.path.insert(0, str(PROJECT))
 
-# project/experiments/ holds manifest.py, runner.py and ladder.py, which the
-# ladder and manifest tests import by bare name the same way run_ladder.py does.
-_EXPERIMENTS = PROJECT / 'experiments'
-if _EXPERIMENTS.is_dir() and str(_EXPERIMENTS) not in sys.path:
-    sys.path.insert(0, str(_EXPERIMENTS))
-
 # MPLBACKEND is required, not cosmetic: pruning_factory.py imports
 # matplotlib.pyplot at module scope, and check_sparsity_distribution calls
 # plt.show(). Without Agg, importing the pruner can block or fail headless.

@@ -29,17 +29,14 @@ def cap_contrastive_loss(z_anchor, z_cand, pos_mask, tau, eps=1e-8):
     mean over 2B anchors by ~2x, silently halving the effective lambda on every
     contrastive term.
 
-    ONE FUNCTIONAL, CALLED TWICE. CAP composes an unsupervised and a supervised
-    term as the same loss under two different definitions of P(i), sharing one
-    denominator. Summing two separately-normalized losses instead is not
-    equivalent: SupCon's positive set already contains the paired view (same label
-    by construction), so NT-Xent's single positive is a strict subset of it --
-    SupCon reduces to NT-Xent at |P(i)| = 1 (Khosla et al. 2020, sec. 3). Adding
-    NT-Xent therefore re-weights an existing signal and inverts the treatment of
-    every other same-class sample: SupCon pulls such a pair with weight
-    1/|P(i)| ~ 1/102 at batch 512 on CIFAR-10, while NT-Xent's single-target
-    cross-entropy pushes it apart at full softmax weight. The push wins by roughly
-    two orders of magnitude.
+    ONE FUNCTIONAL, CALLED TWICE. CAP composes the unsupervised and supervised
+    terms as the same loss under two definitions of P(i), and because the
+    denominator is a function of the logits alone, both calls normalize over
+    the identical candidate set. The material difference from the legacy
+    SupCon+NTXent sum is the anchor set, not the normalizer: the legacy pair
+    anchors on all 2B rows of a square 2Bx2B matrix, so each contrastive
+    term's mean runs over twice the anchors -- silently halving the effective
+    lambda on every contrastive term relative to the equations as written.
 
     Anchors with no positives are EXCLUDED, not divided by a clamped 1. With
     in-batch candidates every anchor has a positive, so this cannot currently
@@ -106,6 +103,25 @@ class CAPContrastiveLoss(nn.Module):
 
 
 class SupConLoss(nn.Module):
+    """Supervised contrastive loss, L_out form (Khosla et al. 2020, Eq. 2).
+
+    Reference: Khosla et al., "Supervised Contrastive Learning", NeurIPS 2020,
+    arXiv 2004.11362. P(i) = every other view in the batch sharing anchor i's
+    label; denominator over A(i) = all-except-self; positives weighted
+    1/|P(i)|; the mean over log-probabilities sits OUTSIDE the log (their
+    L_out, which the paper argues outperforms L_in).
+
+    Known deviations from their Eq. 2, deliberate and pinned by tests
+    (test_losses.py):
+      - the (temp / base_temp) scale factor is dropped; base_temp is stored
+        and unused (test_supcon_base_temp_is_currently_unused);
+      - an anchor with no positive is DILUTED via clamp(min=1.0) rather than
+        excluded (the CAP path above excludes instead);
+      - an eps inside log(denom + eps), absent from the paper.
+
+    Kept for `contrastive_mode='legacy'`; the CAP path above is the default.
+    """
+
     def __init__(self, temp, base_temp, device, n_views=2, eps=1e-8):
         super(SupConLoss, self).__init__()
         self.temp = temp
@@ -140,12 +156,24 @@ class SupConLoss(nn.Module):
         return loss
     
 class NTXentLoss(nn.Module):
+    """NT-Xent, the SimCLR objective (Chen et al. 2020, Eq. 1).
+
+    Reference: Chen, Kornblith, Norouzi & Hinton, "A Simple Framework for
+    Contrastive Learning of Visual Representations", ICML 2020,
+    arXiv 2002.05709. For 2B views the positive of view i is its augmented
+    counterpart i+B (mod 2B); every other non-self view is a negative, and
+    self-similarity is masked to -inf before the softmax, matching their
+    1[k != i] indicator.
+
+    Kept for `contrastive_mode='legacy'`; the CAP path above is the default.
+    """
+
     def __init__(self, temp, device, n_views=2, eps=1e-8):
         super(NTXentLoss, self).__init__()
         self.temp = temp
         self.device = device
         self.n_views = n_views
-        self.eps = 1e-8
+        self.eps = eps
 
     def forward(self, z1, z2):
         z = torch.cat([z1, z2], dim=0)
@@ -212,7 +240,7 @@ def kd_kl_loss(student_logits, teacher_logits, T=4.0):
     the soft-target gradients scale as 1/T^2 and multiply by T^2 so that the
     relative contribution of the soft and hard targets stays roughly unchanged as
     T varies. Without it, raising the temperature quietly turns the term off --
-    which would surface in the ladder as "KD does nothing", indistinguishable from
+    which would surface in the results as "KD does nothing", indistinguishable from
     a real null. Note the 1/T^2 relation is a HIGH-TEMPERATURE approximation (the
     exact gradient is (1/T)(q_i - p_i), Eq. 2); T^2 is a balancing heuristic, not
     an exact normaliser, and the paper should not claim otherwise.

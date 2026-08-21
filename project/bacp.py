@@ -1,3 +1,25 @@
+"""BaCP: Backbone Contrastive Pruning -- the contrastive pruning trainer.
+
+The module decomposition (PrC, SnC, FiC) and the four-term objective
+
+    L = l1*L_PrC + l2*L_FiC + l3*L_SnC + l4*L_CE
+
+(sum(l_i) = 1 by convention: the 0.25 defaults satisfy it, and user-supplied
+lambdas are used as given, not renormalized)
+
+follow CAP: Xu, Luo, Wang, Chang, Huang, Huang & Huang, "From Dense to Sparse:
+Contrastive Pruning for Better Pre-trained Language Model Compression",
+AAAI 2022 (vol. 36, pp. 11547-11555), arXiv 2112.07198. CAP defines the three
+teachers -- PrC contrasts against the frozen pretrained model, SnC against
+saved sparse snapshots, FiC against the fine-tuned model -- and BaCP applies
+that decomposition to vision backbones. The decomposition itself is CAP's
+contribution, not this project's.
+
+The contrastive functional is cap_contrastive_loss (loss_functions.py), CAP
+Eq. 1. Pruning is delegated to pruning_factory; each criterion carries its own
+citation there.
+"""
+
 import os
 import torch
 import torch.nn as nn
@@ -94,7 +116,7 @@ class BaCPTrainingArguments:
     # Distillation controls. These are NOT part of BaCP; they are the arms that
     # make BaCP's claim falsifiable. 'kl' is Hinton response distillation on the
     # fine-tuned dense teacher's logits, 'feature' is FitNets-style matching on
-    # its embeddings, 'both' runs the two together. See manifest rungs C1/C2 --
+    # its embeddings, 'both' runs the two together. They exist because
     # without them the evidence supports "a dense teacher helps", which is a
     # weaker and different claim than the paper makes.
     #
@@ -165,8 +187,8 @@ class BaCPTrainingArguments:
         # A distillation arm that is silently off is worse than one that crashes:
         # results.canonical_method names the run 'kd_<mode>+<pruner>' from
         # distill_mode alone, so the record would claim a KD arm while the
-        # objective contained no KD term at all, and the ladder would score that
-        # null as a real teacher effect.
+        # objective contained no KD term at all, and the results table would score
+        # that null as a real teacher effect.
         _mode = getattr(self, 'distill_mode', 'none')
         if _mode not in (None, 'none') and not getattr(self, 'lambda_kd', 0.0):
             raise ValueError(
@@ -740,8 +762,8 @@ class BaCPTrainer:
         (which isolates view count) would no longer be clean.
 
         The extra forward pass is charged only when distillation is on. Stage C's
-        FLOP matching is maintained by `_combine_losses` keeping the PrC/FiC
-        teacher forwards running on every rung regardless of lambda, so the
+        FLOP matching is maintained by _run_train_epoch running the PrC/FiC
+        teacher forwards unconditionally regardless of lambda, so the
         rung-to-rung difference is one teacher pass either way.
         """
         if self.distill_mode in (None, 'none') or not self.lambda_kd:
