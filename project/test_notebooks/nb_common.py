@@ -10,9 +10,12 @@ five things, so they live here once:
     run() / run_group()      run it, streaming every epoch into the cell
     results_table()          our numbers next to the paper's published ones
 
-Protocols come from the original paper (Paper/BaCP__Appendix.pdf, Tables 1-3):
-static pruning at 0.95 / 0.97 / 0.99 from a PRETRAINED model, 5 pruning epochs
-+ 10 recovery epochs, then finetune. Nothing here touches the experiment code.
+Protocols come from the original paper (Paper/BaCP__Appendix.pdf, Tables 1-3)
+with ONE declared deviation: the pruning regime is modernized to the standard
+gradual schedule (total epochs + prune every delta_T steps, cubic ramp to 80%,
+final 20% recovery) -- see the TRAINING REGIME note below. Static pruning at
+0.95 / 0.97 / 0.99 from a PRETRAINED model. Nothing here touches the
+experiment code.
 
 This file lives under test_notebooks/, which results.code_fingerprint excludes,
 so editing it never invalidates a run record.
@@ -135,9 +138,23 @@ def setup(quiet=False):
 #   prune  I.P.: iterative prune + recovery                  (pruning_script)
 #   bacp   contrastive pruning + AdamW finetune              (bacp_script)
 #
-# Pruning is step-driven: a mask update every delta_T optimizer steps over the
-# first 80% of the pruning phase. delta_T=100 ~ one epoch at batch 512 on
-# CIFAR-10, which matches the paper's "prune once at the start of each epoch".
+# TRAINING REGIME (deliberately modernized -- a declared deviation from the
+# appendix's "5 epochs + 10 recovery", whose code interleaved a 10-epoch
+# recovery block after EVERY pruning epoch, a shape no current literature
+# uses). The standard gradual-pruning regime (Zhu & Gupta 2017,
+# arXiv 1710.01878; Gale, Elsen & Hooker 2019, arXiv 1902.09574) is one
+# continuous run:
+#
+#   epochs           total epoch budget for the pruning phase
+#   delta_T          prune every delta_T optimizer steps (~1 epoch here)
+#   cubic ramp       sparsity rises to the target over the FIRST 80% of
+#                    training (BasePruner: end_idx = 0.8 * total_steps)
+#   final 20%        recovery: mask fixed at the target, training continues
+#   recovery_epochs  0 -- the interleaved per-epoch recovery is disabled;
+#                    recovery is the schedule's built-in tail instead
+#
+# delta_T is set to ~one epoch of optimizer steps per family:
+#   resnet/vgg  45,000/512 ~ 88    vit  45,000/256 ~ 176    llm  67,349/64 ~ 1052
 
 _CV_BASE = dict(model_type='cv', dataset_name='cifar10', num_classes=10,
                 image_size=32, batch_size=512, num_workers=8)
@@ -145,11 +162,11 @@ _CV_BASE = dict(model_type='cv', dataset_name='cifar10', num_classes=10,
 _CNN_DENSE = dict(optimizer_type='sgd', learning_rate=0.01,
                   scheduler_type='linear_with_warmup', epochs=100, patience=20)
 _CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
-                  epochs=5, recovery_epochs=10,
-                  sparsity_scheduler='cubic', delta_T=100)
+                  epochs=60, recovery_epochs=0,
+                  sparsity_scheduler='cubic', delta_T=88)
 _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
-                 epochs=5, recovery_epochs=10,
-                 sparsity_scheduler='cubic', delta_T=100,
+                 epochs=60, recovery_epochs=0,
+                 sparsity_scheduler='cubic', delta_T=88,
                  tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
                  enable_finetune=True, optimizer_type_ft='adamw',
                  learning_rate_ft=1e-4, epochs_ft=50)
@@ -177,12 +194,12 @@ FAMILIES = {
     # BaCP's contrastive phase SGD 0.01 (appendix B.5 note).
     'vit-tiny': dict(base=_VIT_BASE, dense=_CNN_DENSE,
                      prune=dict(_CNN_PRUNE, optimizer_type='adamw',
-                                learning_rate=1e-3),
-                     bacp=dict(_CNN_BACP, learning_rate=0.01)),
+                                learning_rate=1e-3, delta_T=176),
+                     bacp=dict(_CNN_BACP, learning_rate=0.01, delta_T=176)),
     'vit-small': dict(base=_VIT_BASE, dense=_CNN_DENSE,
                       prune=dict(_CNN_PRUNE, optimizer_type='adamw',
-                                 learning_rate=1e-3),
-                      bacp=dict(_CNN_BACP, learning_rate=0.01)),
+                                 learning_rate=1e-3, delta_T=176),
+                      bacp=dict(_CNN_BACP, learning_rate=0.01, delta_T=176)),
     # LLMs on SST-2. Dense finetune AdamW 2e-5; I.P. AdamW 5e-5; BaCP's
     # contrastive LR from appendix Table 3 (DistilBERT 5e-5, RoBERTa 1e-5),
     # finetune AdamW 1e-4. GLUE's test split is unlabelled, so the reported
@@ -192,11 +209,11 @@ FAMILIES = {
         dense=dict(optimizer_type='adamw', learning_rate=2e-5,
                    scheduler_type='linear_with_warmup', epochs=5),
         prune=dict(optimizer_type='adamw', learning_rate=5e-5,
-                   epochs=5, recovery_epochs=10,
-                   sparsity_scheduler='cubic', delta_T=100),
+                   epochs=15, recovery_epochs=0,
+                   sparsity_scheduler='cubic', delta_T=1052),
         bacp=dict(optimizer_type='adamw', learning_rate=5e-5,
-                  epochs=5, recovery_epochs=10,
-                  sparsity_scheduler='cubic', delta_T=100,
+                  epochs=15, recovery_epochs=0,
+                  sparsity_scheduler='cubic', delta_T=1052,
                   tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
                   enable_finetune=True, optimizer_type_ft='adamw',
                   learning_rate_ft=1e-4, epochs_ft=10)),
@@ -205,11 +222,11 @@ FAMILIES = {
         dense=dict(optimizer_type='adamw', learning_rate=2e-5,
                    scheduler_type='linear_with_warmup', epochs=5),
         prune=dict(optimizer_type='adamw', learning_rate=5e-5,
-                   epochs=5, recovery_epochs=10,
-                   sparsity_scheduler='cubic', delta_T=100),
+                   epochs=15, recovery_epochs=0,
+                   sparsity_scheduler='cubic', delta_T=1052),
         bacp=dict(optimizer_type='adamw', learning_rate=1e-5,
-                  epochs=5, recovery_epochs=10,
-                  sparsity_scheduler='cubic', delta_T=100,
+                  epochs=15, recovery_epochs=0,
+                  sparsity_scheduler='cubic', delta_T=1052,
                   tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
                   enable_finetune=True, optimizer_type_ft='adamw',
                   learning_rate_ft=1e-4, epochs_ft=10)),

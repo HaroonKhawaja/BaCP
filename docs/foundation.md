@@ -94,8 +94,14 @@ re-applied after every optimizer step.
 $$s_t = s_f\left(1 - \left(1 - \tfrac{t}{T}\right)^3\right)$$
 
 Zhu & Gupta 2017, arXiv 1710.01878, Eq. 1 with $s_i = 0$, $t_0 = 0$. A mask
-update fires every `delta_T` steps over the first 80% of the phase; the final
-20% holds the mask fixed (recovery).
+update fires every `delta_T` steps (~one epoch: 88 CV / 176 ViT / 1052 LLM)
+over the first 80% of the phase; the final 20% holds the mask fixed
+(recovery), the ramp-then-recover proportion of Gale, Elsen & Hooker 2019
+(arXiv 1902.09574). Budgets: 60 total epochs (CV/ViT), 15 (LLM), with
+`recovery_epochs = 0` — the trainer's legacy interleaved per-epoch recovery
+is disabled as a **declared deviation** from the appendix's "5 + 10"
+protocol, whose implementation re-ran a 10-epoch recovery block after every
+pruning epoch.
 
 **Criteria** (score → global or per-layer threshold):
 
