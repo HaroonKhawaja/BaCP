@@ -177,6 +177,7 @@ class BaCPTrainingArguments:
     # Train/val split seed, deliberately separate from `seed`. See
     # dataset_factory.load_cv_datasets for why the split must not track the run seed.
     val_split_seed:         int = 1234
+    val_split:              float = 0.10
     # torch.use_deterministic_algorithms. Off by default: it hard-errors on ops with
     # no deterministic kernel and costs throughput. Recorded either way.
     deterministic:          bool = False

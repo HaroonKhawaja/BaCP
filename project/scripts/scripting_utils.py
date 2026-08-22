@@ -124,6 +124,12 @@ def build_baseline_parser():
     parser.add_argument('--val_split_seed',      type=int,       default=1234,
                         help="Train/val split seed, held fixed across runs so a 3-seed "
                              "error bar measures init and data-order variance only.")
+    parser.add_argument('--val_split',           type=float,     default=0.10,
+                        help="Validation fraction held out of the train split. 0.10 "
+                             "gives CIFAR-10's published 45,000/5,000. Set 0 to train "
+                             "on all 50,000 and build no validation loader, which is "
+                             "what runs made before the split reached contrastive "
+                             "recipes did.")
     parser.add_argument('--deterministic',       action='store_true',
                         help="torch.use_deterministic_algorithms(True). Slower and errors "
                              "on ops lacking deterministic kernels; recorded either way.")
@@ -228,6 +234,12 @@ def build_pruning_parser():
     parser.add_argument('--val_split_seed',      type=int,       default=1234,
                         help="Train/val split seed, held fixed across runs so a 3-seed "
                              "error bar measures init and data-order variance only.")
+    parser.add_argument('--val_split',           type=float,     default=0.10,
+                        help="Validation fraction held out of the train split. 0.10 "
+                             "gives CIFAR-10's published 45,000/5,000. Set 0 to train "
+                             "on all 50,000 and build no validation loader, which is "
+                             "what runs made before the split reached contrastive "
+                             "recipes did.")
     parser.add_argument('--deterministic',       action='store_true',
                         help="torch.use_deterministic_algorithms(True). Slower and errors "
                              "on ops lacking deterministic kernels; recorded either way.")
@@ -377,6 +389,12 @@ def build_bacp_parser():
     parser.add_argument('--val_split_seed',      type=int,       default=1234,
                         help="Train/val split seed, held fixed across runs so a 3-seed "
                              "error bar measures init and data-order variance only.")
+    parser.add_argument('--val_split',           type=float,     default=0.10,
+                        help="Validation fraction held out of the train split. 0.10 "
+                             "gives CIFAR-10's published 45,000/5,000. Set 0 to train "
+                             "on all 50,000 and build no validation loader, which is "
+                             "what runs made before the split reached contrastive "
+                             "recipes did.")
     parser.add_argument('--deterministic',       action='store_true',
                         help="torch.use_deterministic_algorithms(True). Slower and errors "
                              "on ops lacking deterministic kernels; recorded either way.")

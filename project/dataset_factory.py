@@ -313,6 +313,7 @@ def load_cv_datasets(
     n_views:        int,
     cache_dir:      str = './cache',
     val_split_seed: int = VAL_SPLIT_SEED,
+    val_split:      float = 0.10,
     ):
 
     # Creating datasets
@@ -334,10 +335,13 @@ def load_cv_datasets(
     # 0.10, not 0.20: 45,000 train / 5,000 val is the published CIFAR-10
     # convention -- GraNet (Liu et al., NeurIPS 2021, arXiv 2106.10404) trains
     # on 45,000, and docs/citations.md records that as verified.
-    if t_type in ('supervised', 'contrastive'):
+    # val_split=0 trains on the whole set and builds no validation loader --
+    # needed to reproduce runs made before the split applied to contrastive
+    # recipes, so an old result stays comparable to a new one.
+    if t_type in ('supervised', 'contrastive') and val_split > 0:
         # Creating validation split
         train_size = len(trainset)
-        val_size = int(0.10 * train_size)
+        val_size = int(val_split * train_size)
         train_size = train_size - val_size
 
         # Seeded, and deliberately NOT from args.seed. Two reasons:
@@ -377,10 +381,12 @@ def load_cv_dataloaders(
     num_workers:    int,
     cache_dir:      str = './cache',
     val_split_seed: int = VAL_SPLIT_SEED,
+    val_split:      float = 0.10,
     seed:           int = 0,
     ):
     try:
         datasets = load_cv_datasets(dataset_name, t_type, size, n_views, cache_dir,
+                                    val_split=val_split,
                                     val_split_seed=val_split_seed)
 
         # Creating dataloaders. drop_last differs by split, which is not incidental:
@@ -602,6 +608,7 @@ def get_dataloaders(args, supervised_override=False):
             num_workers=args.num_workers,
             cache_dir=args.cache_dir,
             val_split_seed=getattr(args, 'val_split_seed', VAL_SPLIT_SEED),
+            val_split=getattr(args, 'val_split', 0.10),
             seed=getattr(args, 'seed', 0),
             )
 

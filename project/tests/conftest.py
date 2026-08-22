@@ -241,7 +241,7 @@ def _base_arg_dict(is_bacp=False, **overrides):
         # limit here would mean the loop tests exercise _LimitedLoader instead of
         # the real loader, which is the opposite of what they are for.
         limit_train_batches=0, limit_eval_batches=0,
-        seed=0, val_split_seed=1234, deterministic=False,
+        seed=0, val_split_seed=1234, val_split=0.10, deterministic=False,
         # -- set by __post_init__ before the helpers run
         scaler=None, device="cpu", retrain=False, is_bacp=is_bacp,
         # -- read by Trainer.__init__ / _optimizer_step / _log_metrics
