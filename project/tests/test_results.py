@@ -43,10 +43,13 @@ def test_capture_git_returns_a_sha_and_dirty_flag():
     g = capture_git()
     assert g["git_sha"] and len(g["git_sha"]) == 40
     assert isinstance(g["git_dirty"], bool)
-    # A dirty tree MUST carry a patch hash: a HEAD sha alone does not identify the
-    # code that ran, and the tree is routinely dirty during active work.
-    if g["git_dirty"]:
-        assert g["git_patch_sha1"], "dirty tree with no patch hash is unreproducible"
+    # A tree with MODIFIED TRACKED files must carry a patch hash: a HEAD sha
+    # alone does not identify the code that ran. Untracked files are excluded
+    # -- `git diff HEAD` cannot represent them, so there is no patch to hash,
+    # and git_untracked records them instead.
+    tracked_dirty = g["git_n_dirty"] - g["git_untracked"]
+    if tracked_dirty > 0:
+        assert g["git_patch_sha1"], "modified tracked files but no patch hash"
 
 
 def test_code_fingerprint_is_stable_and_excludes_tests(tmp_path):

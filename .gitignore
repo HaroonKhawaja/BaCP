@@ -39,3 +39,6 @@ project/scripts/research/
 # Superseded records, archived rather than deleted when a run is re-done.
 results/runs/_superseded/
 results/runs/*.patch
+
+# generated from the run records by nb_common.update_results_csv
+results/results.csv

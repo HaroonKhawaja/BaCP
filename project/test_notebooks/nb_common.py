@@ -129,9 +129,8 @@ def setup(quiet=False):
 
 # --- the protocols, one dict per model --------------------------------------
 #
-# Source: Paper/BaCP__Appendix.pdf Tables 1-3, plus the main paper's Training
-# Protocol paragraph (Section 4.1) and the original sweep scripts
-# (project/scripts/sweep_scripts/), which encode the argv actually used.
+# Source: Paper/BaCP__Appendix.pdf Tables 1-3 and the main paper's Training
+# Protocol paragraph (Section 4.1).
 #
 #   base   keys shared by every phase of that model
 #   dense  the pretrained baseline, finetuned on the task   (baseline_script)

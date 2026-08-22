@@ -47,7 +47,6 @@ MODULES = [
 ]
 
 # Files where an undefined name or an unused local is a real defect rather than
-# scratch code. dataset_utils_old.py is deliberately excluded: nothing imports it.
 HOT_FILES = [
     PROJECT / "bacp.py",
     PROJECT / "dyrelu_adapter.py",

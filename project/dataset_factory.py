@@ -405,8 +405,6 @@ def load_cv_dataloaders(
 
 # --- Text datasets --------------------------------------------------------
 #
-# Salvaged from dataset_utils_old.py, which nothing imported -- so the SST-2 and
-# WikiText-2 halves of the results table had no reachable code path at all.
 
 def _seed_worker(worker_id):
     """Seed `random` and `numpy` inside each DataLoader worker.
