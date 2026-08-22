@@ -272,14 +272,18 @@ FAMILIES = {
                      bacp=_CNN_BACP),
     'resnet101': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
                       bacp=_CNN_BACP),
+    # VGG BaCP runs at 0.05, not 0.1. Both VGGs carry ZERO BatchNorm layers
+    # (ResNet-50 has 53), so they cannot absorb the contrastive phase's high
+    # learning rate. Measured on vgg19 magnitude 0.95, everything else held
+    # identical (60+50 epochs, delta_T 88, val_split 0):
+    #     LR 0.10 -> 89.99      LR 0.05 -> 91.88      I.P. -> 91.02
+    # Gradient clipping stops the divergence but does not make 0.1 the right
+    # step size. vgg11 shares the architecture and the symptom (BaCP at 0.1
+    # sat below its own dense), so it takes the same value.
     'vgg11': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
-                  bacp=_CNN_BACP),
-    # VGG-19 runs the SAME BaCP learning rate as every other CNN (0.1). The
-    # old 0.05 was a workaround for gradient explosion; the cause is now
-    # addressed directly -- bf16 autocast keeps forward activations finite and
-    # gradient clipping bounds the step (training_utils.GRAD_CLIP_NORM).
+                  bacp=dict(_CNN_BACP, learning_rate=0.05)),
     'vgg19': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
-                  bacp=_CNN_BACP),
+                  bacp=dict(_CNN_BACP, learning_rate=0.05)),
     # ViTs: hub weights, 224px inputs, batch 256. I.P. uses AdamW 1e-3 and
     # BaCP's contrastive phase SGD 0.01 (appendix B.5 note).
     'vit-tiny': dict(base=_VIT_BASE, dense=_CNN_DENSE,
