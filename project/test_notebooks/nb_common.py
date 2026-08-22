@@ -465,6 +465,108 @@ def make_cell(model_name, phase, seed=1, pruner=None, sparsity=None,
     }
 
 
+# --- results csv ------------------------------------------------------------
+
+CSV_COLUMNS = ['key', 'model', 'dataset', 'phase', 'pruner', 'sparsity',
+               'seed', 'variant', 'test_acc', 'sparsity_achieved',
+               'contrastive_mode', 'proj_mode', 'tau', 'epochs',
+               'prune_task_head', 'wanda_group', 'ended_at']
+
+
+def _row_from_record(rec):
+    """One CSV row from one run record."""
+    key = rec.get('experiment_group') or ''
+    bits = key.split('.')
+    variant = 'legacy' if key.endswith('.legacy') else ''
+    pruner, sparsity = '', ''
+    for b in bits:
+        if b.startswith('s0.'):
+            sparsity = b[1:]
+    if 'magnitude' in bits: pruner = 'magnitude'
+    elif 'snip' in bits:    pruner = 'snip'
+    elif 'wanda' in bits:   pruner = 'wanda'
+    return {
+        'key': key,
+        'model': rec.get('model_name', ''),
+        'dataset': rec.get('dataset_name', ''),
+        'phase': bits[1] if len(bits) > 1 else '',
+        'pruner': pruner,
+        'sparsity': sparsity,
+        'seed': rec.get('seed', ''),
+        'variant': variant,
+        'test_acc': rec.get('test_acc_pct', ''),
+        'sparsity_achieved': rec.get('sparsity_reported', ''),
+        'contrastive_mode': rec.get('contrastive_mode', ''),
+        'proj_mode': rec.get('proj_mode', ''),
+        'tau': rec.get('tau', ''),
+        'epochs': rec.get('epochs', ''),
+        'prune_task_head': rec.get('prune_task_head', ''),
+        'wanda_group': rec.get('wanda_group', ''),
+        'ended_at': rec.get('ended_at', ''),
+    }
+
+
+def update_results_csv(path=None):
+    """Rewrite results.csv from every run record on disk. Cheap; call it after
+    each run so the file always reflects the truth."""
+    import csv, glob, json, os
+    root = os.environ['BACP_RESULTS_DIR']
+    path = path or os.path.join(root, 'results.csv')
+    rows = []
+    for f in glob.glob(os.path.join(root, 'runs', '*.json')):
+        try:
+            rec = json.load(open(f, encoding='utf-8'))
+        except Exception:                                          # noqa: BLE001
+            continue
+        key = rec.get('experiment_group') or ''
+        if not key or '.smoke' in key:
+            continue
+        rows.append(_row_from_record(rec))
+    rows.sort(key=lambda r: (r['model'], r['phase'], r['pruner'],
+                             str(r['sparsity']), r['variant']))
+    with open(path, 'w', newline='', encoding='utf-8') as fh:
+        w = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+    print(f'results.csv <- {len(rows)} record(s)  [{path}]')
+    return path
+
+
+def verification_table():
+    """legacy vs control BaCP against the shared I.P. baseline."""
+    import glob, json, os
+    root = os.environ['BACP_RESULTS_DIR']
+    by_key = {}
+    for f in glob.glob(os.path.join(root, 'runs', '*.json')):
+        try:
+            rec = json.load(open(f, encoding='utf-8'))
+        except Exception:                                          # noqa: BLE001
+            continue
+        k = rec.get('experiment_group')
+        if k:
+            by_key[k] = rec
+
+    base = 'static.{p}.resnet50.cifar10.s{s}.magnitude.seed1'
+    acc = lambda k: (by_key.get(k) or {}).get('test_acc_pct')
+    fmt = lambda v: ' -  ' if v is None else f'{v:.2f}'
+    print(f'{"sparsity":<9}{"I.P.":>8}{"control":>9}{"legacy":>8}'
+          f'{"d(ctl)":>9}{"d(leg)":>9}{"leg-ctl":>9}')
+    for s in (0.95, 0.97, 0.99):
+        ip  = acc(base.format(p='prune', s=s))
+        ctl = acc(base.format(p='bacp',  s=s))
+        leg = acc(base.format(p='bacp',  s=s) + '.legacy')
+        d_c = None if (ctl is None or ip is None) else ctl - ip
+        d_l = None if (leg is None or ip is None) else leg - ip
+        dd  = None if (leg is None or ctl is None) else leg - ctl
+        sgn = lambda v: ' -  ' if v is None else f'{v:+.2f}'
+        print(f'{s:<9}{fmt(ip):>8}{fmt(ctl):>9}{fmt(leg):>8}'
+              f'{sgn(d_c):>9}{sgn(d_l):>9}{sgn(dd):>9}')
+    print()
+    print('d(ctl), d(leg): each objective\'s gain over the SAME I.P. baseline.')
+    print('leg-ctl > 0  ->  the original objective wins.')
+    update_results_csv()
+
+
 # --- sanity check -----------------------------------------------------------
 
 def sanity_check(cells, control=None):
@@ -661,6 +763,10 @@ def run(cell, gpu=0):
     ok = cell['key'] in R.completed_keys()
     if proc.returncode == 0 and ok:
         print(f"DONE {cell['key']}")
+        try:
+            update_results_csv()
+        except Exception as exc:                                   # noqa: BLE001
+            print(f'(results.csv not updated: {exc})')
     elif proc.returncode == 0:
         print(f"!! exited 0 but wrote no record -- check "
               f"results/logs/{cell['key']}.log")
