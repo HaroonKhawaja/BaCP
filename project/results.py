@@ -524,6 +524,11 @@ class RunRecord:
     seed: int | None = None
     seed_source: str = 'unknown'
     val_split_seed: int | None = None
+    # The validation FRACTION, not just its seed. It became a knob when
+    # runs had to be reproducible across the change that made the split
+    # apply to contrastive recipes, so a record must carry it or two runs
+    # trained on different amounts of data look identical on paper.
+    val_split: float | None = None
 
     # model + data
     model_name: str | None = None
@@ -859,6 +864,7 @@ def _record_run_inner(trainer, metrics, *, phase, experiment_group, status, erro
         code_fingerprint=code_fingerprint(),
         seed=seed, seed_source=seed_source,
         val_split_seed=_cfg(trainer, 'val_split_seed'),
+        val_split=_cfg(trainer, 'val_split'),
         method=canonical_method(trainer),
         pruner=_cfg(trainer, 'pruning_type'),
         is_bacp=_is_bacp(trainer),

@@ -204,9 +204,14 @@ def setup(quiet=False):
 #                    recovery is the schedule's built-in tail instead
 #
 # delta_T is set to ~one epoch of optimizer steps per family:
-#   resnet/vgg  45,000/512 = 87    vit  45,000/256 = 175    llm  67,349/64 = 1052
-# (drop_last=True on the train loader, so these are floor divisions and
-#  delta_T is exactly one epoch for BOTH arms now that they share a split)
+#   resnet/vgg  100  (= 1.15 epochs at 45,000/512 = 87 batches)
+#   vit          175 (= 1.00 epochs at 45,000/256 = 175 batches)
+#   llm         1052 (= 1.00 epochs at 67,349/64; GLUE ships its own splits)
+#
+# 100 rather than the exact 87: Zhu & Gupta tested delta_t between 100 and
+# 1000 training steps and report the impact as negligible, so 100 is the
+# smallest value their result actually covers. 87 would be below anything
+# they measured. Every value above sits inside that verified range.
 
 # num_workers=24: the Standard_NC24ads_A100_v4 node has 24 vCPUs, and one
 # training job owns the box (runs are serialised), so the loaders get all of
@@ -234,7 +239,7 @@ _CNN_DENSE = dict(optimizer_type='sgd', learning_rate=0.01,
 # arms is the contrastive objective -- which is the claim.
 _CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
                   epochs=50, recovery_epochs=0,
-                  sparsity_scheduler='cubic', delta_T=87,
+                  sparsity_scheduler='cubic', delta_T=100, val_split=0.10,
                   prune_task_head=True,
                   # wanda_group='global': the project's original adaptation --
                   # Wanda's metric under the same global-threshold allocation
@@ -243,7 +248,7 @@ _CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
                   wanda_group='global')
 _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
                  epochs=50, recovery_epochs=0,
-                 sparsity_scheduler='cubic', delta_T=87,
+                 sparsity_scheduler='cubic', delta_T=100, val_split=0.10,
                  prune_task_head=True, wanda_group='global',
                  # tau=0.15: measured winner over 0.07 at every sparsity.
                  #

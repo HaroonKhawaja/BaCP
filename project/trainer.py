@@ -413,11 +413,23 @@ class Trainer:
         else:
             hist = self.accuracies
 
+        # With val_split=0 there is no validation loader, so
+        # _run_validation_epoch returns {} and every entry here is None.
+        # Comparing None > None raises, which used to kill the run at epoch 2.
+        # Fall back to the training loss in that case -- the same criterion
+        # BaCPTrainer._save_model uses when it selects on total_losses -- so
+        # the two arms share a selection rule instead of one silently
+        # crashing.
+        scored = [v for v in hist if v is not None]
+        if not scored:
+            hist = [-l for l in self.train_losses]   # lower loss = better
+
         # Logic: Save if first epoch OR if improved over previous best
         improved = False
         if len(hist) <= 1:
             improved = True
-        elif len(hist) > 1 and hist[-1] > max(hist[:-1]):
+        elif len(hist) > 1 and hist[-1] is not None \
+                and hist[-1] > max(v for v in hist[:-1] if v is not None):
             improved = True
 
         if improved:
