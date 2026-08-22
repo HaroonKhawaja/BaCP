@@ -1,0 +1,172 @@
+\appendix
+\section{Full hyperparameters, schedule derivation and reproducibility}
+\label{sec:appendix}
+
+\subsection{Hyperparameters by family}
+
+The framework groups models into three \emph{families}, each with its own base
+configuration and per-phase overrides. Only the convolutional family is inside
+this paper's grid; the vision-transformer and language-model families are
+implemented, configured and runnable in the same framework, and are listed here
+for completeness, but \textbf{no result in this paper comes from them} and they
+are outside the claims of Section~\ref{sec:results}.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Convolutional family --- ResNet-34, ResNet-50, VGG-11, VGG-19. This is
+the family the paper's grid is drawn from. ResNet-101 is configured identically
+and was not run in this grid.}
+\label{tab:hyp-cnn}
+\begin{tabular}{@{}p{0.26\textwidth}p{0.28\textwidth}p{0.42\textwidth}@{}}
+\toprule
+\multicolumn{3}{@{}p{0.96\textwidth}@{}}{\textit{Shared across all phases}} \\
+\midrule
+Dataset & \multicolumn{2}{p{0.70\textwidth}@{}}{CIFAR-10, 10 classes, $32\times32$ inputs} \\
+Split & \multicolumn{2}{p{0.70\textwidth}@{}}{45{,}000 train / 5{,}000 val / 10{,}000 held-out test} \\
+Batch size & \multicolumn{2}{p{0.70\textwidth}@{}}{512 (87 optimizer steps per epoch)} \\
+Precision & \multicolumn{2}{p{0.70\textwidth}@{}}{bf16 autocast, fp32 master weights} \\
+Gradient clipping & \multicolumn{2}{p{0.70\textwidth}@{}}{global norm 10.0} \\
+Data loader workers & \multicolumn{2}{p{0.70\textwidth}@{}}{24} \\
+\midrule
+\multicolumn{3}{@{}p{0.96\textwidth}@{}}{\textit{Phase-specific}} \\
+\midrule
+ & \textbf{Dense} & \textbf{I.P.\ / BaCP pruning phase} \\
+Optimizer & SGD & SGD \\
+Learning rate & 0.01 & 0.01 (I.P.); 0.1 (BaCP; VGG-11 and VGG-19: 0.05) \\
+LR schedule & linear with warmup & constant \\
+Epochs & 100, early stop patience 20 & 50 \\
+Interleaved recovery epochs & --- & 0 (recovery is the schedule's tail) \\
+Sparsity schedule & --- & cubic \citep{zhu2018prune}, ramp 80\% / hold 20\% \\
+Mask interval $\Delta T$ & --- & 100 optimizer steps \\
+Prunable task head & --- & yes \\
+WANDA comparison group & --- & global \\
+\midrule
+\multicolumn{3}{@{}p{0.96\textwidth}@{}}{\textit{BaCP-only}} \\
+\midrule
+Temperature $\tau$ & \multicolumn{2}{p{0.70\textwidth}@{}}{0.15} \\
+$(\lambda_1,\lambda_2,\lambda_3,\lambda_4)$ & \multicolumn{2}{p{0.70\textwidth}@{}}{$(0.25, 0.25, 0.25, 0.25)$ on PrC, FiC, SnC, CE} \\
+Contrastive formulation & \multicolumn{2}{p{0.70\textwidth}@{}}{\texttt{legacy}: SupCon $+$ NT-Xent over the square $2B \times 2B$ matrix} \\
+Projection head & \multicolumn{2}{p{0.70\textwidth}@{}}{per-model trainable $\mathrm{Linear}(d, 128)$, never pruned, discarded before fine-tune} \\
+\midrule
+\multicolumn{3}{@{}p{0.96\textwidth}@{}}{\textit{Fine-tune (both arms, identical)}} \\
+\midrule
+Optimizer / LR / epochs & \multicolumn{2}{p{0.70\textwidth}@{}}{AdamW \citep{loshchilov2019adamw}, $10^{-4}$, 25 epochs, mask frozen} \\
+Model selection & \multicolumn{2}{p{0.70\textwidth}@{}}{validation accuracy on the 5{,}000-image split} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Families implemented in the framework but \textbf{outside this paper's
+grid}. Listed for completeness; no reported result uses them.}
+\label{tab:hyp-other}
+\begin{tabular}{@{}p{0.22\textwidth}p{0.30\textwidth}p{0.44\textwidth}@{}}
+\toprule
+ & \textbf{Vision transformer} & \textbf{Language model} \\
+ & ViT-Tiny, ViT-Small & DistilBERT-base, RoBERTa-base \\
+\midrule
+Dataset & CIFAR-10, $224\times224$ & SST-2 (GLUE), 2 classes \\
+Batch size & 256 & 64 \\
+Initialisation & Hugging Face hub weights & Hugging Face hub weights \\
+Dense phase & SGD $0.01$, linear warmup, 100 epochs, patience 20 & AdamW $2\times10^{-5}$, linear warmup, 5 epochs \\
+I.P.\ phase & AdamW $10^{-3}$, 50 epochs & AdamW $5\times10^{-5}$, 15 epochs \\
+BaCP phase & SGD $0.01$, 50 epochs & AdamW, 15 epochs; DistilBERT $5\times10^{-5}$, RoBERTa $10^{-5}$ \\
+Mask interval $\Delta T$ & 175 steps ($=1$ epoch) & 1052 steps ($=1$ epoch) \\
+Fine-tune & AdamW $10^{-4}$, 25 epochs & AdamW $10^{-4}$, 10 epochs \\
+Task head / embeddings & pruned (vision convention) & kept dense, the PLM convention of \citet{xu2022cap} \\
+Evaluation caveat & --- & GLUE's test split is unlabelled, so the reported ``test'' accuracy would be the validation set \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Derivation of the sparsity schedule}
+
+Let $T_{\mathrm{tot}}$ be the total number of optimizer steps in the pruning
+phase, $T = \alpha T_{\mathrm{tot}}$ the end of the ramp with $\alpha = 0.8$,
+$s_f$ the target sparsity, and $\Delta T$ the mask-update interval. The scheduled
+sparsity at step $t$ is Eq.~\eqref{eq:cubic},
+$s_t = s_f\big(1 - (1 - t/T)^3\big)$ for $t \le T$ and $s_t = s_f$ thereafter, the
+schedule of \citet{zhu2018prune} with $s_i = 0$ and $t_0 = 0$. The mask is
+recomputed at steps $t \in \{\Delta T, 2\Delta T, \dots\}$ with $t \le T$, and
+re-applied after every optimizer step throughout.
+
+For the convolutional family this instantiates as follows. With 45{,}000 training
+images at batch 512 there are 87 optimizer steps per epoch, so a 50-epoch pruning
+phase gives $T_{\mathrm{tot}} = 4{,}350$ steps. The ramp ends at
+$T = 0.8 \times 4{,}350 = 3{,}480$ steps, which is 40 epochs, and the mask is held
+fixed for the remaining 870 steps, which is 10 epochs of recovery. At
+$\Delta T = 100$ the mask is therefore recomputed 34 times over the ramp.
+
+Two properties of the cubic form are worth making explicit at extreme sparsity.
+The derivative $ds_t/dt = 3 s_f (1 - t/T)^2 / T$ is largest at $t = 0$ and decays
+to zero at the end of the ramp, so most of the \emph{sparsity} is reached early
+and the late updates move $s_t$ very little. But the quantity the network
+experiences is the fraction of \emph{surviving} weights removed, which is
+$\big(s_{t+\Delta T} - s_t\big) / \big(1 - s_t\big)$, and at $s_f = 0.999$ that
+ratio grows across the ramp even as the absolute increments shrink: the final
+updates remove a large share of a very small population. This asymmetry is the
+reason the ramp is not allowed to run to the last step. The $\alpha = 0.8$ split
+guarantees a fixed 20\% of the budget in which no further weights are removed and
+the surviving ones can re-fit, following \citet{gale2019state}.
+
+The choice $\Delta T = 100$ rather than the exact per-epoch count of 87 is
+deliberate and conservative: \citet{zhu2018prune} report the pruning frequency as
+having negligible effect over the range 100 to 1000 steps, and 87 would place the
+protocol below the smallest interval they measured. Because mask updates are
+driven by optimizer steps rather than epoch boundaries, the schedule is invariant
+to changes in the number of batches per epoch.
+
+\subsection{Reproducibility}
+
+\paragraph{Single source of protocol truth.}
+Every hyperparameter in Tables~\ref{tab:protocol}, \ref{tab:hyp-cnn} and
+\ref{tab:hyp-other} is read from one file, \texttt{project/test\_notebooks/nb\_common.py},
+whose \texttt{FAMILIES} dictionary holds a base configuration per model family
+plus per-phase overrides for the dense, I.P.\ and BaCP phases. Both arms of every
+cell are constructed from that dictionary by the same builder function, which is
+what makes the matched-budget claim of Section~\ref{sec:experiments} mechanical
+rather than a matter of care: the I.P.\ and BaCP configurations are derived from a
+shared base, so a protocol value cannot drift between arms without changing both.
+The BaCP-specific keys (temperature, $\lambda$ vector, contrastive formulation,
+projection-head mode, fine-tune optimizer) are the only additions in the BaCP
+override.
+
+\paragraph{Provenance enforcement.}
+Initialisation is verified before training rather than assumed. The model factory
+records what the loaded weights actually are --- an ImageNet checkpoint, hub
+weights, or random initialisation --- and the notebooks' preflight check raises and
+halts when the recorded provenance is not the requested one. This exists because a
+checkpoint load that fails soft is otherwise indistinguishable from a run that
+trained from scratch, and a ``pretrained'' baseline that was never pretrained
+would invalidate every cell measured against it.
+
+\paragraph{Run identity and completion.}
+Each run is addressed by a structured key of the form
+\texttt{static.\{phase\}.\{model\}.\{dataset\}.\{sparsity\}.\{pruner\}.seed\{n\}}.
+A cell counts as complete if and only if a result record carrying its key exists;
+deleting the record is the re-run mechanism. Failures write records with an
+explicit failed status, so a crashed run is never silently indistinguishable from
+one that was never scheduled --- which matters for a grid reported at partial
+completion.
+
+\paragraph{Evaluation.}
+All reported accuracies are top-1 on the full 10{,}000-image CIFAR-10 test set,
+evaluated once per completed cell, with no partial final batch dropped. Sparsity
+is reported as the fraction of prunable weights that are masked, where the
+prunable scope excludes 1-D tensors, frozen tensors and the projection head, and
+includes the classifier head. The scope is identical between the two arms of every
+cell.
+
+\subsection{Seed and variance reporting}
+
+The run-to-run spread of
+\result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} accuracy points
+quoted in Sections~\ref{sec:experiments} and \ref{sec:discussion} was estimated
+from repeated runs of a fixed configuration on this dataset, and is used only to
+set a floor below which a single-cell difference should not be interpreted. It is
+not a per-cell error bar: the headline cells in Table~\ref{tab:seeds} carry their
+own measured standard deviations over 3 seeds, and those should be preferred
+wherever both are available.

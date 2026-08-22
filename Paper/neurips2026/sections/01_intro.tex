@@ -1,0 +1,71 @@
+\section{Introduction}
+\label{sec:intro}
+
+Unstructured pruning removes individual weights from a trained network and then
+retrains what remains \citep{han2015learning}. Up to moderate sparsity the
+procedure is close to free: a gradual, schedule-driven magnitude criterion
+\citep{zhu2018prune,gale2019state} recovers essentially dense accuracy on
+CIFAR-scale image classifiers at 90--95\% of weights removed
+\citep{liu2021granet}. Past that point the picture changes. As the surviving
+weight budget shrinks toward a few tenths of a percent, retraining stops being a
+repair operation and starts being a re-derivation: the network must rebuild a
+representation from a support set too small to hold the one it had. The failure
+is visible in the published record --- at extreme sparsity, methods that are
+within a fraction of a point of each other at 90\% separate by tens of points,
+and some collapse to chance \citep{li2025east}.
+
+This suggests a different target for the retraining signal. Cross-entropy asks
+the sparse network only to recover the \emph{decisions} of the dense one; it says
+nothing about the intermediate representation those decisions are read from, and
+at extreme sparsity the representation is what has been destroyed. An objective
+that constrains the backbone directly --- that asks the sparse student's
+embedding of an image to stay close to the dense model's embedding of that same
+image, and away from its embeddings of other classes --- gives the optimiser a
+denser, better-conditioned target than a ten-way label.
+
+That objective already exists. \citet{xu2022cap} introduced Contrastive Pruning
+(CAP), which supervises a network \emph{during} gradual pruning with three
+contrastive terms against three frozen teachers: the pretrained model (PrC), the
+task-fine-tuned model (FiC), and the sparse snapshots the run has produced so far
+(SnC). CAP was developed and evaluated on pre-trained language models, up to 97\%
+sparsity. \textbf{The PrC/FiC/SnC decomposition, and the four-term objective that
+combines them with cross-entropy, are CAP's, not ours.} We state this here rather
+than in a footnote because it bounds everything that follows.
+
+What we contribute is a controlled study of that objective in a setting CAP did
+not examine. We call the resulting configuration \emph{Backbone Contrastive
+Pruning} (BaCP): CAP's contrastive supervision applied to convolutional vision
+backbones under a gradual static pruning schedule, run against an iterative
+pruning (I.P.) baseline that is identical in every respect --- same schedule,
+same criterion, same epoch budget, same fine-tune, same data --- except the
+training objective. Because the two arms differ only in the objective, whatever
+separates them is attributable to the objective and to nothing else. That matched
+budget, not any absolute accuracy figure, is the unit of evidence in this paper.
+
+\paragraph{Contributions.} Stated narrowly, and in the order of how much of the
+work they represent:
+
+\begin{enumerate}
+\item \textbf{Extension from language to vision backbones.} We port CAP's
+  contrastive pruning objective from pre-trained language models to ResNet and
+  VGG image classifiers, and report it under a matched-budget comparison against
+  an I.P.\ baseline on CIFAR-10.
+\item \textbf{Criterion-agnosticism.} The objective is orthogonal to the scoring
+  rule that decides which weights die. We evaluate three criteria --- magnitude
+  \citep{han2015learning}, SNIP-it \citep{lee2019snip,verdenius2020snipit} and
+  WANDA \citep{sun2024wanda} --- under one global threshold, so that the columns
+  of our results table differ only in the score, and ask whether the contrastive
+  objective helps under all three.
+\item \textbf{The extreme-sparsity regime.} We run the grid to 99.9\% sparsity,
+  where \citet{xu2022cap} reported 97\% and where the vision pruning literature
+  reports its sharpest divergences between methods.
+\end{enumerate}
+
+We are also explicit about what this study does not establish. It uses a single
+dataset and a single modality; its compute budget is well below that of the
+published comparators we quote for context; and the projection head our objective
+is measured through is trainable and unpruned, which --- as we argue in
+Section~\ref{sec:discussion} --- means the measured result supports the claim
+\emph{``this objective produces better sparse models''} but not, on the loss
+alone, the stronger claim \emph{``this objective preserves representations.''}
+Section~\ref{sec:discussion} makes those limits precise.

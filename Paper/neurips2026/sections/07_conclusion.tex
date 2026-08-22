@@ -1,0 +1,19 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We studied CAP's contrastive pruning objective \citep{xu2022cap} --- the PrC / FiC
+/ SnC decomposition, which is CAP's contribution and not ours --- outside the
+setting it was developed in: on convolutional vision backbones rather than
+language models, under three different pruning criteria rather than one, and at
+sparsities up to 99.9\% rather than 97\%. The comparison was made against an
+iterative pruning baseline sharing the same initialisation, schedule, criterion,
+epoch budget and fine-tune, differing only in the training objective, so that the
+measured difference is attributable to the objective alone.
+
+The evidence is bounded in ways we have tried to state precisely rather than
+minimise: one dataset, a compute budget well below the published comparators',
+seed replication on the headline cells only, and a trainable projection head that
+makes the accuracy result defensible but the representation-preservation reading
+of the loss not. Within those bounds, the useful output of this work is a
+controlled measurement of what changing the retraining objective is worth as a
+network is pruned past the point where cross-entropy alone can rebuild it.

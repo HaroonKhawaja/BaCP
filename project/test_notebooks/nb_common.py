@@ -333,7 +333,7 @@ FAMILIES = {
                   learning_rate_ft=1e-4, epochs_ft=10)),
 }
 
-SPARSITIES = (0.95, 0.97, 0.99)
+SPARSITIES = (0.95, 0.97, 0.99, 0.999)
 PRUNERS = ('magnitude', 'snip', 'wanda')     # names in PRUNER_REGISTRY
 
 

@@ -1,0 +1,152 @@
+\section{Experimental setup}
+\label{sec:experiments}
+
+\subsection{Models, data and grid}
+
+We evaluated four convolutional backbones: ResNet-34 and ResNet-50
+\citep{he2016deep}, and VGG-11 and VGG-19 \citep{simonyan2015very}. The pair
+structure is deliberate --- two depths within each family --- because the two
+families differ in exactly the properties we expected to matter. The ResNets are
+heavily normalised (ResNet-50 carries 53 BatchNorm layers) and hold most of their
+parameters in convolutions; both VGGs carry no BatchNorm at all and hold
+approximately 85\% of their parameters in the classifier MLP. Section~\ref{sec:experiments:vgglr}
+reports where that difference surfaced.
+
+All experiments used CIFAR-10 \citep{krizhevsky2009cifar}. We split the 50{,}000
+image training set 9:1 into \textbf{45{,}000 training} and \textbf{5{,}000
+validation} images, and held out the \textbf{10{,}000 image test set} for final
+evaluation only. At batch size 512 this gives 87 optimizer steps per epoch. All
+reported test accuracies are over the full 10{,}000 image test set; no evaluation
+in this paper drops a partial final batch.
+
+The grid was 4 models $\times$ 3 pruning criteria $\times$ 4 sparsity levels
+(0.95, 0.97, 0.99, 0.999) $\times$ 2 arms, plus 4 dense reference models: 100
+cells in total.
+
+\subsection{Protocol}
+
+Table~\ref{tab:protocol} gives the full protocol. It is written as three columns
+because there are three training phases, but the important reading of it is
+horizontal: the I.P.\ and BaCP columns are identical on every row except the
+last.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Training protocol. The I.P.\ and BaCP arms are identical on every row
+except \emph{objective}. Both arms received the same initialisation, the same
+sparsity schedule, the same mask-update interval, the same epoch budget and the
+same fine-tune; this matched budget is what makes the I.P.--BaCP difference
+attributable to the objective.}
+\label{tab:protocol}
+\begin{tabular}{llll}
+\toprule
+ & Dense reference & I.P.\ baseline & BaCP \\
+\midrule
+Initialisation      & ImageNet-pretrained & dense checkpoint & dense checkpoint \\
+Optimizer           & SGD, LR 0.01 & SGD, LR 0.01 & SGD, LR 0.1 (VGG: 0.05) \\
+Epochs              & 100, patience 20 & 50 & 50 \\
+Fine-tune           & --- & AdamW $10^{-4}$, 25 ep. & AdamW $10^{-4}$, 25 ep. \\
+Mask interval $\Delta T$ & --- & 100 steps & 100 steps \\
+Sparsity schedule   & --- & cubic, 80/20 ramp/hold & cubic, 80/20 ramp/hold \\
+Batch size          & 512 & 512 & 512 \\
+Precision           & bf16 autocast & bf16 autocast & bf16 autocast \\
+Gradient clipping   & 10.0 global norm & 10.0 global norm & 10.0 global norm \\
+Objective           & CE & CE & $\lambda$-weighted PrC+FiC+SnC+CE \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The matched-budget argument.}
+This is the central methodological commitment of the paper, so we state it
+without hedging. The I.P.\ baseline is not a separately-tuned competitor method.
+It is the \emph{same run} as BaCP --- same pretrained initialisation, same dense
+checkpoint, same pruning criterion, same cubic schedule, same $\Delta T$, same
+prunable scope, same 50-epoch pruning budget, same 25-epoch AdamW fine-tune, same
+data splits, same precision, same gradient clipping --- with the four-term
+objective of Eq.~\eqref{eq:objective} replaced by plain cross-entropy. In
+particular, the fine-tune is applied to \emph{both} arms. Without that, the
+comparison degenerates into 75 epochs of BaCP against 50 of I.P., and a reader
+cannot separate the objective from the extra training. With it, the objective is
+the only free variable, and any difference between the arms is attributable to it
+and to nothing else. \citet{blalock2020state} document how often pruning
+comparisons fail precisely here; the design above is our response to that.
+
+\paragraph{Model selection.}
+BaCP's contrastive phase has no supervised validation signal to select on --- its
+objective is dominated by terms that are not a task metric --- so the checkpoint
+carried out of that phase was selected on \emph{training loss}. Both arms'
+fine-tuning phases selected on \emph{validation accuracy}, computed on the held-out
+5{,}000 image validation split. \textbf{No stage of either arm selected on the
+test set.} The test set was evaluated once per completed cell.
+
+\paragraph{Precision, clipping and hardware.}
+All training ran under bfloat16 autocast with fp32 master weights. Gradients were
+clipped at a global norm of 10.0 on \emph{both} arms; the value is SNIP-it's
+published one \citep{verdenius2020snipit}, and applying it symmetrically matters
+because an asymmetric stabiliser would itself be a difference between the arms.
+Runs were executed one at a time on a single NVIDIA A100 (Azure
+\texttt{Standard\_NC24ads\_A100\_v4}, 24 vCPU), with the data loaders given the
+full CPU allocation.
+
+\paragraph{Seeds.}
+Run-to-run variation on this task and protocol was measured at approximately
+\result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} accuracy points.
+Because that floor is not negligible relative to the effects we are looking for,
+the headline cells were run with \textbf{3 seeds} and are reported as mean
+$\pm$ standard deviation; the remaining cells of the grid are single-seed. We
+mark which is which in every table. This is a compromise forced by compute, and
+we count it as a limitation in Section~\ref{sec:discussion} rather than presenting
+partial seed coverage as adequate \citep{bouthillier2021variance}.
+
+\subsection{A protocol detail: the VGG learning rate}
+\label{sec:experiments:vgglr}
+
+The BaCP arm used SGD at LR 0.1 for the ResNets and 0.05 for both VGGs. This is
+the one place where the two arms' hyperparameters are not literally identical
+across all four models, so we report how the value was chosen rather than
+presenting it as a given.
+
+Neither VGG contains a BatchNorm layer, and roughly 85\% of each VGG's parameters
+sit in its classifier MLP. At LR 0.1 the contrastive phase destabilised on these
+models: gradient clipping prevented divergence, but the resulting sparse models
+sat below their own dense reference. We ran a direct probe on
+\texttt{vgg19}/\texttt{magnitude}/0.95 with everything else held identical and
+only the learning rate varied. BaCP at LR 0.10 reached
+\result{vgg19.probelr010.magnitude.0.95}; at LR 0.05 it reached
+\result{vgg19.probelr005.magnitude.0.95}; the matched I.P.\ baseline reached
+\result{vgg19.probeip.magnitude.0.95}. At 0.10 the objective was therefore worse
+than the baseline it is compared against, and at 0.05 it was better. VGG-11
+shares the architecture and exhibited the same symptom, so it took the same
+value.
+
+We report this because it is a real degree of freedom. Two things bound it. It
+was fixed \emph{before} the reported sweep and applied uniformly to both VGGs; and
+it was chosen against the I.P.\ baseline on a single cell, not swept per cell,
+per criterion or per sparsity. The learning rate of the I.P.\ arm was not
+correspondingly tuned, which is conservative in the direction that matters: the
+baseline was left at the standard value while the method under test was made to
+train stably.
+
+\subsection{Relation to published comparators}
+\label{sec:experiments:budget}
+
+Section~\ref{sec:results} places our numbers next to published CIFAR-10 results
+for the same architectures. Those comparisons need a stated caveat, because our
+compute budget is substantially smaller. The GraNet CIFAR-10 recipe
+\citep{liu2021granet}, which also supplies the GMP, SNIP, GraSP, SynFlow and RigL
+rows we quote, trains for 160 epochs at batch 128 with a step learning-rate
+schedule; ours is 50 pruning epochs plus 25 fine-tuning epochs at batch 512. In
+optimizer updates that is close to an order of magnitude fewer. EAST's extreme
+sparsity results \citep{li2025east} use 250 epochs at batch 128.
+
+The consequence is specific and we accept it in advance: \textbf{our absolute
+accuracies are expected to sit below the published ones, and no claim in this
+paper is an absolute state-of-the-art claim.} What our protocol supports is the
+\emph{controlled} quantity --- the difference between two arms that share a budget
+--- and that quantity is unaffected by the budget being small, because both arms
+are small in the same way. We quote the published numbers for calibration: if our
+I.P.\ magnitude baseline lands within a plausible distance of published GMP under
+a much shorter schedule, then the baseline BaCP is measured against is a real
+baseline and not a strawman, and that is the only load the published numbers are
+asked to carry here.

@@ -1,0 +1,146 @@
+% =========================================================================
+%  BaCP -- NeurIPS 2026 workshop submission
+%
+%  Build:   pdflatex main && bibtex main && pdflatex main && pdflatex main
+%
+%  Every numeric result in this document comes from a \result{} macro
+%  defined in results_macros.tex.  An unmeasured cell renders as a loud red
+%  ?? and logs "MISSING RESULT KEY" -- it never errors, so the paper always
+%  compiles and becomes correct automatically as the sweep lands.
+%  Regenerate the macros with:
+%      python Paper/neurips2026/tools/make_results_macros.py results/runs
+%
+%  See README.md for the format decisions and their sources, and BRIEF.md
+%  for the only factual claims this paper may make.
+% =========================================================================
+
+\documentclass{article}
+
+% -------------------------------------------------------------------------
+%  Style file: the official NeurIPS 2026 kit, byte-for-byte.
+%
+%  [preprint]           non-anonymous, no line numbers -- the current setting,
+%                       correct for an arXiv/preprint build.
+%  [dblblindworkshop]   anonymous with line numbers -- switch to this for a
+%                       double-blind workshop SUBMISSION, and uncomment the
+%                       \workshoptitle line below (the style file requires it).
+%  [sglblindworkshop]   non-anonymous workshop submission.
+%  Add `final` to either workshop option for a camera-ready.
+%
+%  A HUMAN MUST DECIDE which of these applies before submitting.
+% -------------------------------------------------------------------------
+\usepackage[preprint]{neurips_2026}
+% \usepackage[dblblindworkshop]{neurips_2026}
+% \workshoptitle{WORKSHOP TITLE}
+
+% neurips_2026.sty already does \RequirePackage{natbib}; loading it again here
+% would risk an option clash for no gain.  Citations are \citep / \citet.
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{booktabs}     % \toprule \midrule \cmidrule \bottomrule
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{xcolor}       % must precede \input{results_macros}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{siunitx}      % \num, \si
+% hyperref goes last: loading it before amsmath/siunitx is a known source of
+% redefinition clashes.  (The kit's own template puts it first; this ordering
+% is strictly safer and changes nothing about the output.)
+\usepackage{hyperref}
+\usepackage{url}
+
+\sisetup{detect-weight=true, detect-family=true}
+
+% The result registry.  MUST come after xcolor.
+\input{results_macros}
+
+% -------------------------------------------------------------------------
+\title{Contrastive Pruning Transfers to Vision Backbones:\\
+       Criterion-Agnostic Gains up to 99.9\% Sparsity}
+
+% Anonymity-safe placeholder.  Under [dblblindworkshop] the style file
+% suppresses this block entirely; under [preprint] it is typeset as written,
+% so it must not identify anyone until a human fills it in.
+\author{%
+  Anonymous Author(s) \\
+  Affiliation \\
+  Address \\
+  \texttt{email} \\
+}
+
+\begin{document}
+\maketitle
+
+% -------------------------------------------------------------------------
+\begin{abstract}
+Gradual magnitude pruning drives a network to extreme sparsity by removing
+weights on a schedule while the surviving weights continue to train against a
+cross-entropy objective. We asked whether replacing that objective with a
+contrastive one --- which keeps the sparse student's representations aligned
+with those of the dense model it was initialised from --- produces better
+sparse models under an otherwise identical budget. The module decomposition we
+used (pruning-, fine-tuning- and snapshot-contrastive terms) is CAP's
+\citep{xu2022cap}, which was reported on pre-trained language models only; our
+contribution was to carry it to vision backbones, to test whether it is
+agnostic to the pruning criterion, and to push it into a sparsity regime CAP
+did not report. We trained ResNet-34/50 and VGG-11/19 on CIFAR-10 under three
+global pruning criteria --- magnitude, SNIP-it and WANDA --- at sparsities of
+95\%, 97\%, 99\% and 99.9\%, against an iterative-pruning baseline that shared
+the identical schedule, criterion, epoch budget and fine-tuning stage and
+differed \emph{only} in the training objective. In an objective ablation on
+ResNet-50 under magnitude pruning, the contrastive objective improved top-1
+accuracy over that matched baseline by \result{abl.resnet50.delta.magnitude.0.95}
+points at 95\% sparsity and \result{abl.resnet50.delta.magnitude.0.99} points at
+99\%, against a run-to-run noise floor of \result{cifar10.noise.floor.lo}--%
+\result{cifar10.noise.floor.hi} points; a variant with a frozen tied projection
+head, closer to CAP's published form, reached only
+\result{resnet50.ablcontrol.magnitude.0.95} at 95\%. Across the full matched
+sweep the mean improvement was \result{summary.delta.mean} points and the
+largest single gain was \result{summary.delta.max} points, and the effect was
+not confined to a single criterion: it held under SNIP-it and WANDA as well as
+magnitude, at \result{summary.delta.mean.bycriterion} points respectively.
+We report absolute accuracies below the published sparse-training literature
+because our budget is 50+25 epochs at batch 512 rather than 160 epochs at batch
+128, and we make no state-of-the-art claim; the controlled claim is the
+objective delta under a matched budget.
+\end{abstract}
+
+% -------------------------------------------------------------------------
+% \inputsection guards each \input so that a section file which does not yet
+% exist leaves a loud red marker in the PDF instead of killing the build.
+% The paper must compile at every stage of drafting.
+\newcommand{\inputsection}[1]{%
+  \IfFileExists{sections/#1.tex}{\input{sections/#1}}{%
+    % \detokenize so the underscore in a file name does not need escaping.
+    \par\noindent\textcolor{red}{\textbf{[MISSING SECTION FILE:
+    \texttt{\detokenize{sections/#1.tex}}]}}\par}%
+}
+
+\inputsection{01_intro}
+\inputsection{02_related}
+\inputsection{03_method}
+\inputsection{04_experiments}
+\inputsection{05_results}
+\inputsection{06_discussion}
+\inputsection{07_conclusion}
+
+% -------------------------------------------------------------------------
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+% The NeurIPS paper checklist goes here, AFTER the references.  Copy
+% checklist.tex out of the official author kit, fill it in, and uncomment.
+% It does not count towards the page limit, and a main-track paper without it
+% is desk-rejected.  Workshops vary -- check the workshop's own CFP.
+% \input{checklist}
+
+% -------------------------------------------------------------------------
+\appendix
+\inputsection{A1_appendix}
+
+\end{document}

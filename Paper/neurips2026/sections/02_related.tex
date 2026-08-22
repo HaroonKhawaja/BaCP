@@ -1,0 +1,142 @@
+\section{Related work}
+\label{sec:related}
+
+\subsection{Pruning}
+
+\paragraph{Magnitude pruning and the prune--retrain paradigm.}
+\citet{han2015learning} established the template this paper works in: train a
+dense network, remove the weights of smallest magnitude, and retrain the survivors
+to recover the lost accuracy. \citet{zhu2018prune} replaced the one-shot removal
+with a schedule, raising sparsity along a cubic ramp across training so that the
+network is never asked to absorb a large discontinuity, and reported that the
+interval between mask updates could vary over an order of magnitude with
+negligible effect. \citet{gale2019state} audited that family at scale and
+established the ramp-then-hold shape --- sparsity rises over the early portion of
+training and the mask is then frozen while the weights recover --- that we adopt
+in Section~\ref{sec:method}. Gradual magnitude pruning (GMP) in the sense of
+those two papers is exactly what our \texttt{magnitude} criterion implements, a
+correspondence we rely on in Section~\ref{sec:results} when we place our numbers
+next to published ones.
+
+\paragraph{Saliency criteria.}
+SNIP \citep{lee2019snip} scores a weight by $|w \cdot \partial\mathcal{L}/\partial w|$,
+the first-order effect of deleting it on the loss, and applies the score once
+before training; SNIP-it \citep{verdenius2020snipit} applies the same criterion
+iteratively during training, which is the form we use. WANDA
+\citep{sun2024wanda} scores $|w_{ij}| \cdot \lVert X_j \rVert_2$, weighting
+magnitude by the norm of the corresponding input activation over a calibration
+set. WANDA's headline configuration ranks weights within each output row and its
+authors argue that comparison group matters; that argument is made for large
+language models, and their own appendix reports that the effect does not transfer
+to image classifiers. We therefore use WANDA's \emph{metric} under the same
+global threshold as the other two criteria, and present the grouping as our
+design choice rather than on WANDA's authority.
+
+\paragraph{Lottery tickets and data-free criteria.}
+\citet{frankle2019lottery} showed that dense networks contain sparse subnetworks
+that train to comparable accuracy from a rewound initialisation, which reframed
+pruning as a search for structure rather than a compression post-process. GraSP
+\citep{wang2020grasp} and SynFlow \citep{tanaka2020synflow} prune at
+initialisation from gradient-flow and synaptic-flow signals respectively;
+SynFlow additionally characterises layer collapse, the failure mode in which a
+single layer is emptied and the network's function becomes constant, which is the
+dominant risk at the sparsities we run. \citet{blalock2020state} document how
+rarely pruning papers are mutually comparable --- differing protocols, missing
+baselines, incommensurable sparsity conventions --- which is the direct motivation
+for the matched-budget design in Section~\ref{sec:experiments}.
+
+\paragraph{Dynamic sparse training.}
+A parallel line keeps the parameter count fixed but lets the \emph{support} move.
+SET \citep{mocanu2018set} prunes and regrows connections at random during
+training; RigL \citep{evci2020rigl} regrows on gradient magnitude and introduces
+the Erd\H{o}s--R\'{e}nyi-Kernel layer budget that most of this line now uses;
+GraNet \citep{liu2021granet} interpolates between dense-to-sparse and
+sparse-to-sparse training, and reports the strongest CIFAR-10 numbers we quote in
+Section~\ref{sec:results}; EAST \citep{li2025east} targets the extreme regime
+specifically and is, to our knowledge, the only published source reporting
+CIFAR-10 accuracy for a ResNet at 99.9\% sparsity and beyond. This paper studies
+\emph{static} pruning --- a mask that only ever removes weights --- so these
+methods are context rather than baselines, and we do not claim results against
+them. We list them because a reader evaluating an extreme-sparsity claim will
+reasonably ask why the mask is not allowed to move, and the answer is scope: an
+objective-level intervention and a support-level intervention are separable, and
+we vary one of them.
+
+\subsection{Contrastive learning}
+
+SimCLR \citep{chen2020simclr} learns representations by pulling together two
+augmented views of the same image and pushing apart views of different images
+through the NT-Xent loss over in-batch negatives. MoCo \citep{he2020moco}
+decouples the negative count from the batch by maintaining a momentum-updated
+queue of keys. SupCon \citep{khosla2020supcon} generalises NT-Xent to multiple
+positives per anchor by admitting every same-label sample into the positive set,
+and shows that the formulation with the sum over positives outside the logarithm
+is the better-behaved one; at a single positive it reduces to NT-Xent. These
+three supply the loss forms that Section~\ref{sec:method} composes.
+
+Contrastive objectives have also been used as distillation signals. CRD
+\citep{tian2020crd} transfers a teacher's representation to a student by
+maximising a lower bound on their mutual information, and is the closest
+antecedent to using a contrastive term where a logit-matching term
+\citep{hinton2015distilling} would ordinarily go.
+
+\subsection{Contrastive objectives for compression}
+
+CAP \citep{xu2022cap} is the direct antecedent of this work. It supervises a
+model during gradual pruning with three contrastive terms, each contrasting the
+current sparse student against a different frozen teacher --- the pretrained model
+(PrC), the task-fine-tuned model (FiC), and previously saved sparse snapshots
+(SnC) --- combined with cross-entropy into a single four-term weighted sum. CAP
+reports on pre-trained language models (BERT-family encoders on GLUE tasks) at up
+to 97\% sparsity.
+
+\paragraph{Differences from CAP.}
+The module decomposition used in this paper --- PrC, FiC and SnC, and the
+four-term objective that combines them with cross-entropy --- is
+\textbf{CAP's contribution, not ours}, and we do not present it as new. Our
+objective is CAP's objective with the $\lambda$ indices permuted. The differences
+between our instantiation and CAP's are the following, and none of them is a
+claim of superiority in itself:
+
+\begin{table}[t]
+\centering
+\small
+\caption{Differences between CAP \citep{xu2022cap} and the instantiation studied
+here. The three-module decomposition and the four-term objective are shared and
+are CAP's.}
+\label{tab:cap-diff}
+\begin{tabular}{@{}p{0.16\textwidth}p{0.38\textwidth}p{0.38\textwidth}@{}}
+\toprule
+ & CAP \citep{xu2022cap} & This paper \\
+\midrule
+Modules & PrC, FiC, SnC & PrC, FiC, SnC --- identical \\
+Objective & four-term weighted sum & same four terms, $\lambda$ indices permuted \\
+Loss form & one functional, two positive sets, shared denominator & two functionals summed (SupCon $+$ NT-Xent), SimCLR-style all-pairs \\
+Similarities & rectangular $B \times N$: student anchors $\times$ teacher candidates & square $2B \times 2B$ over $\mathrm{cat}[z_s, z_t]$ \\
+Projection head & none; contrasts the \texttt{[CLS]} state & $\mathrm{Linear}(d,128)$, trainable, never pruned \\
+Negatives & memory bank, $N = 4096$ pre-encoded & in-batch only, $2B$ \\
+Modality & pre-trained language models & convolutional vision backbones \\
+Max.\ sparsity reported & 97\% & 99.9\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:cap-diff} sets them out. Two deserve comment. First, the
+\emph{loss form}: CAP computes one functional over a rectangular
+student-anchor $\times$ teacher-candidate similarity matrix, whereas the
+instantiation we run stacks student and teacher embeddings and computes SupCon
+and NT-Xent over the resulting square matrix, which admits within-student and
+within-teacher blocks that CAP's formulation does not contain. This is a real
+difference and not a reparameterisation; we ran both forms as a controlled
+two-variable ablation and report the outcome in Section~\ref{sec:results}.
+Second, the \emph{projection head}: CAP contrasts the backbone representation
+directly, while we interpose a trainable linear head that is never pruned. This
+is the substantive caveat on our claim and we return to it in
+Section~\ref{sec:discussion}. CAP's memory bank is a component we omit rather
+than an improvement we made; it slots into the rectangular formulation with no
+change to the loss, and its absence reduces our negative count from $4096$ to
+$2B$.
+
+What remains, after those subtractions, is what we claim: the objective works on
+vision backbones, works under three different pruning criteria, and continues to
+work at sparsities beyond the range CAP examined.

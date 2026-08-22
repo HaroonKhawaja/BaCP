@@ -373,7 +373,7 @@ being reproduced: a different algorithm, not a different setting.
 
 ## 10. CAP — the antecedent
 
-Ruiqi Xu, Fuli Luo, Chengyu Wang, Baobao Chang, Jun Huang, Songfang Huang, Fei
+Runxin Xu, Fuli Luo, Chengyu Wang, Baobao Chang, Jun Huang, Songfang Huang, Fei
 Huang. *From Dense to Sparse: Contrastive Pruning for Better Pre-trained Language
 Model Compression.* AAAI 2022, vol. 36, pp. 11547–11555. arXiv:2112.07198.
 

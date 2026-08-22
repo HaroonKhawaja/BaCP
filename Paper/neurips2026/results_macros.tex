@@ -1,0 +1,203 @@
+% !TeX root = ../main.tex
+%
+% GENERATED FILE -- do not edit by hand.
+% Regenerate with:
+%     python Paper/neurips2026/tools/make_results_macros.py results/runs
+% The macro definitions and the MEASURED / LITERATURE blocks are string
+% constants inside that script; edit them there.
+%
+% Contract
+% --------
+%   \defresult{key}{value}    register a value
+%   \defresultsd{key}{sd}     register a standard deviation for that key
+%   \defresultn{key}{n}       register the number of seeds behind it
+%   \result{key}              -> the value, or a loud red ?? if unregistered
+%   \resultpm{key}            -> "value +/- sd", or just "value" if no sd,
+%                                or a loud red ?? if unregistered
+%   \resultn{key}             -> the seed count, or ??
+%   \resultif{key}{yes}{no}   -> branch on whether a key is registered
+%
+% Nothing here can raise a LaTeX error on a missing key.  A missing key is a
+% visible red ?? in the PDF and a "MISSING RESULT KEY" line in the .log, so an
+% unfinished cell is impossible to ship by accident but never blocks a build:
+%     grep "MISSING RESULT KEY" main.log | sort -u
+%
+% \input this file in the PREAMBLE, after xcolor.  The \@ifpackageloaded guard
+% below is a preamble-only command.
+
+\makeatletter
+\@ifpackageloaded{xcolor}{}{\RequirePackage{xcolor}}
+
+\newcommand{\bacp@missing}{\textcolor{red}{\textbf{??}}}
+\newcommand{\bacp@warn}[1]{\GenericWarning{}{MISSING RESULT KEY: #1}}
+
+\newcommand{\defresult}[2]{\expandafter\gdef\csname bacp@val@#1\endcsname{#2}}
+\newcommand{\defresultsd}[2]{\expandafter\gdef\csname bacp@sd@#1\endcsname{#2}}
+\newcommand{\defresultn}[2]{\expandafter\gdef\csname bacp@n@#1\endcsname{#2}}
+
+\DeclareRobustCommand{\result}[1]{%
+  \ifcsname bacp@val@#1\endcsname
+    \csname bacp@val@#1\endcsname
+  \else
+    \bacp@warn{#1}\bacp@missing
+  \fi
+}
+
+\DeclareRobustCommand{\resultpm}[1]{%
+  \ifcsname bacp@val@#1\endcsname
+    \csname bacp@val@#1\endcsname
+    \ifcsname bacp@sd@#1\endcsname
+      \,\ensuremath{\pm}\,\csname bacp@sd@#1\endcsname
+    \fi
+  \else
+    \bacp@warn{#1}\bacp@missing
+  \fi
+}
+
+\DeclareRobustCommand{\resultn}[1]{%
+  \ifcsname bacp@n@#1\endcsname
+    \csname bacp@n@#1\endcsname
+  \else
+    \bacp@warn{#1}\bacp@missing
+  \fi
+}
+
+% \resultif{key}{if registered}{if not} -- for prose that must change shape,
+% not just its number, when a cell is missing.
+\DeclareRobustCommand{\resultif}[3]{%
+  \ifcsname bacp@val@#1\endcsname #2\else #3\fi
+}
+\makeatother
+
+% ==========================================================================
+% MEASURED -- hand-entered from Paper/neurips2026/BRIEF.md.
+% These are the only numbers of ours that may be stated as results today.
+% ==========================================================================
+
+% --- Objective ablation ----------------------------------------------------
+% ResNet-50 / CIFAR-10 / magnitude, seed 1, under the PREVIOUS protocol
+% (60 epochs, delta_T 88, no validation split).  Single seed.  The `abl`
+% prefix on the ARM keeps this out of the headline namespace, so it can never
+% be mistaken for, or silently substituted into, a matched-sweep cell.
+%   ablip      = iterative-pruning baseline
+%   ablcontrol = CAP-form objective with a frozen tied head
+%   abllegacy  = the implemented BaCP objective (SupCon + NT-Xent, 2Bx2B,
+%                trainable per-model projection heads)
+%   abldelta   = abllegacy minus ablip
+% Each is registered twice, under the spelling the sections use and under the
+% `abl.<model>....` spelling, so either resolves to the same number.
+\defresult{resnet50.ablip.magnitude.0.95}{91.71}
+\defresult{abl.resnet50.ip.magnitude.0.95}{91.71}
+\defresult{resnet50.ablcontrol.magnitude.0.95}{91.78}
+\defresult{abl.resnet50.control.magnitude.0.95}{91.78}
+\defresult{resnet50.abllegacy.magnitude.0.95}{92.43}
+\defresult{abl.resnet50.legacy.magnitude.0.95}{92.43}
+\defresult{resnet50.abldelta.magnitude.0.95}{+0.72}
+\defresult{abl.resnet50.delta.magnitude.0.95}{+0.72}
+
+\defresult{resnet50.ablip.magnitude.0.97}{91.35}
+\defresult{abl.resnet50.ip.magnitude.0.97}{91.35}
+\defresult{resnet50.ablcontrol.magnitude.0.97}{91.40}
+\defresult{abl.resnet50.control.magnitude.0.97}{91.40}
+\defresult{resnet50.abllegacy.magnitude.0.97}{92.04}
+\defresult{abl.resnet50.legacy.magnitude.0.97}{92.04}
+\defresult{resnet50.abldelta.magnitude.0.97}{+0.69}
+\defresult{abl.resnet50.delta.magnitude.0.97}{+0.69}
+
+\defresult{resnet50.ablip.magnitude.0.99}{89.80}
+\defresult{abl.resnet50.ip.magnitude.0.99}{89.80}
+% resnet50.ablcontrol.magnitude.0.99 is deliberately UNREGISTERED: that run was
+% killed.  It renders ?? and must be reported as not run, not as a gap.
+\defresult{resnet50.abllegacy.magnitude.0.99}{91.24}
+\defresult{abl.resnet50.legacy.magnitude.0.99}{91.24}
+\defresult{resnet50.abldelta.magnitude.0.99}{+1.44}
+\defresult{abl.resnet50.delta.magnitude.0.99}{+1.44}
+
+% --- Dense ResNet-34 seed spread -------------------------------------------
+% CIFAR-10 from scratch, 5 seeds.  Obtained with a DEFECTIVE STEM, so this is
+% a measurement of run-to-run spread, NOT a dense baseline.  It is deliberately
+% NOT registered as `resnet34.dense.none.0.0` for that reason.  The .run1..run5
+% keys follow the order listed in the BRIEF; that order is not a seed mapping.
+\defresult{probe.resnet34.densescratch}{91.64}
+\defresultsd{probe.resnet34.densescratch}{0.30}
+\defresultn{probe.resnet34.densescratch}{5}
+\defresult{probe.resnet34.densescratch.run1}{91.6535}
+\defresult{probe.resnet34.densescratch.run2}{91.5447}
+\defresult{probe.resnet34.densescratch.run3}{91.5843}
+\defresult{probe.resnet34.densescratch.run4}{91.2876}
+\defresult{probe.resnet34.densescratch.run5}{92.1064}
+
+% --- VGG learning-rate probe -----------------------------------------------
+% vgg19 / CIFAR-10 / magnitude / 0.95, everything else held identical.
+% Reported as a protocol detail: both VGGs carry zero BatchNorm layers and
+% hold ~85% of their parameters in the classifier MLP, so they cannot absorb
+% the contrastive phase's 0.1 step size.
+\defresult{vgg19.probelr010.magnitude.0.95}{89.99}
+\defresult{probe.vgg19.bacplr010.magnitude.0.95}{89.99}
+\defresult{vgg19.probelr005.magnitude.0.95}{91.88}
+\defresult{probe.vgg19.bacplr005.magnitude.0.95}{91.88}
+\defresult{vgg19.probeip.magnitude.0.95}{91.02}
+\defresult{probe.vgg19.ip.magnitude.0.95}{91.02}
+
+% --- Noise floor -----------------------------------------------------------
+\defresult{cifar10.noise.floor.lo}{0.1}
+\defresult{probe.noisefloor.lo}{0.1}
+\defresult{cifar10.noise.floor.hi}{0.3}
+\defresult{probe.noisefloor.hi}{0.3}
+
+% ==========================================================================
+% LITERATURE -- published comparators, quoted exactly.  Not our measurements.
+% Routed through the same macro so that no bare accuracy is ever typed into
+% the paper, and so a transcription error has exactly one place to live.
+%
+% Protocol gap, which must be stated wherever these appear: GraNet's recipe is
+% 160 epochs at batch 128, SGD(0.9) LR 0.1, x10 at [80,120], wd 5e-4.  Ours is
+% 50+25 epochs at batch 512.  The controlled claim is our I.P.-vs-BaCP delta
+% under a matched budget, never a state-of-the-art absolute.
+% ==========================================================================
+
+% --- GraNet Table 2, ResNet-50 / CIFAR-10 ----------------------------------
+% Liu et al., NeurIPS 2021, arXiv:2106.10404.
+\defresult{lit.granet.resnet50.dense}{94.75}
+\defresultsd{lit.granet.resnet50.dense}{0.01}
+% GMP at 95% is our exact cell.
+\defresult{lit.granet.resnet50.gmp.0.95}{94.52}
+\defresultsd{lit.granet.resnet50.gmp.0.95}{0.08}
+% The BRIEF labels only the GMP row with a sparsity, so these carry no
+% sparsity field rather than an assumed one.
+\defresult{lit.granet.resnet50.snip}{90.86}
+\defresult{lit.granet.resnet50.grasp}{91.32}
+\defresult{lit.granet.resnet50.synflow}{91.22}
+\defresult{lit.granet.resnet50.rigl}{93.86}
+\defresultsd{lit.granet.resnet50.rigl}{0.25}
+\defresult{lit.granet.resnet50.granet}{94.44}
+\defresultsd{lit.granet.resnet50.granet}{0.01}
+
+% --- VGG-19 / CIFAR-10 -----------------------------------------------------
+% The two papers disagree on the dense figure; both are registered and the
+% disagreement must be noted in the text rather than resolved silently.
+\defresult{lit.granet.vgg19.dense}{93.85}
+\defresultsd{lit.granet.vgg19.dense}{0.05}
+\defresult{lit.grasp.vgg19.dense}{94.23}
+
+\defresult{lit.granet.vgg19.gmp.0.90}{93.59}
+\defresultsd{lit.granet.vgg19.gmp.0.90}{0.10}
+\defresult{lit.granet.vgg19.snip.0.95}{93.43}
+\defresultsd{lit.granet.vgg19.snip.0.95}{0.20}
+\defresult{lit.granet.vgg19.snip.0.98}{92.05}
+\defresultsd{lit.granet.vgg19.snip.0.98}{0.28}
+\defresult{lit.granet.vgg19.grasp.0.95}{93.04}
+\defresultsd{lit.granet.vgg19.grasp.0.95}{0.18}
+\defresult{lit.granet.vgg19.grasp.0.98}{92.19}
+\defresultsd{lit.granet.vgg19.grasp.0.98}{0.12}
+\defresult{lit.granet.vgg19.rigl.0.90}{93.38}
+\defresultsd{lit.granet.vgg19.rigl.0.90}{0.11}
+
+% ========================================================================
+% GENERATED from the run records -- everything below this line is
+% rebuilt on every invocation.  Source: results/runs
+% ========================================================================
+
+% No usable records found.  Every headline key is therefore
+% unregistered and renders as a red ?? -- which is the correct
+% state for a sweep that has not run.
