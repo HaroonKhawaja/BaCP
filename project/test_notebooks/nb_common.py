@@ -173,10 +173,18 @@ _CNN_DENSE = dict(optimizer_type='sgd', learning_rate=0.01,
 # remains excluded unconditionally (frozen, discarded, never in the
 # denominator). LLM families keep heads dense -- the PLM convention of CAP
 # and WANDA-as-published.
+# MATCHED COMPUTE BUDGET. I.P. runs the same 50-epoch AdamW(1e-4) fine-tune
+# that BaCP runs after its contrastive phase, so both arms see 60 + 50 = 110
+# epochs and the same fine-tuning optimizer. Without this the comparison comes
+# down to "110 epochs of BaCP vs 60 of I.P.", and a reviewer cannot tell the
+# objective from the extra training. With it, the ONLY difference between the
+# arms is the contrastive objective -- which is the claim.
 _CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
                   epochs=60, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=88,
                   prune_task_head=True,
+                  enable_finetune=True, optimizer_type_ft='adamw',
+                  learning_rate_ft=1e-4, epochs_ft=50,
                   # wanda_group='global': the project's original adaptation --
                   # Wanda's metric under the same global-threshold allocation
                   # as magnitude and SNIP, so the columns differ only in
@@ -241,7 +249,9 @@ FAMILIES = {
                    scheduler_type='linear_with_warmup', epochs=5),
         prune=dict(optimizer_type='adamw', learning_rate=5e-5,
                    epochs=15, recovery_epochs=0,
-                   sparsity_scheduler='cubic', delta_T=1052),
+                   sparsity_scheduler='cubic', delta_T=1052,
+                   enable_finetune=True, optimizer_type_ft='adamw',
+                   learning_rate_ft=1e-4, epochs_ft=10),
         bacp=dict(optimizer_type='adamw', learning_rate=5e-5,
                   epochs=15, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=1052,
@@ -255,7 +265,9 @@ FAMILIES = {
                    scheduler_type='linear_with_warmup', epochs=5),
         prune=dict(optimizer_type='adamw', learning_rate=5e-5,
                    epochs=15, recovery_epochs=0,
-                   sparsity_scheduler='cubic', delta_T=1052),
+                   sparsity_scheduler='cubic', delta_T=1052,
+                   enable_finetune=True, optimizer_type_ft='adamw',
+                   learning_rate_ft=1e-4, epochs_ft=10),
         bacp=dict(optimizer_type='adamw', learning_rate=1e-5,
                   epochs=15, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=1052,

@@ -11,6 +11,7 @@ from training_utils import (
     _initialize_all,
     _initialize_logs,
 
+    _initialize_optimizer,
     _optimizer_step,
     _step_pruning_step,
 
@@ -51,6 +52,15 @@ class TrainingArguments:
     target_sparsity:        float = None
     sparsity_scheduler:     str = None
     recovery_epochs:        int = 0
+
+    # Post-pruning supervised fine-tune, mask frozen. Exists so the I.P.
+    # baseline can be run on the SAME budget as BaCP (which fine-tunes after
+    # its contrastive phase); otherwise every reported delta compares 110
+    # epochs of BaCP against 60 of I.P.
+    enable_finetune:        bool = False
+    optimizer_type_ft:      str = 'adamw'
+    learning_rate_ft:       float = 1e-4
+    epochs_ft:              int = 0
     pruning_module:         object = None
     delta_T:                int = 100
     # How the global sparsity budget is split across layers. Only read by
@@ -174,6 +184,43 @@ class Trainer:
             # Recovery Phase
             if self.retrain:
                 self._retrain(run)
+
+        if self.enable_finetune and self.epochs_ft:
+            self.finetune(run)
+
+
+    def finetune(self, run=None):
+        """Supervised fine-tune with the mask frozen.
+
+        Mirrors BaCPTrainer.finetune so the two arms share a budget and a
+        fine-tuning optimizer, leaving the contrastive objective as the only
+        difference between them.
+
+        `recover = True` is what freezes the mask: _step_pruning_step skips
+        every mask update while it is set, and _optimizer_step still calls
+        pruner.apply_mask() afterwards, so sparsity is enforced but the
+        surviving set never changes. The loaders need no rebuilding here --
+        unlike BaCP, this trainer is already on the single-view supervised
+        recipe.
+        """
+        print(f"[TRAINER] Fine-tuning for {self.epochs_ft} epochs "
+              f"({self.optimizer_type_ft} @ {self.learning_rate_ft}), mask frozen")
+        self.recover = True
+        self.optimizer_type = self.optimizer_type_ft
+        self.learning_rate = self.learning_rate_ft
+        _initialize_optimizer(self)
+        self.scheduler = None
+
+        for epoch in range(self.epochs_ft):
+            curr = f"Fine-tuning Epoch [{epoch+1}/{self.epochs_ft}]"
+            loss = self._run_train_epoch(epoch, f"Training {curr}")
+            metrics = self._run_validation_epoch(f"Validation {curr}")
+            self._update_metric_lists(loss, metrics.get('accuracy'))
+            metrics['loss'] = loss
+            _log_metrics(self, curr, metrics, run)
+            self._handle_save(epoch)
+
+        self.recover = False
 
 
     def evaluate(self, load=True, run=None):

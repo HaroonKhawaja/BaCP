@@ -208,6 +208,20 @@ def build_pruning_parser():
                              "transformers: tied embeddings mean this also prunes "
                              "the LM head and dominates the sparsity denominator.")
 
+    # Post-pruning fine-tune. Present so the I.P. baseline can be given the SAME
+    # budget as BaCP: BaCP runs its contrastive phase and then a supervised
+    # fine-tune, so without this the comparison is 110 epochs against 60 and the
+    # objective cannot be separated from the extra training.
+    parser.add_argument('--enable_finetune',     action='store_true',
+                        help="Supervised fine-tune after pruning, mask frozen.")
+    parser.add_argument('--optimizer_type_ft',   type=str,       default='adamw',
+                        help="Optimizer for the fine-tuning phase.")
+    parser.add_argument('--learning_rate_ft',    type=float,     default=1e-4,
+                        help="Learning rate for the fine-tuning phase.")
+    parser.add_argument('--epochs_ft',           type=int,       default=0,
+                        help="Fine-tuning epochs. Match BaCP's epochs_ft for a "
+                             "like-for-like comparison.")
+
     # Non-trainer args
     parser.add_argument('--log_to_wandb',        action='store_true', help="Log results to Weights & Biases (WANDB).")
     parser.add_argument('--seed',                type=int,       default=42)

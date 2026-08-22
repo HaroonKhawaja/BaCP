@@ -223,6 +223,10 @@ def _base_arg_dict(is_bacp=False, **overrides):
         num_classes=NUM_CLASSES, num_out_features=NUM_OUT_FEATURES,
         image_size=IMAGE_SIZE, batch_size=BATCH_SIZE, num_workers=0,
         epochs=2, recovery_epochs=0,
+        # Present on BOTH dataclasses: the I.P. path gained a fine-tune phase
+        # so it can be run on the same budget as BaCP.
+        enable_finetune=False, optimizer_type_ft='adamw',
+        learning_rate_ft=1e-4, epochs_ft=0,
         optimizer_type="sgd", learning_rate=0.1,
         scheduler_type=None, patience=None, trained_weights=None,
         experiment_type="test",
