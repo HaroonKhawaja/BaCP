@@ -83,6 +83,57 @@ def _field(name, line):
         return float('nan')
 
 
+def iter_progress(raw_lines):
+    """Turn a training subprocess's raw output into ONE event per epoch.
+
+    tqdm repaints the same "Epoch [k/N]" line many times a second. The stream
+    loop used to print every repaint, which flooded the cell with dozens of
+    identical rows per epoch and made the timing meaningless -- `per` measured
+    the gap between two repaints, so it reported things like "0.2s/ep eta
+    0.0m" instead of the real per-epoch cost.
+
+    Yields:
+        ('line', text)                                  non-epoch output
+        ('epoch', phase, ep, tot, acc, loss, sparsity)  once per epoch
+
+    The epoch event carries the LAST values seen for that epoch, because the
+    final repaint is the one holding the finished-epoch metrics; earlier
+    repaints hold running averages over a partial epoch. A field stays at its
+    most recent non-None value, so a repaint that omits one does not blank it.
+    """
+    pending = None
+    for raw in raw_lines:
+        # \r is tqdm's in-place repaint; treat it as a line break so a single
+        # buffered chunk of repaints does not arrive as one giant line.
+        for seg in raw.replace('\r', '\n').split('\n'):
+            line = seg.rstrip()
+            if not line:
+                continue
+            m = _EPOCH.search(line)
+            if not m:
+                yield ('line', line)
+                continue
+
+            ep, tot = int(m.group(1)), int(m.group(2))
+            phase = line.split('Epoch')[0].strip() or 'train'
+            vals = (_field('accuracy', line), _field('loss', line),
+                    _field('sparsity', line))
+
+            if pending is not None and (pending[0], pending[1]) != (phase, ep):
+                yield ('epoch', *pending)
+                pending = None
+
+            if pending is None:
+                pending = [phase, ep, tot, *vals]
+            else:
+                for i, v in enumerate(vals, start=3):
+                    if v is not None:
+                        pending[i] = v
+
+    if pending is not None:
+        yield ('epoch', *pending)
+
+
 def on_databricks():
     """True when running on a Databricks cluster."""
     return bool(os.environ.get('DATABRICKS_RUNTIME_VERSION'))
@@ -736,20 +787,18 @@ def run(cell, gpu=0):
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1, env=env,
                             encoding='utf-8', errors='replace')
+    def _tee(stream):
+        for raw in stream:
+            log_file.write(raw)          # the log keeps every repaint verbatim
+            yield raw
+
     try:
-        for raw in proc.stdout:
-            line = raw.rstrip()
-            log_file.write(raw)
-            m = _EPOCH.search(line)
-            if not m:
-                if line:
-                    print(line)
+        for event in iter_progress(_tee(proc.stdout)):
+            if event[0] == 'line':
+                print(event[1])
                 continue
 
-            ep, tot = int(m.group(1)), int(m.group(2))
-            acc = _field('accuracy', line)
-            loss = _field('loss', line)
-            sp = _field('sparsity', line)
+            _, phase_tag, ep, tot, acc, loss, sp = event
             now = time.perf_counter()
             per, t_prev = now - t_prev, now
 
@@ -758,7 +807,6 @@ def run(cell, gpu=0):
             hist['loss'].append(loss)
             hist['sparsity'].append(sp)
 
-            phase_tag = line.split('Epoch')[0].strip() or 'train'
             acc_s = f'{acc:6.2f}' if acc is not None else '     -'
             loss_s = f'{loss:9.4f}' if loss is not None else '        -'
             sp_s = f'{sp:.4f}' if sp is not None else '-'
