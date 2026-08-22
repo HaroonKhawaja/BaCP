@@ -156,8 +156,14 @@ def setup(quiet=False):
 # delta_T is set to ~one epoch of optimizer steps per family:
 #   resnet/vgg  45,000/512 ~ 88    vit  45,000/256 ~ 176    llm  67,349/64 ~ 1052
 
+# num_workers=24: the Standard_NC24ads_A100_v4 node has 24 vCPUs, and one
+# training job owns the box (runs are serialised), so the loaders get all of
+# them. enable_tqdm=True streams a per-batch progress bar; both nb_common.run
+# and runner.run_cell merge stderr into stdout, so the bar reaches the cell
+# and the job log.
 _CV_BASE = dict(model_type='cv', dataset_name='cifar10', num_classes=10,
-                image_size=32, batch_size=512, num_workers=8)
+                image_size=32, batch_size=512, num_workers=24,
+                enable_tqdm=True)
 
 _CNN_DENSE = dict(optimizer_type='sgd', learning_rate=0.01,
                   scheduler_type='linear_with_warmup', epochs=100, patience=20)
@@ -192,10 +198,11 @@ _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
                  learning_rate_ft=1e-4, epochs_ft=50)
 
 _VIT_BASE = dict(model_type='cv', dataset_name='cifar10', num_classes=10,
-                 image_size=224, batch_size=256, num_workers=8)
+                 image_size=224, batch_size=256, num_workers=24,
+                 enable_tqdm=True)
 
 _LLM_BASE = dict(model_type='llm', dataset_name='sst2', num_classes=2,
-                 batch_size=64, num_workers=8)
+                 batch_size=64, num_workers=24, enable_tqdm=True)
 
 FAMILIES = {
     'resnet34': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
@@ -456,6 +463,111 @@ def make_cell(model_name, phase, seed=1, pruner=None, sparsity=None,
         'sparsity': sparsity,
         'config': config,
     }
+
+
+# --- sanity check -----------------------------------------------------------
+
+def sanity_check(cells, control=None):
+    """Verify a batch of cells BEFORE any GPU time is spent. Returns True if
+    everything passes.
+
+    Prints three sections, in this order:
+
+      1. TRAINING PROTOCOL  epochs, delta_T, schedule, recovery, optimiser/LR
+                            per phase, tau, lambdas, prunable scope.
+      2. THE RUN            model, phase, pruner, sparsity, seed, record key,
+                            whether that record already EXISTS (would skip),
+                            and -- when `control` is given -- the exact set of
+                            config keys that differ from it.
+      3. THE DATASET        name, splits, batch size, image size, classes, and
+                            which split the reported accuracy comes from.
+
+    A FAIL is a stop: fix it before submitting.
+    """
+    import runner as R
+
+    cells = list(cells)
+    if not cells:
+        print('SANITY: no cells given'); return False
+    done = R.completed_keys()
+    ok = True
+
+    # -- 1. protocol ---------------------------------------------------------
+    print('=' * 78)
+    print('1. TRAINING PROTOCOL')
+    print('=' * 78)
+    c0 = cells[0]['config']
+    phase = cells[0]['rung'].replace('static-', '')
+    keys = ['epochs', 'delta_T', 'sparsity_scheduler', 'recovery_epochs',
+            'optimizer_type', 'learning_rate', 'patience',
+            'tau', 'lambdas', 'contrastive_mode', 'proj_mode', 'num_snapshots',
+            'enable_finetune', 'optimizer_type_ft', 'learning_rate_ft',
+            'epochs_ft', 'prune_task_head', 'prune_embeddings', 'wanda_group',
+            'num_workers', 'enable_tqdm']
+    for k in keys:
+        if k in c0:
+            print(f'   {k:<20} {c0[k]}')
+    if phase in ('prune', 'bacp'):
+        ep, dt = c0.get('epochs'), c0.get('delta_T')
+        print(f'   -> ramp: cubic to target over first 80% of {ep} epochs, '
+              f'final 20% recovery at fixed mask; mask update every {dt} steps')
+        if c0.get('recovery_epochs'):
+            print('   FAIL  recovery_epochs != 0 re-enables the legacy '
+                  'interleaved recovery block'); ok = False
+
+    # -- 2. the runs ---------------------------------------------------------
+    print()
+    print('=' * 78)
+    print('2. THE RUN(S)')
+    print('=' * 78)
+    for c in cells:
+        exists = c['key'] in done
+        mark = 'EXISTS -> WILL SKIP' if exists else 'will run'
+        print(f'   {c["key"]}')
+        print(f'      model={c["model_name"]} phase={c["rung"]} '
+              f'pruner={c["config"].get("pruning_type", "-")} '
+              f'sparsity={c["sparsity"]} seed={c["seed"]}  [{mark}]')
+        if exists:
+            print('      NOTE  delete its record to force a re-run')
+    if control is not None:
+        a, b = cells[0]['config'], control['config']
+        diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+        print()
+        print(f'   ablation vs control {control["key"]}')
+        print(f'      keys that differ: {diff}')
+        for k in diff:
+            print(f'         {k}: control={b.get(k)!r} -> arm={a.get(k)!r}')
+        if not diff:
+            print('      FAIL  nothing differs; this is not an ablation'); ok = False
+
+    # -- 3. the dataset ------------------------------------------------------
+    print()
+    print('=' * 78)
+    print('3. THE DATASET')
+    print('=' * 78)
+    ds = c0.get('dataset_name')
+    print(f'   dataset       {ds}')
+    print(f'   batch_size    {c0.get("batch_size")}')
+    print(f'   num_classes   {c0.get("num_classes")}')
+    if 'image_size' in c0:
+        print(f'   image_size    {c0["image_size"]}')
+    if ds == 'cifar10':
+        print('   splits        50,000 train -> 40,000 train / 10,000 val '
+              '(0.2 split); 10,000 test')
+        print('   reported acc  the 10,000-image TEST split, all of it '
+              '(drop_last=False)')
+    elif ds == 'sst2':
+        print('   splits        67,349 train / 872 validation / 1,821 test')
+        print('   reported acc  the VALIDATION split -- GLUE test labels are '
+              'not public. State this wherever the number appears.')
+    else:
+        print('   splits        (not described here; verify before reporting)')
+
+    print()
+    print('=' * 78)
+    print('SANITY: PASS' if ok else 'SANITY: FAIL -- fix before submitting')
+    print('=' * 78)
+    return ok
 
 
 # --- running ---------------------------------------------------------------
