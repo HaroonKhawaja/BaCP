@@ -19,19 +19,21 @@
 % -------------------------------------------------------------------------
 %  Style file: the official NeurIPS 2026 kit, byte-for-byte.
 %
-%  [preprint]           non-anonymous, no line numbers -- the current setting,
-%                       correct for an arXiv/preprint build.
-%  [dblblindworkshop]   anonymous with line numbers -- switch to this for a
-%                       double-blind workshop SUBMISSION, and uncomment the
-%                       \workshoptitle line below (the style file requires it).
+%  [dblblindworkshop]   anonymous with line numbers -- THE CURRENT SETTING,
+%                       correct for a double-blind workshop SUBMISSION.  The
+%                       style file REQUIRES \workshoptitle with this option;
+%                       it is used for the first-page footer.
 %  [sglblindworkshop]   non-anonymous workshop submission.
+%  [preprint]           non-anonymous, no line numbers -- for an arXiv build.
 %  Add `final` to either workshop option for a camera-ready.
 %
-%  A HUMAN MUST DECIDE which of these applies before submitting.
+%  A HUMAN MUST fill in \workshoptitle below.  The workshop is not yet chosen,
+%  so the placeholder is deliberately loud: it prints in the page footer.
 % -------------------------------------------------------------------------
-\usepackage[preprint]{neurips_2026}
-% \usepackage[dblblindworkshop]{neurips_2026}
-% \workshoptitle{WORKSHOP TITLE}
+\usepackage[dblblindworkshop]{neurips_2026}
+\workshoptitle{FIXME -- WORKSHOP NAME NOT YET CHOSEN}
+% \usepackage[sglblindworkshop]{neurips_2026}
+% \usepackage[preprint]{neurips_2026}
 
 % neurips_2026.sty already does \RequirePackage{natbib}; loading it again here
 % would risk an option clash for no gain.  Citations are \citep / \citet.
@@ -63,9 +65,10 @@
 \title{Contrastive Pruning Transfers to Vision Backbones:\\
        Criterion-Agnostic Gains up to 99.9\% Sparsity}
 
-% Anonymity-safe placeholder.  Under [dblblindworkshop] the style file
-% suppresses this block entirely; under [preprint] it is typeset as written,
-% so it must not identify anyone until a human fills it in.
+% Anonymity-safe placeholder.  Under the current [dblblindworkshop] option the
+% style file suppresses this block entirely and prints "Anonymous Author(s)";
+% under [preprint] or [sglblindworkshop] it is typeset AS WRITTEN, so it must
+% not identify anyone until a human fills it in for a non-anonymous build.
 \author{%
   Anonymous Author(s) \\
   Affiliation \\
@@ -78,36 +81,29 @@
 
 % -------------------------------------------------------------------------
 \begin{abstract}
-Gradual magnitude pruning drives a network to extreme sparsity by removing
-weights on a schedule while the surviving weights continue to train against a
-cross-entropy objective. We asked whether replacing that objective with a
-contrastive one --- which keeps the sparse student's representations aligned
-with those of the dense model it was initialised from --- produces better
-sparse models under an otherwise identical budget. The module decomposition we
-used (pruning-, fine-tuning- and snapshot-contrastive terms) is CAP's
-\citep{xu2022cap}, which was reported on pre-trained language models only; our
-contribution was to carry it to vision backbones, to test whether it is
-agnostic to the pruning criterion, and to push it into a sparsity regime CAP
-did not report. We trained ResNet-34/50 and VGG-11/19 on CIFAR-10 under three
-global pruning criteria --- magnitude, SNIP-it and WANDA --- at sparsities of
-95\%, 97\%, 99\% and 99.9\%, against an iterative-pruning baseline that shared
-the identical schedule, criterion, epoch budget and fine-tuning stage and
-differed \emph{only} in the training objective. In an objective ablation on
-ResNet-50 under magnitude pruning, the contrastive objective improved top-1
-accuracy over that matched baseline by \result{abl.resnet50.delta.magnitude.0.95}
-points at 95\% sparsity and \result{abl.resnet50.delta.magnitude.0.99} points at
-99\%, against a run-to-run noise floor of \result{cifar10.noise.floor.lo}--%
-\result{cifar10.noise.floor.hi} points; a variant with a frozen tied projection
-head, closer to CAP's published form, reached only
-\result{resnet50.ablcontrol.magnitude.0.95} at 95\%. Across the full matched
-sweep the mean improvement was \result{summary.delta.mean} points and the
-largest single gain was \result{summary.delta.max} points, and the effect was
-not confined to a single criterion: it held under SNIP-it and WANDA as well as
-magnitude, at \result{summary.delta.mean.bycriterion} points respectively.
-We report absolute accuracies below the published sparse-training literature
-because our budget is 50+25 epochs at batch 512 rather than 160 epochs at batch
-128, and we make no state-of-the-art claim; the controlled claim is the
-objective delta under a matched budget.
+Gradual pruning drives a network to extreme sparsity while the surviving
+weights keep training against a cross-entropy objective. We asked whether
+replacing that objective with a contrastive one --- one that keeps the sparse
+student's representations aligned with those of the dense model it was
+initialised from --- yields better sparse models under an otherwise identical
+budget. The module decomposition we used (pruning-, fine-tuning- and
+snapshot-contrastive terms) is CAP's \citep{xu2022cap}, which was reported on
+pre-trained language models only; our contribution was to carry it to vision
+backbones, to test whether it is agnostic to the pruning criterion, and to push
+it into a sparsity regime CAP did not report. We trained ResNet-34/50 and
+VGG-11/19 on CIFAR-10 under three global pruning criteria --- magnitude,
+SNIP-it and WANDA --- at sparsities from 95\% to 99.9\%, against an
+iterative-pruning baseline that shared the identical schedule, criterion, epoch
+budget and fine-tuning stage and differed \emph{only} in the training
+objective. In an objective ablation on ResNet-50 under magnitude pruning, the
+contrastive objective improved top-1 accuracy over that matched baseline by
+\result{abl.resnet50.delta.magnitude.0.95} points at 95\% sparsity and
+\result{abl.resnet50.delta.magnitude.0.99} points at 99\%, against a
+run-to-run noise floor of \result{cifar10.noise.floor.lo}--%
+\result{cifar10.noise.floor.hi} points. Absolute accuracies sit below the
+published sparse-training literature because our budget is 50+25 epochs at
+batch 512 rather than 160 epochs at batch 128; we make no state-of-the-art
+claim, and the controlled claim is the objective delta under a matched budget.
 \end{abstract}
 
 % -------------------------------------------------------------------------
@@ -121,26 +117,49 @@ objective delta under a matched budget.
     \texttt{\detokenize{sections/#1.tex}}]}}\par}%
 }
 
+% Same guard for the submission statements in statements/.  These are appendix
+% material and do not count towards the page limit.
+\newcommand{\inputstatement}[1]{%
+  \IfFileExists{statements/#1.tex}{\input{statements/#1}}{%
+    \par\noindent\textcolor{red}{\textbf{[MISSING STATEMENT FILE:
+    \texttt{\detokenize{statements/#1.tex}}]}}\par}%
+}
+
 \inputsection{01_intro}
-\inputsection{02_related}
+\inputsection{02_cap}
 \inputsection{03_method}
-\inputsection{04_experiments}
-\inputsection{05_results}
-\inputsection{06_discussion}
-\inputsection{07_conclusion}
+\inputsection{04_results}
+\inputsection{05_limitations}
 
 % -------------------------------------------------------------------------
 \bibliographystyle{plainnat}
 \bibliography{refs}
 
-% The NeurIPS paper checklist goes here, AFTER the references.  Copy
-% checklist.tex out of the official author kit, fill it in, and uncomment.
-% It does not count towards the page limit, and a main-track paper without it
-% is desk-rejected.  Workshops vary -- check the workshop's own CFP.
-% \input{checklist}
+% The NeurIPS paper checklist follows the references AND the supplementary
+% material, per the author kit's own instruction, so it is \input at the very
+% end of this file rather than here.
 
 % -------------------------------------------------------------------------
-\appendix
+% A1_appendix.tex issues \appendix itself -- issuing it here too
+% restarts the appendix counter and breaks section numbering.
 \inputsection{A1_appendix}
+
+% -------------------------------------------------------------------------
+% Submission statements.  Appendix material: none of it counts towards the
+% content page limit.  Each file is self-contained and starts its own
+% \section, so any of them can be commented out without touching the others.
+\inputstatement{reproducibility}
+\inputstatement{compute}
+\inputstatement{licensing}
+\inputstatement{ethics}
+\inputstatement{broader_impact}
+
+% -------------------------------------------------------------------------
+% The NeurIPS paper checklist.  Filled in for this paper; the questions and
+% guidelines are the author kit's own text, unmodified.  It does not count
+% towards the page limit, and a MAIN-TRACK paper without it is desk-rejected.
+% Workshops usually do not require it -- if the target workshop's CFP does not
+% ask for one, comment this line out.  See SUBMISSION.md.
+\input{checklist}
 
 \end{document}

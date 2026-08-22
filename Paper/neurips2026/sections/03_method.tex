@@ -1,200 +1,101 @@
-\section{Method}
+\section{Method and protocol}
 \label{sec:method}
+\label{sec:experiments}
 
-\subsection{Pipeline}
+\paragraph{Pipeline.}
+Four stages per cell: ImageNet-pretrained initialisation
+\citep{deng2009imagenet}; a dense fine-tune giving the reference model; gradual
+pruning to target sparsity under one of two objectives; a 25-epoch fine-tune,
+mask frozen. This is \citet{han2015learning}'s prune--retrain paradigm on
+\citet{zhu2018prune}'s schedule, with \citet{xu2022cap}'s contrastive supervision
+at stage three, where the arms differ and nowhere else.
 
-Every cell in this study followed the same four stages. A backbone was
-initialised from ImageNet-pretrained weights \citep{deng2009imagenet}; it was
-fine-tuned dense on the target task to produce the reference model; it was then
-pruned gradually to the target sparsity while being trained under one of two
-objectives; and the resulting masked network was fine-tuned to convergence with
-the mask held fixed. This is the prune--retrain paradigm of
-\citet{han2015learning} with the gradual schedule of \citet{zhu2018prune}, and
-the contrastive supervision of \citet{xu2022cap} inserted at the third stage.
-Initialisation was enforced programmatically: the training entry point refused to
-start when the weights it loaded were not the requested provenance, because a
-soft-failing checkpoint load is otherwise indistinguishable from a run that
-trained from scratch.
-
-The two arms differ at the third stage and nowhere else. The
-\textbf{I.P.} (iterative pruning) arm trained under cross-entropy. The
-\textbf{BaCP} arm trained under the four-term contrastive objective below.
-Sections~\ref{sec:method:prune} and \ref{sec:experiments} describe the schedule,
-criteria, budget and fine-tune, all of which were shared.
-
-\subsection{Objective}
-
-BaCP's training objective was the $\lambda$-weighted sum of three contrastive
-terms and a cross-entropy term,
-%
-\begin{equation}
-\label{eq:objective}
-\mathcal{L} \;=\; \lambda_1 \mathcal{L}_{\mathrm{PrC}}
-                + \lambda_2 \mathcal{L}_{\mathrm{FiC}}
-                + \lambda_3 \mathcal{L}_{\mathrm{SnC}}
-                + \lambda_4 \mathcal{L}_{\mathrm{CE}},
-\qquad \sum_{i=1}^{4}\lambda_i = 1 ,
-\end{equation}
-%
-which is the objective of \citet{xu2022cap} with the $\lambda$ indices permuted.
-We set $\lambda_i = 0.25$ for all $i$, so the four terms entered at equal weight
-and no weight was tuned. Constraining the weights to the simplex is deliberate:
-it fixes the total scale of the objective, so that changing the balance between
-terms cannot also change the effective learning rate.
-
-Let $f_\theta$ denote the sparse student, $g$ a projection head, and
-$z = \mathrm{normalize}(g(f_\theta(x))) \in \mathbb{R}^{D}$, so that
-$z_i^{\top} z_j$ is a cosine similarity. Let $\hat f$ denote a frozen teacher and
-$\hat z$ its correspondingly projected, normalised embedding; teacher forward
-passes ran under \texttt{no\_grad}, so $\hat z$ carried no gradient and each
-contrastive term acted as a distillation objective rather than a joint embedding
-objective. With $\tau > 0$ a temperature, the contrastive functional for an
-anchor $i$ with positive set $P(i)$ drawn from $N$ candidates is
+\paragraph{Objective.}
+With $z = \mathrm{normalize}(g(f_\theta(x)))$ --- so $z_i^{\top} z_j$ is cosine
+similarity --- $\hat z$ a frozen teacher's and $\tau = 0.15$, an anchor $i$ with
+positives $P(i)$ among $N$ candidates gave
 %
 \begin{equation}
 \label{eq:functional}
 \mathcal{L}_i \;=\; -\frac{1}{|P(i)|}\sum_{j \in P(i)}
 \log \frac{\exp\!\left(z_i^{\top}\hat z_j / \tau\right)}
           {\sum_{k=1}^{N}\exp\!\left(z_i^{\top}\hat z_k / \tau\right)} ,
-\qquad
-\mathcal{L} \;=\; \frac{1}{|\mathcal{A}|}\sum_{i \in \mathcal{A}} \mathcal{L}_i ,
 \end{equation}
 %
-Equation~1 of \citet{xu2022cap}, averaged over the anchor set
-$\mathcal{A} = \{\, i : |P(i)| > 0 \,\}$. Anchors with an empty positive set were
-excluded from the mean rather than divided by a clamped denominator; \emph{we
-define} this convention, since dividing by a clamped $1$ would contribute a
-spurious zero to the average.
+Equation~1 of \citet{xu2022cap}. BaCP trained under
+$\mathcal{L} = \lambda_1 \mathcal{L}_{\mathrm{PrC}} + \lambda_2
+\mathcal{L}_{\mathrm{FiC}} + \lambda_3 \mathcal{L}_{\mathrm{SnC}} + \lambda_4
+\mathcal{L}_{\mathrm{CE}}$, every $\lambda_i = 0.25$, untuned and
+simplex-constrained so rebalancing cannot also change the effective learning
+rate. Teachers ran under \texttt{no\_grad}: each term was a distillation, not a
+joint embedding, objective. Each module instantiated it twice
+against the same teacher over the same denominator --- self-supervised,
+$P(i) = \{\hat z_i\}$; supervised, $P(i) = \{\hat z_j : y_j = y_i\}$
+\citep{khosla2020supcon} --- and summed, over three teachers: pretrained (general
+features), dense fine-tuned (task structure), the run's own snapshots (trajectory
+drift). Over $K$ snapshots SnC was \emph{averaged}, $\frac{1}{K}\sum_k$, not
+summed, so its scale is independent of $K$ and $\lambda_3$ not silently rescaled
+as snapshots accumulate.
 
-Each module instantiates Eq.~\eqref{eq:functional} twice against the same
-teacher, over the same candidate set and therefore the same denominator: once
-\emph{self-supervised}, with $P(i) = \{\hat z_i\}$, the teacher's view of the same
-image; and once \emph{supervised}, with $P(i) = \{\hat z_j : y_j = y_i\}$, every
-candidate sharing the anchor's label \citep{khosla2020supcon}. The module loss is
-the sum of the two, $\mathcal{L}^{\mathrm{module}} =
-\mathcal{L}_{\mathrm{self}} + \mathcal{L}_{\mathrm{sup}}$. The three modules
-differ only in which frozen network supplies the candidates:
-
-\begin{itemize}
-\item $\mathcal{L}_{\mathrm{PrC}}$ contrasts against the \textbf{pretrained}
-  model $\phi_{\mathrm{pre}}$ --- the general-purpose representation, before any
-  task adaptation.
-\item $\mathcal{L}_{\mathrm{FiC}}$ contrasts against the \textbf{fine-tuned}
-  dense model $\phi_{\mathrm{fine}}$ --- the task-specific representation the
-  sparse network is trying not to lose.
-\item $\mathcal{L}_{\mathrm{SnC}}$ contrasts against the \textbf{snapshots}
-  $\phi_{r'}$, $r' < r$, saved at earlier points of the same pruning run --- the
-  student's own recent past, which anchors the trajectory against drift as the
-  mask tightens.
-\end{itemize}
-
-This three-teacher decomposition is Table~1 of \citet{xu2022cap}. With $K$
-snapshots accumulated, we \emph{averaged} over them rather than summing,
-%
-\begin{equation}
-\label{eq:snc}
-\mathcal{L}_{\mathrm{SnC}} \;=\; \frac{1}{K}\sum_{k=1}^{K}
-\mathcal{L}^{\mathrm{module}}\!\left(\phi_{r_k}\right),
-\end{equation}
-%
-so that the term's scale is independent of $K$. Under a plain sum the SnC term
-grows linearly as snapshots accumulate, which silently rescales $\lambda_3$
-relative to the other three weights over the course of a single run; the average
-removes that coupling and is what we ran.
-
-\paragraph{The instantiation we ran.}
-Equation~\eqref{eq:functional} admits more than one realisation, and the
-difference is not cosmetic. \citet{xu2022cap} evaluate it over a rectangular
-$B \times N$ matrix of student anchors against teacher candidates. The
-instantiation we ran --- referred to below as the \emph{legacy} objective --- forms
-$Z = \mathrm{cat}[z_s, z_t] \in \mathbb{R}^{2B \times D}$ and computes the
-supervised and self-supervised terms as SupCon \citep{khosla2020supcon} and
-NT-Xent \citep{chen2020simclr} over the square $2B \times 2B$ matrix $ZZ^{\top}$,
-in the SimCLR all-pairs convention. The square matrix therefore carries
-student--student and teacher--teacher blocks that CAP's rectangular form does not,
-and it makes teacher rows anchors as well. We implemented both forms and chose
-between them by measurement rather than by inheritance; the controlled comparison
-is reported in Section~\ref{sec:results} and the legacy form was the one that won
-at every measured point, which is why it is the objective this paper studies.
-Throughout, $\tau = 0.15$.
-
-\subsection{Pruning}
-\label{sec:method:prune}
-
-\paragraph{Schedule.}
-Sparsity was raised along the cubic schedule of \citet{zhu2018prune},
+\paragraph{Pruning.}
+Sparsity followed \citet{zhu2018prune}'s cubic schedule,
 %
 \begin{equation}
 \label{eq:cubic}
 s_t \;=\; s_f\left(1 - \left(1 - \frac{t}{T}\right)^{\!3}\right),
 \end{equation}
 %
-their Eq.~1 with initial sparsity $s_i = 0$ and start step $t_0 = 0$, where $s_f$
-is the target sparsity, $t$ the optimizer step and $T$ the end of the ramp. The
-ramp occupied the \textbf{first 80\%} of the pruning phase's optimizer steps; for
-the remaining \textbf{20\%} the mask was frozen at $s_f$ and training continued,
-which is the ramp-then-recover proportion of \citet{gale2019state}. Splitting the
-budget this way matters more at extreme sparsity than at moderate: the last
-increments of the ramp remove the largest fraction of what is still alive, and a
-schedule that reaches $s_f$ at the final step leaves no steps in which to recover
-from them.
+ramped over the first 80\% of optimizer steps, frozen at $s_f$ for the last 20\%
+\citep{gale2019state}, recomputed every $\Delta T = 100$ steps, re-applied after
+each. Scores were $|w_{ij}|$ \citep{han2015learning},
+$|w_{ij}\,\partial\mathcal{L}/\partial w_{ij}|$ (SNIP's score,
+\citealp{lee2019snip}; iterated after \citealp{verdenius2020snipit}) and
+$|w_{ij}|\lVert X_j\rVert_2$
+\citep{sun2024wanda}, all thresholded at one \emph{global} value, so
+Table~\ref{tab:main}'s row blocks differ only in the score. The global grouping
+is ours; WANDA's authors report row-wise scoring does not transfer to image
+classifiers. The classifier head was pruned, following vision practice
+\citep{evci2020rigl,liu2021granet}; the projection head never was and was
+discarded before the fine-tune, appearing in no reported model. Prunable scope
+was identical across arms in every cell; reported sparsity is the fraction of
+\emph{prunable} weights masked.
 
-\paragraph{Mask updates.}
-Mask recomputation was driven by optimizer steps, not epochs: the mask was
-recomputed every $\Delta T = 100$ steps and re-applied after every step in
-between. At batch 512 on 45{,}000 training images, 100 steps is approximately one
-epoch. We used $100$ rather than the exact per-epoch count of $87$ because
-\citet{zhu2018prune} tested update intervals between 100 and 1000 steps and
-report the effect as negligible across that range; $87$ would sit below anything
-they measured. Driving updates from steps rather than epochs also keeps the
-schedule well-defined when the number of batches per epoch changes.
+\paragraph{Setup.}
+Backbones were ResNet-34/50 \citep{he2016deep} and VGG-11/19
+\citep{simonyan2015very}: ResNet-50 carries 53 BatchNorm layers, the VGGs none
+and $\approx$85\% of their parameters in the classifier MLP. CIFAR-10
+\citep{krizhevsky2009cifar}: \num{45000} train, \num{5000} validation,
+\num{10000} held-out test; batch 512 gave 87 steps per epoch; every accuracy
+covers all \num{10000}, no partial batch dropped. The grid: 4 models
+$\times$ 3 criteria $\times$ 4 sparsities (0.95, 0.97, 0.99, 0.999) $\times$ 2
+arms plus 4 dense, 100 cells. BaCP's contrastive phase selected on \emph{training
+loss}, having no supervised validation signal, both fine-tunes on
+\emph{validation accuracy}; the test set, evaluated once per completed cell,
+selected nothing. Headline cells ran 3 seeds, the rest single-seed, against a
+measured floor of \result{cifar10.noise.floor.lo}--%
+\result{cifar10.noise.floor.hi} points \citep{bouthillier2021variance}.
 
-\paragraph{Criteria.}
-The three criteria differ only in the scoring function applied to each surviving
-weight. All three were then thresholded \emph{globally}, at the single value that
-achieves the current $s_t$ over the whole prunable scope, so that the criterion is
-the only variable that changes between columns of our results table:
+\paragraph{Matched budget.}
+The I.P.\ baseline is not a separately tuned competitor but the \emph{same run}
+--- same pretrained initialisation, same dense checkpoint, same criterion, same
+cubic schedule, same $\Delta T$, same prunable scope, same 50 pruning epochs,
+same 25-epoch AdamW $10^{-4}$ fine-tune \citep{loshchilov2019adamw}, same splits,
+same bf16 autocast, same gradient clipping at global norm 10.0 (SNIP-it's
+published value \citep{verdenius2020snipit}, applied symmetrically because an
+asymmetric stabiliser would itself be a difference between arms) --- with
+Eq.~\eqref{eq:functional} replaced by plain cross-entropy. The fine-tune ran on
+both arms: without it the comparison degenerates into 75 epochs of BaCP against
+50 of I.P.\ and the objective cannot be separated from the extra training.
+\citet{blalock2020state} document how often pruning comparisons fail here;
+Table~\ref{tab:protocol} gives the protocol.
 
-\begin{equation}
-\label{eq:criteria}
-S^{\mathrm{mag}}_{ij} = \left| w_{ij} \right| ,
-\qquad
-S^{\mathrm{snip}}_{ij} = \left| w_{ij} \cdot \frac{\partial \mathcal{L}}{\partial w_{ij}} \right| ,
-\qquad
-S^{\mathrm{wanda}}_{ij} = \left| w_{ij} \right| \cdot \left\lVert X_j \right\rVert_2 .
-\end{equation}
-
-$S^{\mathrm{mag}}$ is magnitude pruning \citep{han2015learning}, and under
-Eq.~\eqref{eq:cubic} it is gradual magnitude pruning in the sense of
-\citet{zhu2018prune}. $S^{\mathrm{snip}}$ is the SNIP saliency
-\citep{lee2019snip}, used unnormalised and applied iteratively through training
-after \citet{verdenius2020snipit} rather than once at initialisation.
-$S^{\mathrm{wanda}}$ is the WANDA metric \citep{sun2024wanda}, with
-$\lVert X_j \rVert_2$ the norm of the $j$-th input feature accumulated over the
-current batch. Two conventions here are ours rather than WANDA's and we mark them
-as such. \emph{We define} the global comparison group: WANDA's published form
-ranks within each output row, and its authors report that this grouping choice
-does not transfer from language models to image classifiers, so we adopt the
-global threshold used by the other two criteria in order to isolate the score.
-\emph{We define} the 4-D convention: WANDA's reference implementation covers
-\texttt{Linear} layers only, and we fold a convolution kernel into the input
-dimension so that a weight of shape $(c_{\mathrm{out}}, c_{\mathrm{in}}, k_h, k_w)$
-is scored against unfolded input columns, producing the same matrix WANDA would
-score for a linear layer.
-
-\paragraph{What was pruned, and what was not.}
-The prunable scope excluded 1-D tensors (biases and normalisation parameters) and
-frozen tensors. The \textbf{classifier head was pruned}, following the vision
-pruning line we compare against: \citet{han2015learning} prune the output fully
-connected layer, SNIP thresholds globally over all weights, and RigL and GraNet
-mask the classifier by default \citep{evci2020rigl,liu2021granet}. VGG's
-backbone MLP, which holds the large majority of those models' parameters, was in
-scope. The \textbf{projection head $g$ was never pruned}, under either arm, and
-was \textbf{discarded before the final fine-tune}, so it appears in no reported
-model and contributes to no reported parameter count. The scope was byte-for-byte
-identical between I.P.\ and BaCP within every cell of every table.
-
-Reported sparsity is the fraction of \emph{prunable} weights that are masked. We
-state the denominator explicitly because at 99.9\% the choice of denominator moves
-the reported number materially, and because the prunable scope --- not the full
-parameter count --- is what our threshold acts on.
+\paragraph{The one asymmetry.}
+\label{sec:experiments:vgglr}
+BaCP's pruning phase used SGD 0.1 on the ResNets, 0.05 on the VGGs; I.P.\ stayed
+at 0.01, the objectives not sharing a gradient scale. On
+\texttt{vgg19}/\texttt{magnitude}/0.95, everything else identical, LR 0.10
+reached \result{vgg19.probelr010.magnitude.0.95}, LR 0.05
+\result{vgg19.probelr005.magnitude.0.95} and matched I.P.\
+\result{vgg19.probeip.magnitude.0.95}. Fixed before the sweep, applied uniformly
+to both VGGs, chosen on one cell, not swept; I.P.'s rate was not tuned in reply,
+conservative in the direction that matters.

@@ -1,0 +1,38 @@
+% !TeX root = ../main.tex
+%
+% Broader impact statement.  Deliberately short and deliberately unexcited:
+% this work makes existing models cheaper to run, and unlocks nothing new.
+% Do not inflate it.
+
+\section{Broader impact}
+\label{sec:stmt:impact}
+
+Pruning makes an already-trained model cheaper to run. A sparse network needs
+less memory and, given hardware or kernels that exploit the sparsity pattern,
+less time and less energy per inference than the dense model it came from. The
+benefit of that is real but ordinary: lower serving cost, lower emissions per
+query, and the possibility of running a model on a device that could not hold
+the dense one. This work does not introduce a new capability, a new model or a
+new dataset; it studies which training objective produces a better model at a
+given sparsity, and the artefacts it produces are ten-class image classifiers.
+
+The risk worth naming is specific to the sparsity regime we study. At 99\% and
+99.9\% sparsity, accuracy is lost, and there is no reason for that loss to be
+distributed evenly. Capacity removed from a network is removed first from
+whatever it represented least robustly, which tends to be the rare cases: rare
+classes, rare conditions, and --- in settings other than this benchmark ---
+under-represented subgroups. A single aggregate accuracy figure, which is what
+this paper and most of the pruning literature report, is exactly the statistic
+that cannot see this. We did not measure subgroup effects here; CIFAR-10 is
+class-balanced and carries no subgroup annotations, so this benchmark could not
+show them even in principle. The practical implication is a caution about
+deployment rather than a finding: a model sparsified to these levels for a
+consequential application should be evaluated per group and per rare class, not
+only in aggregate, and the aggregate figures in this paper should not be read
+as evidence that nothing was lost.
+
+We are aware of no path from this work to a directly harmful application that
+was not already open. Making inference cheaper marginally lowers the cost of
+deploying any classifier, benign or otherwise, but the models studied here are
+standard published architectures on a standard public benchmark, and nothing
+about the objective is specific to a sensitive use.

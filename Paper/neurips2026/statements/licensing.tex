@@ -1,0 +1,71 @@
+% !TeX root = ../main.tex
+%
+% Licensing and attribution statement.
+%
+% Every licence named here was verified from the asset itself (the package
+% metadata in the pinned environment, or the repository's LICENSE file), not
+% recalled.  Where no licence declaration could be established, this file says
+% so rather than asserting one -- the checklist guidelines explicitly permit
+% "we were unable to find the license".
+%
+% ANONYMITY: the code licence is named without its copyright line, because the
+% copyright line contains the author's name.  Do not paste the LICENSE header.
+
+\section{Licensing and attribution of existing assets}
+\label{sec:stmt:licensing}
+
+\paragraph{Dataset.}
+All experiments use CIFAR-10 \citep{krizhevsky2009cifar}, obtained through the
+standard \texttt{torchvision} dataset loader and used unmodified. We credit it
+by citing the technical report that released it, which is the attribution its
+authors ask for. We were not able to establish a formal licence declaration
+accompanying the CIFAR-10 distribution, and we state that rather than assert a
+licence we cannot evidence; the dataset is distributed publicly for research
+use, and our use --- non-commercial academic benchmarking --- is within that
+purpose.
+
+\paragraph{Pre-trained weights.}
+Every dense model in this paper is initialised from ImageNet-pretrained
+\texttt{torchvision} classification weights rather than from random
+initialisation, and the pruned arms are initialised from the resulting dense
+checkpoint. Those weights were trained on ImageNet
+\citep{deng2009imagenet}, whose own terms of access grant use for
+non-commercial research and educational purposes; we use them within that
+scope and release no derived weights. The weights are distributed as part of
+\texttt{torchvision} and carry its licence, below.
+
+\paragraph{Architectures.}
+The backbones are published architectures, not ours: the residual networks of
+\citet{he2016deep} and the VGG family of \citet{simonyan2015very}, taken from
+their \texttt{torchvision} implementations. The training objective this paper
+studies is the module decomposition of CAP \citep{xu2022cap}; the paper states
+plainly that the decomposition is theirs and identifies precisely where our
+implementation departs from their published form. The sparsity schedule is that
+of \citet{zhu2018prune} and the prune-and-retrain paradigm that of
+\citet{han2015learning}. The pruning criteria are those of \citet{lee2019snip}
+and \citet{verdenius2020snipit} for the sensitivity score and its iterative
+re-application, and \citet{sun2024wanda} for the activation-weighted score.
+
+\paragraph{Software.}
+The environment is pinned. \texttt{PyTorch} 2.5.1 and \texttt{torchvision}
+0.20.1 are used under the BSD 3-Clause licence. The codebase also depends on
+\texttt{transformers} 4.46.3 and \texttt{datasets} 3.1.0, both under the
+Apache License 2.0; these support the language-model configurations that the
+framework implements but that this paper does not use --- no result reported
+here comes from a HuggingFace checkpoint, and if a text result is added, the
+licence on each model card must be checked individually, since the checkpoints
+in that family do not share a single licence.
+
+\paragraph{Our own code.}
+The training and analysis code written for this project is licensed under the
+MIT License. It is not linked from this submission, for the anonymity reason
+given in the reproducibility statement, and the licence text is stated here
+without its copyright line for the same reason.
+
+\paragraph{Published numbers quoted for comparison.}
+The comparator accuracies this paper places beside its own are quoted from the
+tables of the papers that reported them, with the source and the training recipe
+named in each case, and are not re-run by us. They are used as published
+reference points under normal scholarly citation, and the paper states the
+difference in training budget that makes a direct comparison of absolute
+accuracies inappropriate.

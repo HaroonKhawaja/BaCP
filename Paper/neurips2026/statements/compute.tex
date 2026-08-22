@@ -1,0 +1,66 @@
+% !TeX root = ../main.tex
+%
+% Compute statement.
+%
+% ANONYMITY: naming the cloud provider and the VM SKU is fine.  Naming the
+% workspace host, the account path or the repository is not.  Do not add them.
+%
+% The archived-record count below (97) is the number of run records in the
+% pre-protocol archive snapshot, counted from the archive itself.  If more
+% pre-protocol runs are archived before submission, update it -- do not guess.
+
+\section{Compute}
+\label{sec:stmt:compute}
+
+\paragraph{Hardware.}
+Every run reported in this paper was executed on a single NVIDIA A100 GPU, on a
+cloud node with 24 vCPUs (an Azure \texttt{Standard\_NC24ads\_A100\_v4}
+instance). Runs are serialised: one training job owns the GPU at a time and is
+given all 24 data-loading workers. There is no multi-GPU or multi-node training
+anywhere in this work, and no result depends on a distributed configuration.
+
+\paragraph{The reported sweep.}
+The matched grid is four backbones $\times$ three pruning criteria $\times$ four
+sparsities $\times$ two arms, plus one dense baseline per backbone: 100 cells.
+Executed end to end on the machine above, at one seed per cell, the sweep takes
+roughly 14 hours of wall-clock. Replicating the headline cells at three seeds
+costs two further passes over that subset. Individual cells are not uniform in
+cost: a dense pre-training run has the largest epoch budget, and a contrastive
+run is materially more expensive per epoch than the baseline it is compared
+against, because it forwards two augmented views through the student and a
+frozen teacher rather than one view through a single network. The matched-budget
+claim in this paper is a claim about \emph{epochs and schedule}, which are
+identical across arms; it is not a claim that the two arms cost the same number
+of GPU-seconds, and they do not.
+
+\paragraph{Supporting runs reported in the paper.}
+Beyond the grid, the paper reports three smaller sets of runs. The objective
+ablation is nine configurations --- three sparsities crossed with three
+objective variants --- of which eight completed; one was terminated before it
+finished and is reported as not run rather than as a gap. The learning-rate
+measurement for the VGG family is three runs at one model, criterion and
+sparsity. The run-to-run noise floor was estimated from a five-seed repetition
+of one dense configuration.
+
+\paragraph{Compute this project consumed that this paper does not report.}
+Considerably more. A body of 97 earlier run records exists and is archived
+rather than used. Those runs are excluded for a protocol reason, not for their
+results: they were produced under a superseded configuration --- a different
+epoch budget, a different mask-update interval, and a contrastive stage that
+trained on the unsplit 50{,}000-image training set rather than on the 45{,}000
+that the current protocol reserves for it --- so they are not comparable with the
+matched sweep and mixing them into it would silently contaminate a matched
+table with an unmatched number. They are archived intact rather than deleted.
+Separately, an earlier line of work on this codebase produced results that were
+invalidated by an evaluation defect, which is described in the reproducibility
+statement; those numbers are not reported anywhere in this paper. Smoke and
+tier-zero runs, used to exercise the pipeline on truncated data, are excluded
+mechanically by the results generator and are not counted as experiments. We do
+not report a total GPU-hour figure for the discarded work, because the archived
+records span several machines and configurations and any single figure we gave
+would be an estimate rather than a measurement.
+
+\paragraph{Unmeasured cells.}
+Cells that had not been measured at the time of writing appear in this document
+as a visible placeholder rather than as a number, and are not counted anywhere
+as results.

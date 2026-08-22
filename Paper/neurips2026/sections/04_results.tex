@@ -1,0 +1,179 @@
+\section{Results}
+\label{sec:results}
+% The ablation is a \paragraph, which is unnumbered, so a \label placed there
+% would inherit the last stepped counter (the table) and resolve to the wrong
+% number.  Both labels therefore sit on the section itself.
+\label{sec:results:ablation}
+
+Within each cell of Table~\ref{tab:main} the two arms differ only in the
+objective (Section~\ref{sec:method}), so $\Delta$ is the quantity this paper
+measures and the absolutes are context for it. It is read three ways --- down a
+column, across blocks, across model groups --- the paper's three claims.
+\resultif{vgg19.delta.wanda.0.999}%
+  {The grid is complete.}%
+  {The sweep is still running; unmeasured cells render as a red \textbf{??}.}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Test accuracy (\%) on the held-out CIFAR-10 test set under a matched
+budget. $\mathrm{BaCP} = \mathrm{I.P.} + \Delta$, so no absolute is lost; the
+full three-column form is Table~\ref{tab:main-abs}. Sparsity is the fraction of
+prunable weights masked; the classifier head is in the prunable scope and the
+projection head is not. Positive $\Delta$ favours BaCP. The four cells marked
+$\dagger$ are 3-seed, with mean $\pm$ standard deviation in the appendix; every
+other cell is single-seed. Reported at partial sweep completion, with unmeasured
+cells visibly marked --- a partly populated table is an honest state, not a
+defect.}
+\label{tab:main}
+\begin{tabular}{lcc cc cc cc}
+\toprule
+& \multicolumn{2}{c}{ResNet-34} & \multicolumn{2}{c}{ResNet-50}
+& \multicolumn{2}{c}{VGG-11} & \multicolumn{2}{c}{VGG-19} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+Sparsity & I.P. & $\Delta$ & I.P. & $\Delta$
+         & I.P. & $\Delta$ & I.P. & $\Delta$ \\
+\midrule
+\multicolumn{9}{l}{\textit{Dense reference (unpruned, cross-entropy)}} \\
+--- & \multicolumn{2}{c}{\result{resnet34.dense.none.0.0}}
+    & \multicolumn{2}{c}{\result{resnet50.dense.none.0.0}}
+    & \multicolumn{2}{c}{\result{vgg11.dense.none.0.0}}
+    & \multicolumn{2}{c}{\result{vgg19.dense.none.0.0}} \\
+\midrule
+\multicolumn{9}{l}{\textit{Magnitude} \citep{han2015learning}} \\
+0.95  & \result{resnet34.ip.magnitude.0.95}  & \result{resnet34.delta.magnitude.0.95}
+      & \result{resnet50.ip.magnitude.0.95}  & \result{resnet50.delta.magnitude.0.95}$^{\dagger}$
+      & \result{vgg11.ip.magnitude.0.95}     & \result{vgg11.delta.magnitude.0.95}
+      & \result{vgg19.ip.magnitude.0.95}     & \result{vgg19.delta.magnitude.0.95}$^{\dagger}$ \\
+0.97  & \result{resnet34.ip.magnitude.0.97}  & \result{resnet34.delta.magnitude.0.97}
+      & \result{resnet50.ip.magnitude.0.97}  & \result{resnet50.delta.magnitude.0.97}
+      & \result{vgg11.ip.magnitude.0.97}     & \result{vgg11.delta.magnitude.0.97}
+      & \result{vgg19.ip.magnitude.0.97}     & \result{vgg19.delta.magnitude.0.97} \\
+0.99  & \result{resnet34.ip.magnitude.0.99}  & \result{resnet34.delta.magnitude.0.99}
+      & \result{resnet50.ip.magnitude.0.99}  & \result{resnet50.delta.magnitude.0.99}$^{\dagger}$
+      & \result{vgg11.ip.magnitude.0.99}     & \result{vgg11.delta.magnitude.0.99}
+      & \result{vgg19.ip.magnitude.0.99}     & \result{vgg19.delta.magnitude.0.99}$^{\dagger}$ \\
+0.999 & \result{resnet34.ip.magnitude.0.999} & \result{resnet34.delta.magnitude.0.999}
+      & \result{resnet50.ip.magnitude.0.999} & \result{resnet50.delta.magnitude.0.999}
+      & \result{vgg11.ip.magnitude.0.999}    & \result{vgg11.delta.magnitude.0.999}
+      & \result{vgg19.ip.magnitude.0.999}    & \result{vgg19.delta.magnitude.0.999} \\
+\midrule
+\multicolumn{9}{l}{\textit{SNIP-it} \citep{lee2019snip,verdenius2020snipit}} \\
+0.95  & \result{resnet34.ip.snip.0.95}  & \result{resnet34.delta.snip.0.95}
+      & \result{resnet50.ip.snip.0.95}  & \result{resnet50.delta.snip.0.95}
+      & \result{vgg11.ip.snip.0.95}     & \result{vgg11.delta.snip.0.95}
+      & \result{vgg19.ip.snip.0.95}     & \result{vgg19.delta.snip.0.95} \\
+0.97  & \result{resnet34.ip.snip.0.97}  & \result{resnet34.delta.snip.0.97}
+      & \result{resnet50.ip.snip.0.97}  & \result{resnet50.delta.snip.0.97}
+      & \result{vgg11.ip.snip.0.97}     & \result{vgg11.delta.snip.0.97}
+      & \result{vgg19.ip.snip.0.97}     & \result{vgg19.delta.snip.0.97} \\
+0.99  & \result{resnet34.ip.snip.0.99}  & \result{resnet34.delta.snip.0.99}
+      & \result{resnet50.ip.snip.0.99}  & \result{resnet50.delta.snip.0.99}
+      & \result{vgg11.ip.snip.0.99}     & \result{vgg11.delta.snip.0.99}
+      & \result{vgg19.ip.snip.0.99}     & \result{vgg19.delta.snip.0.99} \\
+0.999 & \result{resnet34.ip.snip.0.999} & \result{resnet34.delta.snip.0.999}
+      & \result{resnet50.ip.snip.0.999} & \result{resnet50.delta.snip.0.999}
+      & \result{vgg11.ip.snip.0.999}    & \result{vgg11.delta.snip.0.999}
+      & \result{vgg19.ip.snip.0.999}    & \result{vgg19.delta.snip.0.999} \\
+\midrule
+\multicolumn{9}{l}{\textit{WANDA} \citep{sun2024wanda}, global threshold} \\
+0.95  & \result{resnet34.ip.wanda.0.95}  & \result{resnet34.delta.wanda.0.95}
+      & \result{resnet50.ip.wanda.0.95}  & \result{resnet50.delta.wanda.0.95}
+      & \result{vgg11.ip.wanda.0.95}     & \result{vgg11.delta.wanda.0.95}
+      & \result{vgg19.ip.wanda.0.95}     & \result{vgg19.delta.wanda.0.95} \\
+0.97  & \result{resnet34.ip.wanda.0.97}  & \result{resnet34.delta.wanda.0.97}
+      & \result{resnet50.ip.wanda.0.97}  & \result{resnet50.delta.wanda.0.97}
+      & \result{vgg11.ip.wanda.0.97}     & \result{vgg11.delta.wanda.0.97}
+      & \result{vgg19.ip.wanda.0.97}     & \result{vgg19.delta.wanda.0.97} \\
+0.99  & \result{resnet34.ip.wanda.0.99}  & \result{resnet34.delta.wanda.0.99}
+      & \result{resnet50.ip.wanda.0.99}  & \result{resnet50.delta.wanda.0.99}
+      & \result{vgg11.ip.wanda.0.99}     & \result{vgg11.delta.wanda.0.99}
+      & \result{vgg19.ip.wanda.0.99}     & \result{vgg19.delta.wanda.0.99} \\
+0.999 & \result{resnet34.ip.wanda.0.999} & \result{resnet34.delta.wanda.0.999}
+      & \result{resnet50.ip.wanda.0.999} & \result{resnet50.delta.wanda.0.999}
+      & \result{vgg11.ip.wanda.0.999}    & \result{vgg11.delta.wanda.0.999}
+      & \result{vgg19.ip.wanda.0.999}    & \result{vgg19.delta.wanda.0.999} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Across sparsity.}
+0.95 is the least informative comparison: both arms sit near the dense
+reference, with little damage for either objective to repair. The
+informative region is the right end of the schedule, where the weight budget is
+small enough that the retraining signal has to do real work, and a
+representation-level effect predicts the margin widening there.
+% TODO: confirm direction once the sweep lands -- the claim "the margin widened with sparsity" must be checked against every model column, not only ResNet-50.
+
+\paragraph{Across criteria.}
+The three blocks share everything but the score, so a $\Delta$ that keeps its
+sign across all three is the criterion-agnosticism evidence; consistency of sign
+matters, not their ranking. If any block reverses sign, the claim
+is narrowed to the criteria where it holds and the reversal reported rather than
+averaged away.
+% TODO: confirm direction once the sweep lands -- if any criterion block reverses sign, the criterion-agnostic claim must be narrowed to the criteria where it holds, and the reversal reported rather than averaged away.
+
+\paragraph{Across architectures and seeds.}
+ResNet and VGG are not expected to behave identically --- heavily normalised and
+convolution-dominated against unnormalised and classifier-MLP-dominated --- and
+the learning-rate probe of Section~\ref{sec:method} is one place the difference
+already surfaced. The daggered cells carry three seeds, and a $\Delta$ that does
+not clear its own seed spread is not a result.
+% TODO: confirm direction once the sweep lands -- whether the VGG and ResNet families agree in sign and in trend with sparsity.
+% TODO: confirm direction once the sweep lands -- if a headline delta does not clear its own seed spread, say so explicitly here.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Objective ablation. ResNet-50, CIFAR-10, magnitude criterion,
+\textbf{single seed}, under an \textbf{earlier protocol} than
+Table~\ref{tab:main} (60 pruning epochs, $\Delta T = 88$, no validation split,
+50-epoch fine-tune). Reported for the ordering it establishes, not for its
+absolute values. \emph{Control} is the CAP-form rectangular functional with a
+single frozen projection head shared by student and teachers. The control arm at
+0.99 was terminated by an unrelated job cancellation and was not re-run, so that
+cell holds no number.}
+\label{tab:ablation}
+\begin{tabular}{lcccc}
+\toprule
+Sparsity & I.P.\ baseline & Control & Legacy (ours) & Legacy $-$ I.P. \\
+\midrule
+0.95 & \result{resnet50.ablip.magnitude.0.95} & \result{resnet50.ablcontrol.magnitude.0.95} & \result{resnet50.abllegacy.magnitude.0.95} & \result{resnet50.abldelta.magnitude.0.95} \\
+0.97 & \result{resnet50.ablip.magnitude.0.97} & \result{resnet50.ablcontrol.magnitude.0.97} & \result{resnet50.abllegacy.magnitude.0.97} & \result{resnet50.abldelta.magnitude.0.97} \\
+0.99 & \result{resnet50.ablip.magnitude.0.99} & \result{resnet50.ablcontrol.magnitude.0.99} & \result{resnet50.abllegacy.magnitude.0.99} & \result{resnet50.abldelta.magnitude.0.99} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Which contrastive objective.}
+Table~\ref{tab:ablation} changes exactly two configuration keys: the contrastive
+formulation and the projection-head mode. \emph{Legacy} is SupCon plus NT-Xent
+over the square $2B \times 2B$ matrix with per-model trainable heads;
+\emph{control} is CAP's \citep{xu2022cap} rectangular $B \times N$ functional
+with one frozen head
+shared by student and teachers, so the head cannot absorb the objective. Legacy
+was ahead of control at every measured sparsity, which is why it is the
+objective studied and why we report the arm that lost. Both contrastive arms
+were at or above I.P.\ everywhere measured, so the direction does not depend on
+the realisation, only its size. The legacy margin grew as sparsity rose ---
+\result{resnet50.abldelta.magnitude.0.95},
+\result{resnet50.abldelta.magnitude.0.97},
+\result{resnet50.abldelta.magnitude.0.99} points --- which is why the grid was
+extended to 0.999. Caveats: single seed; a gap exceeding but not far exceeding
+the \result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi}-point noise
+floor; an earlier protocol, so ordering only; and a winner carrying the
+trainable head (Section~\ref{sec:discussion}). That ordering is not what our
+account of the mechanism predicts, and we have no mechanism for it.
+
+\paragraph{Calibration.}
+Gradual magnitude pruning is our magnitude criterion renamed:
+ResNet-50 / CIFAR-10 / 95\% GMP reached \resultpm{lit.granet.resnet50.gmp.0.95}
+\citep{liu2021granet} under 160 epochs at batch 128, against our 50$+$25 at
+batch 512. That row carries one load --- whether the baseline BaCP is measured
+against is competently trained --- not a ranking. Two gaps we state rather than paper
+over: VGG-11 has no published comparator at any sparsity, and no published
+static comparator exists at 0.97, 0.99 or 0.999 for any of our four models,
+which is exactly why the I.P.\ baseline was run under a matched budget rather
+than quoted. The appendix (Table~\ref{tab:published}) collects the published
+values.
+% TODO: confirm direction once the sweep lands -- state the actual gap between our I.P. magnitude cell and published GMP, and attribute it to budget only if the size is consistent with the budget difference.

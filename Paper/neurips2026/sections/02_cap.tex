@@ -1,0 +1,23 @@
+\section{Relation to CAP}
+\label{sec:cap}
+
+CAP \citep{xu2022cap} sums cross-entropy with three contrastive terms during
+gradual pruning, one per frozen teacher --- pretrained (PrC), task-fine-tuned
+(FiC), snapshot (SnC) --- on language encoders.
+
+That four-term decomposition is CAP's, not ours; ours permutes only the
+$\lambda$ indices and is not presented as new. Nothing below claims superiority.
+
+CAP computes one functional over the rectangular $B \times N$
+student-anchor/teacher-candidate matrix, contrasting \texttt{[CLS]} with no
+projection head; we stacked both embeddings and summed SupCon and NT-Xent over
+the square $2B \times 2B$ matrix on $\mathrm{cat}[z_s, z_t]$, SimCLR all-pairs,
+with in-batch negatives and a trainable, never-pruned head; CAP's memory bank we
+omitted rather than improved on --- it slots into that form unchanged, leaving
+only the batch.
+
+The loss form is a real difference, not a reparameterisation; both were run and
+measurement decided (\S\ref{sec:results}, Table~\ref{tab:ablation}). The head is
+the substantive caveat (\S\ref{sec:discussion}). Table~\ref{tab:cap-diff} lists
+the rest. Ours is CAP's objective on vision backbones, three pruning criteria,
+sparsities beyond CAP's.

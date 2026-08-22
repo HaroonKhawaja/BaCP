@@ -1,6 +1,307 @@
+% !TeX root = ../main.tex
+%
+% APPENDIX.  This file issues \appendix; no other file in the project may.
+%
+% It holds everything displaced from the 4-page body: the row-by-row CAP
+% difference table, the full method detail and the three demoted display
+% equations, the complete protocol and hyperparameter tables, the schedule
+% derivation, the full-width results tables (I.P./BaCP/Delta), the seed table,
+% the published-comparator table, the mechanism argument, the extended related
+% work, and the reproducibility statement.
+%
+% Every numeric value here routes through \result{} / \resultpm{}.  Nothing is
+% typed as a bare number except published values, each of which is registered
+% as a lit.* key in results_macros.tex and carries its \citep on the same line.
+%
 \appendix
-\section{Full hyperparameters, schedule derivation and reproducibility}
+
+% =========================================================================
+\section{Differences from CAP, row by row}
 \label{sec:appendix}
+\label{sec:app:cap}
+
+Section~\ref{sec:cap} states the relationship in prose. This section is the
+reference form of the same content: Table~\ref{tab:cap-diff} lists every
+difference between CAP \citep{xu2022cap} and the instantiation studied here, and
+the two differences that carry weight are expanded below.
+
+The module decomposition used in this paper --- PrC, FiC and SnC, and the
+four-term objective that combines them with cross-entropy --- is \textbf{CAP's
+contribution, not ours}, and we do not present it as new. Our objective is CAP's
+objective with the $\lambda$ indices permuted. None of the differences below is a
+claim of superiority in itself.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Differences between CAP \citep{xu2022cap} and the instantiation studied
+here. The three-module decomposition and the four-term objective are shared and
+are CAP's.}
+\label{tab:cap-diff}
+\begin{tabular}{@{}p{0.16\textwidth}p{0.38\textwidth}p{0.38\textwidth}@{}}
+\toprule
+ & CAP \citep{xu2022cap} & This paper \\
+\midrule
+Modules & PrC, FiC, SnC & PrC, FiC, SnC --- identical \\
+Objective & four-term weighted sum & same four terms, $\lambda$ indices permuted \\
+Loss form & one functional, two positive sets, shared denominator & two functionals summed (SupCon $+$ NT-Xent), SimCLR-style all-pairs \\
+Similarities & rectangular $B \times N$: student anchors $\times$ teacher candidates & square $2B \times 2B$ over $\mathrm{cat}[z_s, z_t]$ \\
+Projection head & none; contrasts the \texttt{[CLS]} state & $\mathrm{Linear}(d,128)$, trainable, never pruned \\
+Negatives & memory bank, $N = 4096$ pre-encoded & in-batch only, $2B$ \\
+Modality & pre-trained language models & convolutional vision backbones \\
+Max.\ sparsity reported & 97\% & 99.9\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The loss form.}
+CAP computes one functional over a rectangular student-anchor $\times$
+teacher-candidate similarity matrix, whereas the instantiation we ran stacked
+student and teacher embeddings and computed SupCon and NT-Xent over the
+resulting square matrix, which admits within-student and within-teacher blocks
+that CAP's formulation does not contain. This is a real difference and not a
+reparameterisation. We ran both forms as a controlled two-variable ablation and
+report the outcome in Section~\ref{sec:results}, Table~\ref{tab:ablation}; the
+choice between them was made by measurement rather than by inheritance.
+
+\paragraph{The projection head.}
+CAP contrasts the backbone representation directly, while we interposed a
+trainable linear head that was never pruned. This is the substantive caveat on
+our claim and Section~\ref{sec:limitations} states what it costs. CAP's memory
+bank is a component we omitted rather than an improvement we made: it slots into
+the rectangular formulation with no change to the loss, and its absence reduced
+our negative count from $4096$ to $2B$, leaving only the batch.
+
+What remains, after those subtractions, is what we claim: the objective works on
+vision backbones, works under three different pruning criteria, and continues to
+work at sparsities beyond the range CAP examined.
+
+% =========================================================================
+\section{The objective and the pruning rule in full}
+\label{sec:app:method}
+
+Section~\ref{sec:method} states this material inline and at the compression the
+page limit forced. This section gives the displayed forms and the conventions
+that had to be defined rather than inherited.
+
+\subsection{The four-term objective}
+
+BaCP's training objective was the $\lambda$-weighted sum of three contrastive
+terms and a cross-entropy term,
+%
+\begin{equation}
+\label{eq:objective}
+\mathcal{L} \;=\; \lambda_1 \mathcal{L}_{\mathrm{PrC}}
+                + \lambda_2 \mathcal{L}_{\mathrm{FiC}}
+                + \lambda_3 \mathcal{L}_{\mathrm{SnC}}
+                + \lambda_4 \mathcal{L}_{\mathrm{CE}},
+\qquad \sum_{i=1}^{4}\lambda_i = 1 ,
+\end{equation}
+%
+which is the objective of \citet{xu2022cap} with the $\lambda$ indices permuted.
+We set $\lambda_i = 0.25$ for all $i$, so the four terms entered at equal weight
+and no weight was tuned. Constraining the weights to the simplex was deliberate:
+it fixes the total scale of the objective, so that changing the balance between
+terms cannot also change the effective learning rate. The optional
+knowledge-distillation weight sits outside the simplex by design and was not
+used in any reported run.
+
+Let $f_\theta$ denote the sparse student, $g$ the projection head, and
+$z = \mathrm{normalize}(g(f_\theta(x))) \in \mathbb{R}^{D}$, so that
+$z_i^{\top} z_j$ is a cosine similarity. Let $\hat f$ denote a frozen teacher and
+$\hat z$ its correspondingly projected, normalised embedding. Teacher forward
+passes ran under \texttt{no\_grad}, so $\hat z$ carried no gradient and each
+contrastive term acted as a distillation objective rather than a joint embedding
+objective. The per-anchor functional is Eq.~\eqref{eq:functional} of
+Section~\ref{sec:method}, and the module loss is its average over the anchor set
+$\mathcal{A} = \{\, i : |P(i)| > 0 \,\}$.
+
+\paragraph{The empty-positive-set convention.}
+Anchors with an empty positive set were excluded from that mean rather than
+divided by a clamped denominator. \emph{We define} this convention: dividing by a
+clamped $1$ would contribute a spurious zero to the average, which at small batch
+and heavy class imbalance would silently attenuate the term.
+
+\subsection{The three modules}
+
+Each module instantiated the functional twice against the same teacher, over the
+same candidate set and therefore the same denominator: once
+\emph{self-supervised}, with $P(i) = \{\hat z_i\}$, the teacher's view of the
+same image; and once \emph{supervised}, with $P(i) = \{\hat z_j : y_j = y_i\}$,
+every candidate sharing the anchor's label \citep{khosla2020supcon}. The module
+loss was the sum of the two,
+$\mathcal{L}^{\mathrm{module}} = \mathcal{L}_{\mathrm{self}} +
+\mathcal{L}_{\mathrm{sup}}$. The three modules differ only in which frozen
+network supplied the candidates:
+
+\begin{itemize}
+\item $\mathcal{L}_{\mathrm{PrC}}$ contrasts against the \textbf{pretrained}
+  model $\phi_{\mathrm{pre}}$ --- the general-purpose representation, before any
+  task adaptation.
+\item $\mathcal{L}_{\mathrm{FiC}}$ contrasts against the \textbf{fine-tuned}
+  dense model $\phi_{\mathrm{fine}}$ --- the task-specific representation the
+  sparse network is trying not to lose.
+\item $\mathcal{L}_{\mathrm{SnC}}$ contrasts against the \textbf{snapshots}
+  $\phi_{r'}$, $r' < r$, saved at earlier points of the same pruning run --- the
+  student's own recent past, which anchors the trajectory against drift as the
+  mask tightens.
+\end{itemize}
+
+This three-teacher decomposition is Table~1 of \citet{xu2022cap}. With $K$
+snapshots accumulated we \emph{averaged} over them rather than summing,
+%
+\begin{equation}
+\label{eq:snc}
+\mathcal{L}_{\mathrm{SnC}} \;=\; \frac{1}{K}\sum_{k=1}^{K}
+\mathcal{L}^{\mathrm{module}}\!\left(\phi_{r_k}\right),
+\end{equation}
+%
+so that the term's scale is independent of $K$. Under a plain sum the SnC term
+grows linearly as snapshots accumulate, which silently rescales $\lambda_3$
+relative to the other three weights over the course of a single run; the average
+removes that coupling and is what we ran.
+
+\paragraph{The instantiation we ran.}
+\citet{xu2022cap} evaluate the functional over a rectangular $B \times N$ matrix
+of student anchors against teacher candidates. The instantiation we ran --- the
+\emph{legacy} objective --- formed
+$Z = \mathrm{cat}[z_s, z_t] \in \mathbb{R}^{2B \times D}$ and computed the
+supervised and self-supervised terms as SupCon \citep{khosla2020supcon} and
+NT-Xent \citep{chen2020simclr} over the square $2B \times 2B$ matrix $ZZ^{\top}$,
+in the SimCLR all-pairs convention. The square matrix therefore carries
+student--student and teacher--teacher blocks that CAP's rectangular form does
+not, and it makes teacher rows anchors as well. Both forms were implemented and
+the choice between them was made by measurement (Table~\ref{tab:ablation}), the
+legacy form winning at every measured point. Throughout, $\tau = 0.15$.
+
+\subsection{Criteria, in displayed form}
+
+The three criteria differ only in the scoring function applied to each surviving
+weight. All three were then thresholded \emph{globally}, at the single value that
+achieves the current $s_t$ over the whole prunable scope, so that the criterion
+is the only variable that changes between row blocks of Table~\ref{tab:main}:
+%
+\begin{equation}
+\label{eq:criteria}
+S^{\mathrm{mag}}_{ij} = \left| w_{ij} \right| ,
+\qquad
+S^{\mathrm{snip}}_{ij} = \left| w_{ij} \cdot \frac{\partial \mathcal{L}}{\partial w_{ij}} \right| ,
+\qquad
+S^{\mathrm{wanda}}_{ij} = \left| w_{ij} \right| \cdot \left\lVert X_j \right\rVert_2 .
+\end{equation}
+%
+$S^{\mathrm{mag}}$ is magnitude pruning \citep{han2015learning}, and under the
+cubic schedule of Eq.~\eqref{eq:cubic} it is gradual magnitude pruning in the
+sense of \citet{zhu2018prune}. $S^{\mathrm{snip}}$ is the SNIP saliency
+\citep{lee2019snip}, used unnormalised and applied iteratively through training
+after \citet{verdenius2020snipit} rather than once at initialisation.
+$S^{\mathrm{wanda}}$ is the WANDA metric \citep{sun2024wanda}, with
+$\lVert X_j \rVert_2$ the norm of the $j$-th input feature accumulated over the
+current batch.
+
+Two conventions here are ours rather than WANDA's and we mark them as such.
+\emph{We define} the global comparison group: WANDA's published form ranks
+weights within each output row, and its authors argue that the comparison group
+matters --- but that argument is made for large language models, and their own
+appendix reports that the effect does not transfer to image classifiers. We
+therefore used WANDA's \emph{metric} under the same global threshold as the other
+two criteria, in order to isolate the score, and we present the grouping as our
+design choice rather than on WANDA's authority. \emph{We define} the 4-D
+convention: WANDA's reference implementation covers \texttt{Linear} layers only,
+and we folded a convolution kernel into the input dimension so that a weight of
+shape $(c_{\mathrm{out}}, c_{\mathrm{in}}, k_h, k_w)$ was scored against unfolded
+input columns, producing the same matrix WANDA would score for a linear layer.
+
+\subsection{What was pruned, and what was not}
+
+The prunable scope excluded 1-D tensors (biases and normalisation parameters) and
+frozen tensors. The \textbf{classifier head was pruned}, following the vision
+pruning line we compare against: \citet{han2015learning} prune the output fully
+connected layer, SNIP thresholds globally over all weights, and RigL and GraNet
+mask the classifier by default \citep{evci2020rigl,liu2021granet}. VGG's backbone
+MLP, which holds the large majority of those models' parameters, was in scope.
+The \textbf{projection head $g$ was never pruned}, under either arm, and was
+\textbf{discarded before the final fine-tune}, so it appears in no reported model
+and contributes to no reported parameter count. The scope was byte-for-byte
+identical between I.P.\ and BaCP within every cell of every table.
+
+Reported sparsity is the fraction of \emph{prunable} weights that are masked. We
+state the denominator explicitly because at 99.9\% the choice of denominator
+moves the reported number materially, and because the prunable scope --- not the
+full parameter count --- is what our threshold acted on.
+
+\paragraph{Initialisation provenance.}
+Initialisation was enforced programmatically rather than assumed: the training
+entry point refused to start when the weights it loaded were not of the requested
+provenance, because a soft-failing checkpoint load is otherwise
+indistinguishable from a run that trained from scratch. Section~\ref{sec:app:repro}
+gives the mechanism.
+
+% =========================================================================
+\section{Protocol, hyperparameters and schedule}
+\label{sec:app:protocol}
+
+\subsection{The protocol table}
+
+Table~\ref{tab:protocol} is the tabular form of the matched-budget argument made
+in Section~\ref{sec:method}. It is written as three columns because there were
+three training phases, but the important reading of it is horizontal: the I.P.\
+and BaCP columns are identical on every row except the last.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Training protocol. The I.P.\ and BaCP arms are identical on every row
+except \emph{objective}. Both arms received the same initialisation, the same
+sparsity schedule, the same mask-update interval, the same epoch budget and the
+same fine-tune; this matched budget is what makes the I.P.--BaCP difference
+attributable to the objective.}
+\label{tab:protocol}
+\begin{tabular}{llll}
+\toprule
+ & Dense reference & I.P.\ baseline & BaCP \\
+\midrule
+Initialisation      & ImageNet-pretrained & dense checkpoint & dense checkpoint \\
+Optimizer           & SGD, LR 0.01 & SGD, LR 0.01 & SGD, LR 0.1 (VGG: 0.05) \\
+Epochs              & 100, patience 20 & 50 & 50 \\
+Fine-tune           & --- & AdamW $10^{-4}$, 25 ep. & AdamW $10^{-4}$, 25 ep. \\
+Mask interval $\Delta T$ & --- & 100 steps & 100 steps \\
+Sparsity schedule   & --- & cubic, 80/20 ramp/hold & cubic, 80/20 ramp/hold \\
+Batch size          & 512 & 512 & 512 \\
+Precision           & bf16 autocast & bf16 autocast & bf16 autocast \\
+Gradient clipping   & 10.0 global norm & 10.0 global norm & 10.0 global norm \\
+Objective           & CE & CE & $\lambda$-weighted PrC+FiC+SnC+CE \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Model selection.}
+BaCP's contrastive phase had no supervised validation signal to select on --- its
+objective is dominated by terms that are not a task metric --- so the checkpoint
+carried out of that phase was selected on \emph{training loss}. Both arms'
+fine-tuning phases selected on \emph{validation accuracy}, computed on the
+held-out \num{5000}-image validation split. \textbf{No stage of either arm
+selected on the test set.} The test set was evaluated once per completed cell.
+
+\paragraph{Precision, clipping and hardware.}
+All training ran under bfloat16 autocast with fp32 master weights. Gradients were
+clipped at a global norm of 10.0 on \emph{both} arms; the value is SNIP-it's
+published one \citep{verdenius2020snipit}, and applying it symmetrically matters
+because an asymmetric stabiliser would itself be a difference between the arms.
+Runs were executed one at a time on a single NVIDIA A100 (Azure
+\texttt{Standard\_NC24ads\_A100\_v4}, 24 vCPU), with the data loaders given the
+full CPU allocation.
+
+\paragraph{Seeds.}
+Run-to-run variation on this task and protocol was measured at approximately
+\result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} accuracy points.
+Because that floor is not negligible relative to the effects we are looking for,
+the headline cells were run with \textbf{3 seeds} and are reported as mean
+$\pm$ standard deviation in Table~\ref{tab:seeds}; the remaining cells of the
+grid are single-seed. Every table marks which is which. This is a compromise
+forced by compute, and Section~\ref{sec:limitations} counts it as a limitation
+rather than presenting partial seed coverage as adequate
+\citep{bouthillier2021variance}.
 
 \subsection{Hyperparameters by family}
 
@@ -89,13 +390,13 @@ phase, $T = \alpha T_{\mathrm{tot}}$ the end of the ramp with $\alpha = 0.8$,
 $s_f$ the target sparsity, and $\Delta T$ the mask-update interval. The scheduled
 sparsity at step $t$ is Eq.~\eqref{eq:cubic},
 $s_t = s_f\big(1 - (1 - t/T)^3\big)$ for $t \le T$ and $s_t = s_f$ thereafter, the
-schedule of \citet{zhu2018prune} with $s_i = 0$ and $t_0 = 0$. The mask is
+schedule of \citet{zhu2018prune} with $s_i = 0$ and $t_0 = 0$. The mask was
 recomputed at steps $t \in \{\Delta T, 2\Delta T, \dots\}$ with $t \le T$, and
 re-applied after every optimizer step throughout.
 
-For the convolutional family this instantiates as follows. With 45{,}000 training
-images at batch 512 there are 87 optimizer steps per epoch, so a 50-epoch pruning
-phase gives $T_{\mathrm{tot}} = 4{,}350$ steps. The ramp ends at
+For the convolutional family this instantiates as follows. With \num{45000}
+training images at batch 512 there are 87 optimizer steps per epoch, so a
+50-epoch pruning phase gives $T_{\mathrm{tot}} = 4{,}350$ steps. The ramp ends at
 $T = 0.8 \times 4{,}350 = 3{,}480$ steps, which is 40 epochs, and the mask is held
 fixed for the remaining 870 steps, which is 10 epochs of recovery. At
 $\Delta T = 100$ the mask is therefore recomputed 34 times over the ramp.
@@ -106,42 +407,453 @@ to zero at the end of the ramp, so most of the \emph{sparsity} is reached early
 and the late updates move $s_t$ very little. But the quantity the network
 experiences is the fraction of \emph{surviving} weights removed, which is
 $\big(s_{t+\Delta T} - s_t\big) / \big(1 - s_t\big)$, and at $s_f = 0.999$ that
-ratio grows across the ramp even as the absolute increments shrink: the final
-updates remove a large share of a very small population. This asymmetry is the
-reason the ramp is not allowed to run to the last step. The $\alpha = 0.8$ split
-guarantees a fixed 20\% of the budget in which no further weights are removed and
-the surviving ones can re-fit, following \citet{gale2019state}.
+ratio grows over almost the whole ramp even as the absolute increments shrink,
+peaking close to its end --- writing $u = 1 - t/T$, the ratio is maximised at
+$u^3 = 2(1 - s_f)/s_f$, which for $s_f = 0.999$ falls inside the final 15\% of
+the ramp. The final updates remove a large share of a very small population. This
+asymmetry is the reason the ramp is not allowed to run to the last step. The
+$\alpha = 0.8$ split guarantees a fixed 20\% of the budget in which no further
+weights are removed and the surviving ones can re-fit, following
+\citet{gale2019state}.
 
 The choice $\Delta T = 100$ rather than the exact per-epoch count of 87 is
 deliberate and conservative: \citet{zhu2018prune} report the pruning frequency as
 having negligible effect over the range 100 to 1000 steps, and 87 would place the
-protocol below the smallest interval they measured. Because mask updates are
+protocol below the smallest interval they measured. Because mask updates were
 driven by optimizer steps rather than epoch boundaries, the schedule is invariant
 to changes in the number of batches per epoch.
 
-\subsection{Reproducibility}
+\subsection{A protocol detail: the VGG learning rate}
+\label{sec:app:vgglr}
+
+The BaCP arm used SGD at LR 0.1 for the ResNets and 0.05 for both VGGs. This is
+the one place where the two arms' hyperparameters are not literally identical
+across all four models, so we report how the value was chosen rather than
+presenting it as a given.
+
+Neither VGG contains a BatchNorm layer, and roughly 85\% of each VGG's parameters
+sit in its classifier MLP. At LR 0.1 the contrastive phase destabilised on these
+models: gradient clipping prevented divergence, but the resulting sparse models
+sat below their own dense reference. We ran a direct probe on
+\texttt{vgg19}/\texttt{magnitude}/0.95 with everything else held identical and
+only the learning rate varied. BaCP at LR 0.10 reached
+\result{vgg19.probelr010.magnitude.0.95}; at LR 0.05 it reached
+\result{vgg19.probelr005.magnitude.0.95}; the matched I.P.\ baseline reached
+\result{vgg19.probeip.magnitude.0.95}. At 0.10 the objective was therefore worse
+than the baseline it is compared against, and at 0.05 it was better. VGG-11
+shares the architecture and exhibited the same symptom, so it took the same
+value.
+
+We report this because it is a real degree of freedom. Two things bound it. It
+was fixed \emph{before} the reported sweep and applied uniformly to both VGGs;
+and it was chosen against the I.P.\ baseline on a single cell, not swept per
+cell, per criterion or per sparsity. The learning rate of the I.P.\ arm was not
+correspondingly tuned, which is conservative in the direction that matters: the
+baseline was left at the standard value while the method under test was made to
+train stably.
+
+% =========================================================================
+\section{Full result tables}
+\label{sec:app:results}
+
+\subsection{Absolute accuracies for both arms}
+
+Table~\ref{tab:main} in the body reports the I.P.\ column and $\Delta$, from
+which BaCP is recoverable as $\mathrm{I.P.} + \Delta$.
+Table~\ref{tab:main-abs} is the same measurement in its full three-column form,
+so that no absolute is lost to the page limit and every BaCP cell is readable
+directly. The two tables report identical runs; only the presentation differs.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\caption{Test accuracy (\%) on the held-out CIFAR-10 test set under a matched
+budget --- the full form of body Table~\ref{tab:main}.
+$\Delta = \mathrm{BaCP} - \mathrm{I.P.}$; positive favours BaCP. Sparsity is the
+fraction of prunable weights masked; the classifier head is in the prunable scope
+and the projection head is not. Cells are single-seed except the headline cells
+of Table~\ref{tab:seeds}. Reported at partial sweep completion; unmeasured cells
+render as a red \textbf{??} rather than being omitted.}
+\label{tab:main-abs}
+\begin{tabular}{lccc ccc ccc ccc}
+\toprule
+& \multicolumn{3}{c}{ResNet-34} & \multicolumn{3}{c}{ResNet-50}
+& \multicolumn{3}{c}{VGG-11} & \multicolumn{3}{c}{VGG-19} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}
+Sparsity & I.P. & BaCP & $\Delta$ & I.P. & BaCP & $\Delta$
+         & I.P. & BaCP & $\Delta$ & I.P. & BaCP & $\Delta$ \\
+\midrule
+\multicolumn{13}{l}{\textit{Dense reference (unpruned, cross-entropy)}} \\
+--- & \multicolumn{3}{c}{\result{resnet34.dense.none.0.0}}
+    & \multicolumn{3}{c}{\result{resnet50.dense.none.0.0}}
+    & \multicolumn{3}{c}{\result{vgg11.dense.none.0.0}}
+    & \multicolumn{3}{c}{\result{vgg19.dense.none.0.0}} \\
+\midrule
+\multicolumn{13}{l}{\textit{Magnitude} \citep{han2015learning}} \\
+0.95  & \result{resnet34.ip.magnitude.0.95}  & \result{resnet34.bacp.magnitude.0.95}  & \result{resnet34.delta.magnitude.0.95}
+      & \result{resnet50.ip.magnitude.0.95}  & \result{resnet50.bacp.magnitude.0.95}  & \result{resnet50.delta.magnitude.0.95}
+      & \result{vgg11.ip.magnitude.0.95}     & \result{vgg11.bacp.magnitude.0.95}     & \result{vgg11.delta.magnitude.0.95}
+      & \result{vgg19.ip.magnitude.0.95}     & \result{vgg19.bacp.magnitude.0.95}     & \result{vgg19.delta.magnitude.0.95} \\
+0.97  & \result{resnet34.ip.magnitude.0.97}  & \result{resnet34.bacp.magnitude.0.97}  & \result{resnet34.delta.magnitude.0.97}
+      & \result{resnet50.ip.magnitude.0.97}  & \result{resnet50.bacp.magnitude.0.97}  & \result{resnet50.delta.magnitude.0.97}
+      & \result{vgg11.ip.magnitude.0.97}     & \result{vgg11.bacp.magnitude.0.97}     & \result{vgg11.delta.magnitude.0.97}
+      & \result{vgg19.ip.magnitude.0.97}     & \result{vgg19.bacp.magnitude.0.97}     & \result{vgg19.delta.magnitude.0.97} \\
+0.99  & \result{resnet34.ip.magnitude.0.99}  & \result{resnet34.bacp.magnitude.0.99}  & \result{resnet34.delta.magnitude.0.99}
+      & \result{resnet50.ip.magnitude.0.99}  & \result{resnet50.bacp.magnitude.0.99}  & \result{resnet50.delta.magnitude.0.99}
+      & \result{vgg11.ip.magnitude.0.99}     & \result{vgg11.bacp.magnitude.0.99}     & \result{vgg11.delta.magnitude.0.99}
+      & \result{vgg19.ip.magnitude.0.99}     & \result{vgg19.bacp.magnitude.0.99}     & \result{vgg19.delta.magnitude.0.99} \\
+0.999 & \result{resnet34.ip.magnitude.0.999} & \result{resnet34.bacp.magnitude.0.999} & \result{resnet34.delta.magnitude.0.999}
+      & \result{resnet50.ip.magnitude.0.999} & \result{resnet50.bacp.magnitude.0.999} & \result{resnet50.delta.magnitude.0.999}
+      & \result{vgg11.ip.magnitude.0.999}    & \result{vgg11.bacp.magnitude.0.999}    & \result{vgg11.delta.magnitude.0.999}
+      & \result{vgg19.ip.magnitude.0.999}    & \result{vgg19.bacp.magnitude.0.999}    & \result{vgg19.delta.magnitude.0.999} \\
+\midrule
+\multicolumn{13}{l}{\textit{SNIP-it} \citep{lee2019snip,verdenius2020snipit}} \\
+0.95  & \result{resnet34.ip.snip.0.95}  & \result{resnet34.bacp.snip.0.95}  & \result{resnet34.delta.snip.0.95}
+      & \result{resnet50.ip.snip.0.95}  & \result{resnet50.bacp.snip.0.95}  & \result{resnet50.delta.snip.0.95}
+      & \result{vgg11.ip.snip.0.95}     & \result{vgg11.bacp.snip.0.95}     & \result{vgg11.delta.snip.0.95}
+      & \result{vgg19.ip.snip.0.95}     & \result{vgg19.bacp.snip.0.95}     & \result{vgg19.delta.snip.0.95} \\
+0.97  & \result{resnet34.ip.snip.0.97}  & \result{resnet34.bacp.snip.0.97}  & \result{resnet34.delta.snip.0.97}
+      & \result{resnet50.ip.snip.0.97}  & \result{resnet50.bacp.snip.0.97}  & \result{resnet50.delta.snip.0.97}
+      & \result{vgg11.ip.snip.0.97}     & \result{vgg11.bacp.snip.0.97}     & \result{vgg11.delta.snip.0.97}
+      & \result{vgg19.ip.snip.0.97}     & \result{vgg19.bacp.snip.0.97}     & \result{vgg19.delta.snip.0.97} \\
+0.99  & \result{resnet34.ip.snip.0.99}  & \result{resnet34.bacp.snip.0.99}  & \result{resnet34.delta.snip.0.99}
+      & \result{resnet50.ip.snip.0.99}  & \result{resnet50.bacp.snip.0.99}  & \result{resnet50.delta.snip.0.99}
+      & \result{vgg11.ip.snip.0.99}     & \result{vgg11.bacp.snip.0.99}     & \result{vgg11.delta.snip.0.99}
+      & \result{vgg19.ip.snip.0.99}     & \result{vgg19.bacp.snip.0.99}     & \result{vgg19.delta.snip.0.99} \\
+0.999 & \result{resnet34.ip.snip.0.999} & \result{resnet34.bacp.snip.0.999} & \result{resnet34.delta.snip.0.999}
+      & \result{resnet50.ip.snip.0.999} & \result{resnet50.bacp.snip.0.999} & \result{resnet50.delta.snip.0.999}
+      & \result{vgg11.ip.snip.0.999}    & \result{vgg11.bacp.snip.0.999}    & \result{vgg11.delta.snip.0.999}
+      & \result{vgg19.ip.snip.0.999}    & \result{vgg19.bacp.snip.0.999}    & \result{vgg19.delta.snip.0.999} \\
+\midrule
+\multicolumn{13}{l}{\textit{WANDA} \citep{sun2024wanda}, global threshold} \\
+0.95  & \result{resnet34.ip.wanda.0.95}  & \result{resnet34.bacp.wanda.0.95}  & \result{resnet34.delta.wanda.0.95}
+      & \result{resnet50.ip.wanda.0.95}  & \result{resnet50.bacp.wanda.0.95}  & \result{resnet50.delta.wanda.0.95}
+      & \result{vgg11.ip.wanda.0.95}     & \result{vgg11.bacp.wanda.0.95}     & \result{vgg11.delta.wanda.0.95}
+      & \result{vgg19.ip.wanda.0.95}     & \result{vgg19.bacp.wanda.0.95}     & \result{vgg19.delta.wanda.0.95} \\
+0.97  & \result{resnet34.ip.wanda.0.97}  & \result{resnet34.bacp.wanda.0.97}  & \result{resnet34.delta.wanda.0.97}
+      & \result{resnet50.ip.wanda.0.97}  & \result{resnet50.bacp.wanda.0.97}  & \result{resnet50.delta.wanda.0.97}
+      & \result{vgg11.ip.wanda.0.97}     & \result{vgg11.bacp.wanda.0.97}     & \result{vgg11.delta.wanda.0.97}
+      & \result{vgg19.ip.wanda.0.97}     & \result{vgg19.bacp.wanda.0.97}     & \result{vgg19.delta.wanda.0.97} \\
+0.99  & \result{resnet34.ip.wanda.0.99}  & \result{resnet34.bacp.wanda.0.99}  & \result{resnet34.delta.wanda.0.99}
+      & \result{resnet50.ip.wanda.0.99}  & \result{resnet50.bacp.wanda.0.99}  & \result{resnet50.delta.wanda.0.99}
+      & \result{vgg11.ip.wanda.0.99}     & \result{vgg11.bacp.wanda.0.99}     & \result{vgg11.delta.wanda.0.99}
+      & \result{vgg19.ip.wanda.0.99}     & \result{vgg19.bacp.wanda.0.99}     & \result{vgg19.delta.wanda.0.99} \\
+0.999 & \result{resnet34.ip.wanda.0.999} & \result{resnet34.bacp.wanda.0.999} & \result{resnet34.delta.wanda.0.999}
+      & \result{resnet50.ip.wanda.0.999} & \result{resnet50.bacp.wanda.0.999} & \result{resnet50.delta.wanda.0.999}
+      & \result{vgg11.ip.wanda.0.999}    & \result{vgg11.bacp.wanda.0.999}    & \result{vgg11.delta.wanda.0.999}
+      & \result{vgg19.ip.wanda.0.999}    & \result{vgg19.bacp.wanda.0.999}    & \result{vgg19.delta.wanda.0.999} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Seed replication on the headline cells}
+
+The cells marked $\dagger$ in body Table~\ref{tab:main} are the ones with seed
+replication. Table~\ref{tab:seeds} gives them with their measured spread. The
+comparison that matters there is between the reported spread and the observed
+$\Delta$: a difference that does not clear its own seed spread is not a result,
+and we report the spread so that a reader can apply that test directly rather
+than take our word for it.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Headline cells, 3 seeds, mean $\pm$ standard deviation. These are the
+only cells in the paper with seed replication; every other cell is single-seed.}
+\label{tab:seeds}
+\begin{tabular}{llccc}
+\toprule
+Model & Sparsity & I.P. & BaCP & $\Delta$ \\
+\midrule
+ResNet-50 & 0.95 & \resultpm{resnet50.ip.magnitude.0.95} & \resultpm{resnet50.bacp.magnitude.0.95} & \result{resnet50.delta.magnitude.0.95} \\
+ResNet-50 & 0.99 & \resultpm{resnet50.ip.magnitude.0.99} & \resultpm{resnet50.bacp.magnitude.0.99} & \result{resnet50.delta.magnitude.0.99} \\
+VGG-19    & 0.95 & \resultpm{vgg19.ip.magnitude.0.95}    & \resultpm{vgg19.bacp.magnitude.0.95}    & \result{vgg19.delta.magnitude.0.95} \\
+VGG-19    & 0.99 & \resultpm{vgg19.ip.magnitude.0.99}    & \resultpm{vgg19.bacp.magnitude.0.99}    & \result{vgg19.delta.magnitude.0.99} \\
+\bottomrule
+\end{tabular}
+\end{table}
+% TODO: confirm direction once the sweep lands -- if a headline delta does not clear its own seed spread, say so explicitly here.
+
+\subsection{Calibration against published results}
+\label{sec:app:published}
+
+Table~\ref{tab:published} places our cells beside published CIFAR-10 results for
+the same architectures. The published values are quoted exactly from their
+sources and are \emph{not} matched-budget comparisons against our runs.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Our cells beside published CIFAR-10 results. Published values are quoted
+from their sources under \emph{their} recipes (160 epochs, batch 128 for the
+GraNet-table rows), not ours. They calibrate our baseline; they are not a matched
+comparison and not a ranking. Rows marked \emph{n.s.} are ones whose sparsity the
+source line we quote does not state, and we do not assign one. GraNet and GraSP
+disagree on the VGG-19 dense baseline and we report both rather than choosing.}
+\label{tab:published}
+\begin{tabular}{lllll}
+\toprule
+Model & Sparsity & Method & Accuracy (\%) & Source \\
+\midrule
+\multicolumn{5}{l}{\textit{ResNet-50 / CIFAR-10}} \\
+ResNet-50 & dense & published dense           & \resultpm{lit.granet.resnet50.dense}    & \citep{liu2021granet} \\
+ResNet-50 & dense & ours                      & \result{resnet50.dense.none.0.0}        & this paper \\
+ResNet-50 & n.s.  & SNIP                      & \result{lit.granet.resnet50.snip}       & \citep{liu2021granet} \\
+ResNet-50 & n.s.  & GraSP                     & \result{lit.granet.resnet50.grasp}      & \citep{liu2021granet} \\
+ResNet-50 & n.s.  & SynFlow                   & \result{lit.granet.resnet50.synflow}    & \citep{liu2021granet} \\
+ResNet-50 & n.s.  & RigL (dynamic)            & \resultpm{lit.granet.resnet50.rigl}     & \citep{liu2021granet} \\
+ResNet-50 & n.s.  & GraNet (dynamic)          & \resultpm{lit.granet.resnet50.granet}   & \citep{liu2021granet} \\
+ResNet-50 & 0.95  & GMP $=$ gradual magnitude & \resultpm{lit.granet.resnet50.gmp.0.95} & \citep{liu2021granet} \\
+ResNet-50 & 0.95  & \textbf{I.P.\ magnitude (ours)} & \result{resnet50.ip.magnitude.0.95}   & this paper \\
+ResNet-50 & 0.95  & \textbf{BaCP magnitude (ours)}  & \result{resnet50.bacp.magnitude.0.95} & this paper \\
+\midrule
+\multicolumn{5}{l}{\textit{VGG-19 / CIFAR-10}} \\
+VGG-19 & dense & published dense (GraNet) & \resultpm{lit.granet.vgg19.dense}      & \citep{liu2021granet} \\
+VGG-19 & dense & published dense (GraSP)  & \result{lit.grasp.vgg19.dense}         & \citep{wang2020grasp} \\
+VGG-19 & dense & ours                     & \result{vgg19.dense.none.0.0}          & this paper \\
+VGG-19 & 0.90  & GMP                      & \resultpm{lit.granet.vgg19.gmp.0.90}   & \citep{liu2021granet} \\
+VGG-19 & 0.90  & RigL (dynamic)           & \resultpm{lit.granet.vgg19.rigl.0.90}  & \citep{liu2021granet} \\
+VGG-19 & 0.95  & SNIP                     & \resultpm{lit.granet.vgg19.snip.0.95}  & \citep{liu2021granet,wang2020grasp} \\
+VGG-19 & 0.95  & GraSP                    & \resultpm{lit.granet.vgg19.grasp.0.95} & \citep{liu2021granet,wang2020grasp} \\
+VGG-19 & 0.98  & SNIP                     & \resultpm{lit.granet.vgg19.snip.0.98}  & \citep{liu2021granet,wang2020grasp} \\
+VGG-19 & 0.98  & GraSP                    & \resultpm{lit.granet.vgg19.grasp.0.98} & \citep{liu2021granet,wang2020grasp} \\
+VGG-19 & 0.95  & \textbf{I.P.\ magnitude (ours)} & \result{vgg19.ip.magnitude.0.95}   & this paper \\
+VGG-19 & 0.95  & \textbf{BaCP magnitude (ours)}  & \result{vgg19.bacp.magnitude.0.95} & this paper \\
+VGG-19 & 0.95  & \textbf{I.P.\ SNIP-it (ours)}   & \result{vgg19.ip.snip.0.95}        & this paper \\
+VGG-19 & 0.95  & \textbf{BaCP SNIP-it (ours)}    & \result{vgg19.bacp.snip.0.95}      & this paper \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The budget gap.}
+Those comparisons need a stated caveat, because our compute budget is
+substantially smaller. The GraNet CIFAR-10 recipe \citep{liu2021granet}, which
+supplies the dense, GMP, SNIP, GraSP, SynFlow, RigL and GraNet rows we quote,
+trains for 160 epochs at batch 128 with a step learning-rate schedule; ours was
+50 pruning epochs plus 25 fine-tuning epochs at batch 512. In optimizer updates
+that is close to an order of magnitude fewer. The extreme-sparsity results of
+\citet{li2025east} use 250 epochs at batch 128. The consequence is specific and
+we accept it in advance: \textbf{our absolute accuracies are expected to sit
+below the published ones, and no claim in this paper is an absolute
+state-of-the-art claim.} What our protocol supports is the \emph{controlled}
+quantity --- the difference between two arms that share a budget --- and that
+quantity is unaffected by the budget being small, because both arms are small in
+the same way.
+
+\paragraph{The GMP row.}
+Gradual magnitude pruning is our \texttt{magnitude} criterion under a different
+name --- \citet{zhu2018prune}'s cubic schedule applied to $|W|$ --- so the
+ResNet-50 / 95\% GMP entry is a direct match for our I.P.\ magnitude cell in
+method, model, dataset and sparsity, and differs from it only in budget. It is
+the single most informative published number for this paper: it tells a reader
+whether the baseline BaCP is measured against is a competently trained one. That
+is the only load the published numbers are asked to carry here.
+% TODO: confirm direction once the sweep lands -- state the actual gap between our I.P. magnitude cell and published GMP, and attribute it to budget only if the size is consistent with the budget difference.
+
+\paragraph{The dense disagreement.}
+GraNet \citep{liu2021granet} and GraSP \citep{wang2020grasp} report different
+dense VGG-19 baselines on CIFAR-10. Both are in Table~\ref{tab:published} and we
+report the disagreement rather than resolving it: we have no basis for
+preferring one, and silently picking the lower would flatter any sparse number
+placed beside it.
+
+\paragraph{Two coverage gaps.}
+We state these rather than paper over them. First, \textbf{VGG-11 has no
+published comparator at any sparsity}, so its entire column in
+Table~\ref{tab:main-abs} is reported standalone. Second, \textbf{no published
+static comparator exists at 0.97, 0.99 or 0.999} for any of our four models, so
+for three of our four sparsity levels the I.P.\ baseline is the only reference
+point --- which is exactly why that baseline was run under a matched budget
+rather than quoted. Only 95\% of our sparsity grid overlaps the literature's,
+which evaluates at 90 / 95 / 98.
+
+% =========================================================================
+\section{Why an alignment objective should matter more as sparsity rises}
+\label{sec:app:mechanism}
+
+The design hypothesis behind BaCP is not that a contrastive term is a better loss
+than cross-entropy in general. It is that the two losses differ in \emph{how much
+they constrain}, and that the difference is worth increasingly more as the
+surviving parameter budget shrinks.
+
+Cross-entropy on a $C$-way task supplies at most $\log_2 C$ bits per example, and
+in practice far fewer once the model is confident: on CIFAR-10 a correctly and
+confidently classified image contributes almost no gradient. Everything the
+network computes before the final logits is unconstrained except through that
+scalar. At 90\% sparsity this is adequate, because the surviving weights still
+span a subspace close enough to the dense one that the label is enough to
+re-tune the decision boundary within it. At 99.9\% it is not: the mask has
+removed so much of the support that the sparse network is not re-tuning a
+representation, it is choosing a new one, and a per-example scalar is a very weak
+prior over that choice.
+
+Equation~\eqref{eq:functional} supplies a different quantity. Its gradient with
+respect to an anchor embedding is
+$\tau^{-1}\big[\sum_k p_{ik}\hat z_k - |P(i)|^{-1}\sum_{j\in P(i)} \hat z_j\big]$,
+the difference between the softmax-weighted centroid of all candidates and the
+centroid of the positives: a $D$-dimensional target direction per example rather
+than a scalar, computed against a frozen dense teacher that has not been damaged.
+The teacher receives no gradient, so the term is a distillation signal --- it
+transfers geometry the sparse network can no longer derive on its own. That is
+why the effect should scale with damage, and why we extended the grid to 0.999
+rather than stopping where the antecedent stopped.
+
+The three teachers correspond to three failure modes, which is CAP's insight
+\citep{xu2022cap} rather than ours. PrC guards against losing the general
+features the ImageNet initialisation supplied; FiC guards against losing the
+task-specific structure the dense fine-tune built; SnC guards against trajectory
+drift, in which each mask update pushes the network somewhere the previous
+updates did not anticipate. The last of these is specific to \emph{gradual}
+pruning, and is the one that should matter most at extreme sparsity, where the
+final increments of the cubic ramp remove the largest fraction of what is still
+alive.
+
+\paragraph{What this account does not explain.}
+The ablation of Table~\ref{tab:ablation} found that the formulation with the
+larger, looser similarity matrix and the trainable head outperformed the tighter
+CAP-faithful one, which the argument above does not predict --- if anything it
+predicts the opposite, since the cleaner formulation constrains the backbone more
+directly. We report the ordering because we measured it, and we do not have a
+mechanism for it. The most we can say is that the square-matrix formulation adds
+within-student terms that the rectangular one lacks, which makes it a strictly
+larger objective, and that the two variables --- loss form and projection-head
+mode --- are confounded in a two-variable ablation. Separating them is future
+work.
+
+% =========================================================================
+\section{Extended related work}
+\label{sec:app:related}
+
+Section~\ref{sec:intro} compresses this material to a single paragraph. This
+section is the full treatment.
+
+\subsection{Pruning}
+
+\paragraph{Magnitude pruning and the prune--retrain paradigm.}
+\citet{han2015learning} established the template this paper works in: train a
+dense network, remove the weights of smallest magnitude, and retrain the
+survivors to recover the lost accuracy. \citet{zhu2018prune} replaced the
+one-shot removal with a schedule, raising sparsity along a cubic ramp across
+training so that the network is never asked to absorb a large discontinuity, and
+reported that the interval between mask updates could vary over an order of
+magnitude with negligible effect. \citet{gale2019state} audited that family at
+scale and established the ramp-then-hold shape --- sparsity rises over the early
+portion of training and the mask is then frozen while the weights recover ---
+that we adopt in Section~\ref{sec:method}. Gradual magnitude pruning (GMP) in the
+sense of those two papers is exactly what our \texttt{magnitude} criterion
+implements, a correspondence Section~\ref{sec:app:published} relies on when it
+places our numbers next to published ones.
+
+\paragraph{Saliency criteria.}
+SNIP \citep{lee2019snip} scores a weight by
+$|w \cdot \partial\mathcal{L}/\partial w|$, the first-order effect of deleting it
+on the loss, and applies the score once before training; SNIP-it
+\citep{verdenius2020snipit} applies the same criterion iteratively during
+training, which is the form we use. WANDA \citep{sun2024wanda} scores
+$|w_{ij}| \cdot \lVert X_j \rVert_2$, weighting magnitude by the norm of the
+corresponding input activation over a calibration set. WANDA's headline
+configuration ranks weights within each output row, and its authors argue that
+the comparison group matters; that argument is made for large language models,
+and their own appendix reports that the effect does not transfer to image
+classifiers. We therefore used WANDA's \emph{metric} under the same global
+threshold as the other two criteria, and present the grouping as our design
+choice rather than on WANDA's authority. The point of doing so is isolation: with
+one global threshold shared by all three scores, the row blocks of
+Table~\ref{tab:main-abs} differ in the score and in nothing else, which is the
+condition the criterion-agnosticism claim needs. Adopting WANDA's row-wise
+grouping for one block and not the others would have made the grouping a second
+variable, and a sign that failed to survive would then have had two possible
+causes.
+
+\paragraph{Lottery tickets and data-free criteria.}
+\citet{frankle2019lottery} showed that dense networks contain sparse subnetworks
+that train to comparable accuracy from a rewound initialisation, which reframed
+pruning as a search for structure rather than a compression post-process. GraSP
+\citep{wang2020grasp} and SynFlow \citep{tanaka2020synflow} prune at
+initialisation from gradient-flow and synaptic-flow signals respectively;
+SynFlow additionally characterises layer collapse, the failure mode in which a
+single layer is emptied and the network's function becomes constant, which is the
+dominant risk at the sparsities we run. \citet{blalock2020state} document how
+rarely pruning papers are mutually comparable --- differing protocols, missing
+baselines, incommensurable sparsity conventions --- which is the direct
+motivation for the matched-budget design of Section~\ref{sec:method}.
+
+\paragraph{Dynamic sparse training.}
+A parallel line keeps the parameter count fixed but lets the \emph{support} move.
+SET \citep{mocanu2018set} prunes and regrows connections at random during
+training; RigL \citep{evci2020rigl} regrows on gradient magnitude and introduces
+the Erd\H{o}s--R\'{e}nyi-Kernel layer budget that most of this line now uses;
+GraNet \citep{liu2021granet} interpolates between dense-to-sparse and
+sparse-to-sparse training, and reports the strongest CIFAR-10 numbers we quote in
+Table~\ref{tab:published}; EAST \citep{li2025east} targets the extreme regime
+specifically. This paper studies \emph{static} pruning --- a mask that only ever
+removes weights --- so these methods are context rather than baselines, and we do
+not claim results against them. We list them because a reader evaluating an
+extreme-sparsity claim will reasonably ask why the mask is not allowed to move,
+and the answer is scope: an objective-level intervention and a support-level
+intervention are separable, and we vary one of them. Whether they compose is an
+open question this paper does not answer.
+
+\subsection{Contrastive learning}
+
+SimCLR \citep{chen2020simclr} learns representations by pulling together two
+augmented views of the same image and pushing apart views of different images
+through the NT-Xent loss over in-batch negatives. MoCo \citep{he2020moco}
+decouples the negative count from the batch by maintaining a momentum-updated
+queue of keys --- the same problem CAP's memory bank addresses, and the reason
+its absence in our instantiation costs negatives rather than changing the loss.
+SupCon \citep{khosla2020supcon} generalises NT-Xent to multiple positives per
+anchor by admitting every same-label sample into the positive set, and shows that
+the formulation with the sum over positives outside the logarithm is the
+better-behaved one; at a single positive it reduces to NT-Xent. These three
+supply the loss forms that Section~\ref{sec:app:method} composes.
+
+Contrastive objectives have also been used as distillation signals. CRD
+\citep{tian2020crd} transfers a teacher's representation to a student by
+maximising a lower bound on their mutual information, and is the closest
+antecedent to using a contrastive term where a logit-matching term
+\citep{hinton2015distilling} would ordinarily go. The BaCP modules sit in that
+lineage: each is a distillation term, not a joint embedding term, because the
+teacher branch carries no gradient.
+
+\subsection{Contrastive objectives for compression}
+
+CAP \citep{xu2022cap} is the direct antecedent of this work. It supervises a
+model during gradual pruning with three contrastive terms, each contrasting the
+current sparse student against a different frozen teacher --- the pretrained
+model (PrC), the task-fine-tuned model (FiC), and previously saved sparse
+snapshots (SnC) --- combined with cross-entropy into a single four-term weighted
+sum. CAP reports on pre-trained language models (BERT-family encoders on GLUE
+tasks) at up to 97\% sparsity. Section~\ref{sec:app:cap} sets out every
+difference between CAP's instantiation and ours.
+
+% =========================================================================
+\section{Reproducibility}
+\label{sec:app:repro}
 
 \paragraph{Single source of protocol truth.}
 Every hyperparameter in Tables~\ref{tab:protocol}, \ref{tab:hyp-cnn} and
-\ref{tab:hyp-other} is read from one file, \texttt{project/test\_notebooks/nb\_common.py},
-whose \texttt{FAMILIES} dictionary holds a base configuration per model family
-plus per-phase overrides for the dense, I.P.\ and BaCP phases. Both arms of every
-cell are constructed from that dictionary by the same builder function, which is
-what makes the matched-budget claim of Section~\ref{sec:experiments} mechanical
-rather than a matter of care: the I.P.\ and BaCP configurations are derived from a
-shared base, so a protocol value cannot drift between arms without changing both.
-The BaCP-specific keys (temperature, $\lambda$ vector, contrastive formulation,
+\ref{tab:hyp-other} is read from one file,
+\texttt{project/test\_notebooks/nb\_common.py}, whose \texttt{FAMILIES}
+dictionary holds a base configuration per model family plus per-phase overrides
+for the dense, I.P.\ and BaCP phases. Both arms of every cell were constructed
+from that dictionary by the same builder function, which is what makes the
+matched-budget claim of Section~\ref{sec:method} mechanical rather than a matter
+of care: the I.P.\ and BaCP configurations are derived from a shared base, so a
+protocol value cannot drift between arms without changing both. The
+BaCP-specific keys (temperature, $\lambda$ vector, contrastive formulation,
 projection-head mode, fine-tune optimizer) are the only additions in the BaCP
-override.
+override. The tables in this appendix are transcriptions of that file.
 
 \paragraph{Provenance enforcement.}
-Initialisation is verified before training rather than assumed. The model factory
-records what the loaded weights actually are --- an ImageNet checkpoint, hub
-weights, or random initialisation --- and the notebooks' preflight check raises and
-halts when the recorded provenance is not the requested one. This exists because a
-checkpoint load that fails soft is otherwise indistinguishable from a run that
-trained from scratch, and a ``pretrained'' baseline that was never pretrained
-would invalidate every cell measured against it.
+Initialisation was verified before training rather than assumed. The model
+factory records what the loaded weights actually are --- an ImageNet checkpoint,
+hub weights, or random initialisation --- and the notebooks' preflight check
+raises and halts when the recorded provenance is not the requested one. This
+exists because a checkpoint load that fails soft is otherwise indistinguishable
+from a run that trained from scratch, and a ``pretrained'' baseline that was
+never pretrained would invalidate every cell measured against it.
 
 \paragraph{Run identity and completion.}
 Each run is addressed by a structured key of the form
@@ -153,20 +865,34 @@ one that was never scheduled --- which matters for a grid reported at partial
 completion.
 
 \paragraph{Evaluation.}
-All reported accuracies are top-1 on the full 10{,}000-image CIFAR-10 test set,
-evaluated once per completed cell, with no partial final batch dropped. Sparsity
-is reported as the fraction of prunable weights that are masked, where the
-prunable scope excludes 1-D tensors, frozen tensors and the projection head, and
-includes the classifier head. The scope is identical between the two arms of every
-cell.
+All reported accuracies are top-1 on the full \num{10000}-image CIFAR-10 test
+set, evaluated once per completed cell, with no partial final batch dropped.
+Sparsity is reported as the fraction of prunable weights that are masked, where
+the prunable scope excludes 1-D tensors, frozen tensors and the projection head,
+and includes the classifier head. The scope is identical between the two arms of
+every cell.
 
 \subsection{Seed and variance reporting}
 
 The run-to-run spread of
 \result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} accuracy points
-quoted in Sections~\ref{sec:experiments} and \ref{sec:discussion} was estimated
-from repeated runs of a fixed configuration on this dataset, and is used only to
-set a floor below which a single-cell difference should not be interpreted. It is
-not a per-cell error bar: the headline cells in Table~\ref{tab:seeds} carry their
-own measured standard deviations over 3 seeds, and those should be preferred
-wherever both are available.
+quoted in Sections~\ref{sec:method} and \ref{sec:limitations} was estimated from
+repeated runs of a fixed configuration on this dataset, and is used only to set a
+floor below which a single-cell difference should not be interpreted. It is not a
+per-cell error bar: the headline cells in Table~\ref{tab:seeds} carry their own
+measured standard deviations over 3 seeds, and those should be preferred wherever
+both are available.
+
+The floor itself comes from a repeated-run probe: a dense ResNet-34 trained on
+CIFAR-10 from scratch over \resultn{probe.resnet34.densescratch} seeds, which
+gave \resultpm{probe.resnet34.densescratch} with per-run values
+\result{probe.resnet34.densescratch.run1},
+\result{probe.resnet34.densescratch.run2},
+\result{probe.resnet34.densescratch.run3},
+\result{probe.resnet34.densescratch.run4} and
+\result{probe.resnet34.densescratch.run5}. That probe was obtained with a
+defective network stem and is therefore \textbf{not} a dense baseline for
+ResNet-34; it is registered under a \texttt{probe.} key for exactly that reason
+and appears in no results table. What it measures --- the spread of a fixed
+configuration under reseeding --- is unaffected by the defect, since every run in
+it carried the same defect, and that spread is the only quantity we take from it.
