@@ -186,13 +186,16 @@ _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
                  epochs=60, recovery_epochs=0,
                  sparsity_scheduler='cubic', delta_T=88,
                  prune_task_head=True, wanda_group='global',
-                 # tau=0.15. Measured under the corrected rectangular CAP
-                 # loss: 0.15 beats 0.07 at every sparsity, in both the
-                 # head-dense and head-pruned scopes (ResNet-50/CIFAR-10
-                 # magnitude trios, 2026-08-21). The old operative 0.07 was
-                 # calibrated for the buggy square loss, which halved the
-                 # effective contrastive scale.
+                 # tau=0.15: measured winner over 0.07 at every sparsity.
+                 #
+                 # contrastive_mode='legacy' + proj_mode='current' is THE
+                 # objective, chosen by measurement, not inheritance: a
+                 # two-variable ablation (everything else held identical) put
+                 # it ahead of the rectangular-CAP/frozen-head arm by ~0.65 at
+                 # every sparsity, and ahead of the shared I.P. baseline by
+                 # roughly ten to one. See docs/objective_ablation.md.
                  tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                 contrastive_mode='legacy', proj_mode='current',
                  enable_finetune=True, optimizer_type_ft='adamw',
                  learning_rate_ft=1e-4, epochs_ft=50)
 
@@ -243,6 +246,7 @@ FAMILIES = {
                   epochs=15, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=1052,
                   tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                  contrastive_mode='legacy', proj_mode='current',
                   enable_finetune=True, optimizer_type_ft='adamw',
                   learning_rate_ft=1e-4, epochs_ft=10)),
     'roberta-base': dict(
@@ -256,6 +260,7 @@ FAMILIES = {
                   epochs=15, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=1052,
                   tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                  contrastive_mode='legacy', proj_mode='current',
                   enable_finetune=True, optimizer_type_ft='adamw',
                   learning_rate_ft=1e-4, epochs_ft=10)),
 }
