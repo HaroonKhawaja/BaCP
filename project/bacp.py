@@ -35,6 +35,7 @@ from types import SimpleNamespace
 # exist. That is precisely how three broken call sites survived here
 # (_handle_wanda_hooks, _handle_optimizer_and_pruning, PRUNING_REGISTRY).
 from training_utils import (
+    amp_dtype_and_scaler,
     _get_sparsity_key,
     _handle_data_to_device,
     _handle_tqdm_logs,
@@ -202,7 +203,10 @@ class BaCPTrainingArguments:
                 f"distill_mode='none'. Set --distill_mode, or --lambda_kd 0."
             )
 
-        self.scaler = GradScaler() if self.enable_mixed_precision else None
+        self.amp_dtype, self.scaler = (
+            amp_dtype_and_scaler(
+                'cuda' if torch.cuda.is_available() else 'cpu')
+            if self.enable_mixed_precision else (None, None))
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         # Legacy pair, kept for contrastive_mode='legacy'.
         self.supervised_criterion = SupConLoss(self.tau, self.tau, self.device).to(self.device)
@@ -246,7 +250,8 @@ class BaCPTrainer:
         # this, but evaluate() can be reached without finetune() having run.
         self.criterion = nn.CrossEntropyLoss()
         self.current_sparsity = check_model_sparsity(self.model)
-        self.context = autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext()
+        self.context = (autocast(device_type=self.device, dtype=self.amp_dtype)
+                        if self.enable_mixed_precision else contextlib.nullcontext())
         self._initialize_lambdas()
         self._initialize_metric_lists()
 

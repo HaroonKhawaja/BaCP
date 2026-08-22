@@ -492,6 +492,33 @@ def _handle_wanda_calibration(args):
 # ----------------------------------------------------------------------
 # Training Loop Steps
 # ----------------------------------------------------------------------
+def amp_dtype_and_scaler(device):
+    """Autocast dtype and the matching GradScaler for this device.
+
+    bfloat16 on CUDA when the hardware supports it (Ampere and later, so the
+    A100 this project runs on). bf16 carries fp32's exponent range, so an
+    activation that would overflow fp16 to inf stays finite -- which matters
+    here because GradScaler only skips steps whose *gradients* are non-finite,
+    while BatchNorm's running statistics are updated in the FORWARD pass and
+    are never skipped. One inf activation therefore poisons running_mean /
+    running_var permanently, and the model emits constant logits from then on.
+    bf16 needs no loss scaling, so the scaler is disabled with it.
+
+    Falls back to fp16 + GradScaler elsewhere (older GPUs), and to fp16 with a
+    disabled scaler on CPU, where the tests run.
+    """
+    import torch
+    if device == 'cuda' and torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        return torch.bfloat16, None
+    if device == 'cuda':
+        return torch.float16, torch.amp.GradScaler()
+    return torch.bfloat16, None
+
+
+# Max gradient norm. See _optimizer_step for the citation.
+GRAD_CLIP_NORM = 10.0
+
+
 def _optimizer_step(args, loss, global_step):
     """
     Performs standard ZeroGrad -> Backward -> Prune -> Step -> Mask sequence.
@@ -505,6 +532,16 @@ def _optimizer_step(args, loss, global_step):
         scaler.unscale_(args.optimizer)
     else:
         loss.backward()
+
+    # Gradient clipping, applied to UNSCALED gradients (scaler.unscale_ above
+    # runs first, so the threshold means the same thing with and without AMP).
+    # 10.0 is SNIP-it's published setting (Verdenius, Stol & Forre 2020,
+    # arXiv 2006.00896, "gradient clipping ... magnitude of 10.0"). It is a
+    # safety net, not a regulariser: healthy CNN gradients at these batch
+    # sizes sit far below it, so it changes nothing until a step would
+    # otherwise explode. Without it, VGG-19's depth forced a reduced learning
+    # rate to stay finite.
+    torch.nn.utils.clip_grad_norm_(args.model.parameters(), GRAD_CLIP_NORM)
 
     # === Pruning Step ===
     if args.pruner:

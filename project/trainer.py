@@ -6,6 +6,7 @@ from tqdm import tqdm
 from torch.amp import GradScaler, autocast
 from dataclasses import dataclass
 from training_utils import (
+    amp_dtype_and_scaler,
     _finalize_run,
     _initialize_all,
     _initialize_logs,
@@ -103,7 +104,10 @@ class TrainingArguments:
     auto_init:              bool = True
 
     def __post_init__(self):
-        self.scaler = GradScaler() if self.enable_mixed_precision else None
+        self.amp_dtype, self.scaler = (
+            amp_dtype_and_scaler(
+                'cuda' if torch.cuda.is_available() else 'cpu')
+            if self.enable_mixed_precision else (None, None))
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.retrain = (self.recovery_epochs > 0)
         self.is_bacp = False
@@ -139,7 +143,8 @@ class Trainer:
         self.val_accuracies = []
         self.accuracies = {} if self.target_sparsity is not None else []
         self.current_sparsity = check_model_sparsity(self.model)
-        self.context = autocast(device_type=self.device) if self.enable_mixed_precision else contextlib.nullcontext()
+        self.context = (autocast(device_type=self.device, dtype=self.amp_dtype)
+                        if self.enable_mixed_precision else contextlib.nullcontext())
 
     def train(self, run=None):
         """Main training workflow."""

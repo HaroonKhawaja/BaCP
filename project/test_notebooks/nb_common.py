@@ -212,10 +212,12 @@ FAMILIES = {
                       bacp=_CNN_BACP),
     'vgg11': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
                   bacp=_CNN_BACP),
-    # VGG-19's BaCP LR is 0.05, not 0.1: "reduced to prevent gradient
-    # explosion due to its depth" (appendix Table 1).
+    # VGG-19 runs the SAME BaCP learning rate as every other CNN (0.1). The
+    # old 0.05 was a workaround for gradient explosion; the cause is now
+    # addressed directly -- bf16 autocast keeps forward activations finite and
+    # gradient clipping bounds the step (training_utils.GRAD_CLIP_NORM).
     'vgg19': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
-                  bacp=dict(_CNN_BACP, learning_rate=0.05)),
+                  bacp=_CNN_BACP),
     # ViTs: hub weights, 224px inputs, batch 256. I.P. uses AdamW 1e-3 and
     # BaCP's contrastive phase SGD 0.01 (appendix B.5 note).
     'vit-tiny': dict(base=_VIT_BASE, dense=_CNN_DENSE,
