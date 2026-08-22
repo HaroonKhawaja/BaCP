@@ -324,10 +324,20 @@ def load_cv_datasets(
     trainset = train_dataset_fn()
     testset = test_dataset_fn()
 
-    if t_type == 'supervised':
+    # The split is taken for EVERY recipe, contrastive included. It used to be
+    # supervised-only, which meant BaCP trained on all 50,000 CIFAR images
+    # while the I.P. baseline trained on 40,000 -- 25% more data per epoch for
+    # one arm of the comparison, and BaCP additionally saw the images I.P.
+    # held out. The reported metric was never affected (test is a separate
+    # 10,000 images, untouched by either), but the comparison was.
+    #
+    # 0.10, not 0.20: 45,000 train / 5,000 val is the published CIFAR-10
+    # convention -- GraNet (Liu et al., NeurIPS 2021, arXiv 2106.10404) trains
+    # on 45,000, and docs/citations.md records that as verified.
+    if t_type in ('supervised', 'contrastive'):
         # Creating validation split
         train_size = len(trainset)
-        val_size = int(0.20 * train_size)
+        val_size = int(0.10 * train_size)
         train_size = train_size - val_size
 
         # Seeded, and deliberately NOT from args.seed. Two reasons:

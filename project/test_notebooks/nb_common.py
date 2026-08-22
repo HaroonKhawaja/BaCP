@@ -153,7 +153,9 @@ def setup(quiet=False):
 #                    recovery is the schedule's built-in tail instead
 #
 # delta_T is set to ~one epoch of optimizer steps per family:
-#   resnet/vgg  45,000/512 ~ 88    vit  45,000/256 ~ 176    llm  67,349/64 ~ 1052
+#   resnet/vgg  45,000/512 = 87    vit  45,000/256 = 175    llm  67,349/64 = 1052
+# (drop_last=True on the train loader, so these are floor divisions and
+#  delta_T is exactly one epoch for BOTH arms now that they share a split)
 
 # num_workers=24: the Standard_NC24ads_A100_v4 node has 24 vCPUs, and one
 # training job owns the box (runs are serialised), so the loaders get all of
@@ -180,19 +182,17 @@ _CNN_DENSE = dict(optimizer_type='sgd', learning_rate=0.01,
 # objective from the extra training. With it, the ONLY difference between the
 # arms is the contrastive objective -- which is the claim.
 _CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
-                  epochs=60, recovery_epochs=0,
-                  sparsity_scheduler='cubic', delta_T=88,
+                  epochs=50, recovery_epochs=0,
+                  sparsity_scheduler='cubic', delta_T=87,
                   prune_task_head=True,
-                  enable_finetune=True, optimizer_type_ft='adamw',
-                  learning_rate_ft=1e-4, epochs_ft=50,
                   # wanda_group='global': the project's original adaptation --
                   # Wanda's metric under the same global-threshold allocation
                   # as magnitude and SNIP, so the columns differ only in
                   # score. Ignored by the other pruners.
                   wanda_group='global')
 _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
-                 epochs=60, recovery_epochs=0,
-                 sparsity_scheduler='cubic', delta_T=88,
+                 epochs=50, recovery_epochs=0,
+                 sparsity_scheduler='cubic', delta_T=87,
                  prune_task_head=True, wanda_group='global',
                  # tau=0.15: measured winner over 0.07 at every sparsity.
                  #
@@ -205,7 +205,7 @@ _CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
                  tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
                  contrastive_mode='legacy', proj_mode='current',
                  enable_finetune=True, optimizer_type_ft='adamw',
-                 learning_rate_ft=1e-4, epochs_ft=50)
+                 learning_rate_ft=1e-4, epochs_ft=25)
 
 _VIT_BASE = dict(model_type='cv', dataset_name='cifar10', num_classes=10,
                  image_size=224, batch_size=256, num_workers=24,
@@ -233,12 +233,12 @@ FAMILIES = {
     # BaCP's contrastive phase SGD 0.01 (appendix B.5 note).
     'vit-tiny': dict(base=_VIT_BASE, dense=_CNN_DENSE,
                      prune=dict(_CNN_PRUNE, optimizer_type='adamw',
-                                learning_rate=1e-3, delta_T=176),
-                     bacp=dict(_CNN_BACP, learning_rate=0.01, delta_T=176)),
+                                learning_rate=1e-3, delta_T=175),
+                     bacp=dict(_CNN_BACP, learning_rate=0.01, delta_T=175)),
     'vit-small': dict(base=_VIT_BASE, dense=_CNN_DENSE,
                       prune=dict(_CNN_PRUNE, optimizer_type='adamw',
-                                 learning_rate=1e-3, delta_T=176),
-                      bacp=dict(_CNN_BACP, learning_rate=0.01, delta_T=176)),
+                                 learning_rate=1e-3, delta_T=175),
+                      bacp=dict(_CNN_BACP, learning_rate=0.01, delta_T=175)),
     # LLMs on SST-2. Dense finetune AdamW 2e-5; I.P. AdamW 5e-5; BaCP's
     # contrastive LR from appendix Table 3 (DistilBERT 5e-5, RoBERTa 1e-5),
     # finetune AdamW 1e-4. GLUE's test split is unlabelled, so the reported
@@ -249,9 +249,7 @@ FAMILIES = {
                    scheduler_type='linear_with_warmup', epochs=5),
         prune=dict(optimizer_type='adamw', learning_rate=5e-5,
                    epochs=15, recovery_epochs=0,
-                   sparsity_scheduler='cubic', delta_T=1052,
-                   enable_finetune=True, optimizer_type_ft='adamw',
-                   learning_rate_ft=1e-4, epochs_ft=10),
+                   sparsity_scheduler='cubic', delta_T=1052),
         bacp=dict(optimizer_type='adamw', learning_rate=5e-5,
                   epochs=15, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=1052,
@@ -265,9 +263,7 @@ FAMILIES = {
                    scheduler_type='linear_with_warmup', epochs=5),
         prune=dict(optimizer_type='adamw', learning_rate=5e-5,
                    epochs=15, recovery_epochs=0,
-                   sparsity_scheduler='cubic', delta_T=1052,
-                   enable_finetune=True, optimizer_type_ft='adamw',
-                   learning_rate_ft=1e-4, epochs_ft=10),
+                   sparsity_scheduler='cubic', delta_T=1052),
         bacp=dict(optimizer_type='adamw', learning_rate=1e-5,
                   epochs=15, recovery_epochs=0,
                   sparsity_scheduler='cubic', delta_T=1052,
@@ -672,8 +668,10 @@ def sanity_check(cells, control=None):
     if 'image_size' in c0:
         print(f'   image_size    {c0["image_size"]}')
     if ds == 'cifar10':
-        print('   splits        50,000 train -> 40,000 train / 10,000 val '
-              '(0.2 split); 10,000 test')
+        print('   splits        50,000 train -> 45,000 train / 5,000 val '
+              '(0.1 split, GraNet convention); 10,000 test')
+        print('                 the SAME split for both arms -- contrastive '
+              'recipes used to skip it entirely')
         print('   reported acc  the 10,000-image TEST split, all of it '
               '(drop_last=False)')
     elif ds == 'sst2':
