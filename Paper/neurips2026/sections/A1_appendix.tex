@@ -626,6 +626,22 @@ VGG-19 & 0.95  & \textbf{BaCP SNIP-it (ours)}    & \result{vgg19.bacp.snip.0.95}
 \end{tabular}
 \end{table}
 
+% Moved out of the body in the 4-page cut.  The claim it makes is
+% about the published comparators, which live in this table, so it
+% reads better here than it did beside the main grid.
+\paragraph{Calibration.}
+Gradual magnitude pruning is our magnitude criterion renamed:
+ResNet-50 / CIFAR-10 / 95\% GMP reached \resultpm{lit.granet.resnet50.gmp.0.95}
+\citep{liu2021granet} under 160 epochs at batch 128, against our 50$+$25 at
+batch 512. That row carries one load --- whether the baseline BaCP is measured
+against is competently trained --- not a ranking. Two gaps we state rather than paper
+over: VGG-11 has no published comparator at any sparsity, and no published
+static comparator exists at 0.97, 0.99 or 0.999 for any of our four models,
+which is exactly why the I.P.\ baseline was run under a matched budget rather
+than quoted. The appendix (Table~\ref{tab:published}) collects the published
+values.
+
+
 \paragraph{The budget gap.}
 Those comparisons need a stated caveat, because our compute budget is
 substantially smaller. The GraNet CIFAR-10 recipe \citep{liu2021granet}, which

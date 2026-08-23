@@ -5,10 +5,10 @@
 \paragraph{Pipeline.}
 Four stages per cell: ImageNet-pretrained initialisation
 \citep{deng2009imagenet}; a dense fine-tune giving the reference model; gradual
-pruning to target sparsity under one of two objectives; a 25-epoch fine-tune,
-mask frozen. This is \citet{han2015learning}'s prune--retrain paradigm on
-\citet{zhu2018prune}'s schedule, with \citet{xu2022cap}'s contrastive supervision
-at stage three, where the arms differ and nowhere else.
+pruning under one of two objectives; a fine-tune with the mask frozen. That is
+\citet{han2015learning}'s prune--retrain on
+\citet{zhu2018prune}'s schedule, with \citet{xu2022cap}'s contrastive
+supervision at stage three --- the only place the arms differ.
 
 \paragraph{Objective.}
 With $z = \mathrm{normalize}(g(f_\theta(x)))$ --- so $z_i^{\top} z_j$ is cosine
@@ -28,14 +28,12 @@ $\mathcal{L} = \lambda_1 \mathcal{L}_{\mathrm{PrC}} + \lambda_2
 \mathcal{L}_{\mathrm{CE}}$, every $\lambda_i = 0.25$, untuned and
 simplex-constrained so rebalancing cannot also change the effective learning
 rate. Teachers ran under \texttt{no\_grad}: each term was a distillation, not a
-joint embedding, objective. Each module instantiated it twice
-against the same teacher over the same denominator --- self-supervised,
-$P(i) = \{\hat z_i\}$; supervised, $P(i) = \{\hat z_j : y_j = y_i\}$
-\citep{khosla2020supcon} --- and summed, over three teachers: pretrained (general
-features), dense fine-tuned (task structure), the run's own snapshots (trajectory
-drift). Over $K$ snapshots SnC was \emph{averaged}, $\frac{1}{K}\sum_k$, not
-summed, so its scale is independent of $K$ and $\lambda_3$ not silently rescaled
-as snapshots accumulate.
+joint embedding, objective. Each module summed a self-supervised instantiation,
+$P(i) = \{\hat z_i\}$, and a supervised one, $P(i) = \{\hat z_j : y_j = y_i\}$
+\citep{khosla2020supcon}, over one denominator and three teachers: pretrained,
+dense fine-tuned, and the run's own snapshots. Over $K$ snapshots
+SnC was \emph{averaged}, $\frac{1}{K}\sum_k$, not summed, so its scale and
+$\lambda_3$ stay independent of $K$.
 
 \paragraph{Pruning.}
 Sparsity followed \citet{zhu2018prune}'s cubic schedule,
@@ -45,34 +43,32 @@ Sparsity followed \citet{zhu2018prune}'s cubic schedule,
 s_t \;=\; s_f\left(1 - \left(1 - \frac{t}{T}\right)^{\!3}\right),
 \end{equation}
 %
-ramped over the first 80\% of optimizer steps, frozen at $s_f$ for the last 20\%
-\citep{gale2019state}, recomputed every $\Delta T = 100$ steps, re-applied after
-each. Scores were $|w_{ij}|$ \citep{han2015learning},
+ramped over the first 80\% of steps, frozen at $s_f$ for the last 20\%
+\citep{gale2019state}, recomputed every $\Delta T = 100$ steps. Scores were
+$|w_{ij}|$ \citep{han2015learning},
 $|w_{ij}\,\partial\mathcal{L}/\partial w_{ij}|$ (SNIP's score,
 \citealp{lee2019snip}; iterated after \citealp{verdenius2020snipit}) and
 $|w_{ij}|\lVert X_j\rVert_2$
 \citep{sun2024wanda}, all thresholded at one \emph{global} value, so
-Table~\ref{tab:main}'s row blocks differ only in the score. The global grouping
-is ours; WANDA's authors report row-wise scoring does not transfer to image
+Table~\ref{tab:main}'s blocks differ only in the score. The global grouping
+is ours: WANDA's authors report row-wise scoring does not transfer to image
 classifiers. The classifier head was pruned, following vision practice
-\citep{evci2020rigl,liu2021granet}; the projection head never was and was
-discarded before the fine-tune, appearing in no reported model. Prunable scope
-was identical across arms in every cell; reported sparsity is the fraction of
-\emph{prunable} weights masked.
+\citep{evci2020rigl,liu2021granet}; the projection head never was, and was
+discarded before the fine-tune. Prunable scope was identical across arms.
 
 \paragraph{Setup.}
 Backbones were ResNet-34/50 \citep{he2016deep} and VGG-11/19
 \citep{simonyan2015very}: ResNet-50 carries 53 BatchNorm layers, the VGGs none
 and $\approx$85\% of their parameters in the classifier MLP. CIFAR-10
-\citep{krizhevsky2009cifar}: \num{45000} train, \num{5000} validation,
-\num{10000} held-out test; batch 512 gave 87 steps per epoch; every accuracy
-covers all \num{10000}, no partial batch dropped. The grid: 4 models
-$\times$ 3 criteria $\times$ 4 sparsities (0.95, 0.97, 0.99, 0.999) $\times$ 2
-arms plus 4 dense, 100 cells. BaCP's contrastive phase selected on \emph{training
-loss}, having no supervised validation signal, both fine-tunes on
-\emph{validation accuracy}; the test set, evaluated once per completed cell,
-selected nothing. Headline cells ran 3 seeds, the rest single-seed, against a
-measured floor of \result{cifar10.noise.floor.lo}--%
+\citep{krizhevsky2009cifar} split \num{45000}/\num{5000}/\num{10000}
+train/validation/held-out test; batch 512 gave 87 steps per epoch, and every
+accuracy covers all \num{10000} test images. The grid ran 100 cells: 4 models
+$\times$ 3 criteria $\times$ 4 sparsities $\times$ 2 arms, plus 4 dense.
+BaCP's contrastive phase selected on \emph{training loss}, lacking a
+supervised validation signal, both fine-tunes on \emph{validation accuracy};
+the test set selected nothing. Headline cells ran
+3 seeds, the rest single-seed, against a measured floor of
+\result{cifar10.noise.floor.lo}--%
 \result{cifar10.noise.floor.hi} points \citep{bouthillier2021variance}.
 
 \paragraph{Matched budget.}

@@ -2,55 +2,48 @@
 \label{sec:intro}
 
 Unstructured pruning removes weights from a trained network and retrains what
-remains \citep{han2015learning}. Up to moderate sparsity this is close to free:
+remains \citep{han2015learning}. Up to 90--95\% sparsity this is close to free:
 a cubic gradual schedule \citep{zhu2018prune,gale2019state} recovers essentially
-dense accuracy on CIFAR-scale classifiers at 90--95\% of weights removed. Past
-that point the picture changes. As the surviving budget shrinks toward a few
-tenths of a percent, retraining stops being repair and becomes re-derivation:
-the network must rebuild a representation from a support too small to hold the
-one it had. Methods within a fraction of a point at 90\% separate by tens of
-points at extreme sparsity \citep{li2025east}.
+dense accuracy on CIFAR-scale classifiers. Past that point retraining stops
+being repair and becomes re-derivation --- the network must rebuild a
+representation from a support too small to hold the one it had --- and methods
+within a fraction of a point at 90\% separate by tens of points
+\citep{li2025east}.
 
-Cross-entropy supplies at most $\log_2 C$ bits per example and constrains only
-the decisions, not the representation those decisions are read from --- and at
-extreme sparsity the representation is exactly what the mask destroyed. A
-contrastive term against a frozen dense teacher instead supplies a
-$D$-dimensional target direction per example rather than a scalar; the appendix
-develops the mechanism in full.
+Cross-entropy supplies at most $\log_2 C$ bits per example and constrains the
+decisions, not the representation they are read from --- which is exactly what
+the mask destroyed. A contrastive term against a frozen dense teacher instead
+supplies a $D$-dimensional target direction per example; the appendix develops
+the mechanism.
 
 That objective is not new. \citet{xu2022cap} introduced Contrastive Pruning
-(CAP), which supervises a model during gradual pruning with three contrastive
-terms against three frozen teachers --- pretrained (PrC), task-fine-tuned
-(FiC), and the sparse snapshots saved so far (SnC) --- combined with
-cross-entropy into a four-term weighted sum, on BERT-family encoders to 97\%
-sparsity. \textbf{The PrC/FiC/SnC decomposition, and the four-term objective
-that combines them with cross-entropy, are CAP's, not ours.} We state it here,
-not in a footnote, because it bounds what follows;
+(CAP): cross-entropy plus three contrastive terms against frozen pretrained
+(PrC), task-fine-tuned (FiC) and snapshot (SnC) teachers, on BERT-family
+encoders to 97\% sparsity. \textbf{The PrC/FiC/SnC decomposition, and the
+four-term objective that combines them with cross-entropy, are CAP's, not
+ours.} We state it here because it bounds what follows;
 Section~\ref{sec:method} sets out where our instantiation differs.
 
 We contribute a controlled study of that objective --- \emph{Backbone
-Contrastive Pruning} (BaCP) --- in three settings CAP did not examine: (i) an
-extension from language models to convolutional vision backbones, ResNet-34/50
-and VGG-11/19; (ii) criterion-agnosticism --- magnitude \citep{han2015learning},
-SNIP-it \citep{lee2019snip,verdenius2020snipit} and WANDA \citep{sun2024wanda}
-were run under one global threshold, so the criterion was the only variable
-between blocks; and (iii) the extreme-sparsity regime, run to 99.9\% where CAP
-reported 97\%. Every BaCP run was matched against an iterative pruning (I.P.)
-baseline identical in schedule, criterion, epoch budget, fine-tune and data ---
-everything but the objective --- so $\Delta$ is attributable to the objective
-alone, and $\Delta$, not any absolute accuracy, is the unit of evidence.
+Contrastive Pruning} (BaCP) --- in three settings CAP did not examine:
+(i) convolutional vision backbones, ResNet-34/50 and VGG-11/19;
+(ii) criterion-agnosticism --- magnitude \citep{han2015learning}, SNIP-it
+\citep{lee2019snip,verdenius2020snipit} and WANDA \citep{sun2024wanda} under one
+global threshold, the criterion the only variable between blocks; and
+(iii) sparsity to 99.9\%, where CAP reported 97\%. Every BaCP run was matched
+against an iterative pruning (I.P.) baseline differing in nothing but the
+objective, so $\Delta$, not any absolute accuracy, is the unit of evidence.
 
-\paragraph{Related work.} The prune--retrain template \citep{han2015learning},
-its cubic ramp \citep{zhu2018prune} and the ramp-then-hold shape audited at
-scale \citep{gale2019state} are adopted here; the three criteria above
-span magnitude, gradient and activation saliency. At-init and lottery-ticket
+\paragraph{Related work.} The prune--retrain template and its cubic
+ramp-then-hold schedule \citep{han2015learning,zhu2018prune,gale2019state} are
+adopted here. At-init and lottery-ticket
 criteria \citep{frankle2019lottery,wang2020grasp,tanaka2020synflow} meet layer
-collapse as their extreme-regime failure mode. Dynamic sparse training
+collapse in the extreme regime; dynamic sparse training
 \citep{mocanu2018set,evci2020rigl,liu2021granet,li2025east} is context, not a
-baseline: this paper studies a static mask, and an objective-level and a
-support-level intervention are separable. The loss forms composed here are
-SimCLR's and SupCon's \citep{chen2020simclr,khosla2020supcon}, with CRD
-\citep{tian2020crd} the antecedent for a contrastive term where logit matching
+baseline: the mask here is static, and objective- and support-level
+interventions are separable. The loss forms are SimCLR's and SupCon's
+\citep{chen2020simclr,khosla2020supcon}, with CRD \citep{tian2020crd} the
+antecedent for a contrastive term where logit matching
 \citep{hinton2015distilling} would go. \citet{blalock2020state} document how
-rarely pruning papers are mutually comparable --- the direct motivation for the
-matched-budget design. The appendix treats each line in full.
+rarely pruning papers are comparable, the motivation for the matched-budget
+design; the appendix treats each line in full.

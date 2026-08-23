@@ -19,20 +19,17 @@ clean interpretation is not the better configuration, and we chose the numbers.
 \paragraph{Budget, data, seeds and scope.}
 Our 50 pruning plus 25 fine-tuning epochs at batch 512 are nearly an order of
 magnitude fewer updates than 160 \citep{liu2021granet} or 250 \citep{li2025east}
-epochs at batch 128; nothing here is a state-of-the-art claim. Both arms are
-equally under-trained, so the comparison holds; a full-length rerun is our first
-follow-up. Results are CIFAR-10 only: one point of the vision
-transfer, not a characterisation. Three seeds cover the headline cells only,
-against a \result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} point
-floor; consistency of sign across many cells is not replication
-\citep{bouthillier2021variance}. We compared against our matched baseline, not
-re-run RigL, GraNet, GraSP or SynFlow; whether objective- and support-level
-interventions compose is open.
+epochs at batch 128; nothing here is a state-of-the-art claim, though both arms
+are equally under-trained, so the comparison holds. Results are CIFAR-10 only,
+and three seeds cover the headline cells alone against a
+\result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} point floor:
+consistency of sign is not replication \citep{bouthillier2021variance}. We did
+not re-run RigL, GraNet, GraSP or SynFlow, so whether objective- and
+support-level interventions compose is open.
 
 \paragraph{Conclusion.}
-We studied CAP's contrastive pruning objective \citep{xu2022cap} --- the
-PrC/FiC/SnC decomposition is CAP's, not ours --- on vision backbones rather than
-language models, under three criteria, to 99.9\% sparsity, against a baseline
-differing only in the objective. Within those bounds the output is a controlled
-measurement of what the retraining objective is worth past the point where
-cross-entropy alone can rebuild a pruned network.
+We studied CAP's contrastive pruning objective \citep{xu2022cap} --- theirs, not
+ours --- on vision backbones, under three criteria, to 99.9\% sparsity, against
+a baseline differing only in the objective: a controlled measurement of what the
+retraining objective is worth past the point where cross-entropy alone can
+rebuild a pruned network.
