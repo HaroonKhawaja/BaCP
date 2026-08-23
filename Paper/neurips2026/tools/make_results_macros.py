@@ -446,6 +446,58 @@ def deltas(agg):
 # emit
 # --------------------------------------------------------------------------
 
+def summaries(delta_map):
+    """Sweep-wide aggregates over the per-cell deltas.
+
+    Keys are grouped so the prose can say "the margin widened with sparsity"
+    and cite the four numbers that show it, rather than asserting a shape and
+    leaving the reader to verify it against a 13-column table.
+    """
+    import statistics as _st
+    if not delta_map:
+        return {}
+
+    vals = list(delta_map.values())
+    by_sp, by_cr, by_md = {}, {}, {}
+    for key, v in delta_map.items():
+        # <model>.delta.<pruner>.<sparsity>
+        model, _, pruner, sparsity = key.split('.', 3)
+        by_sp.setdefault(sparsity, []).append(v)
+        by_cr.setdefault(pruner, []).append(v)
+        by_md.setdefault(model, []).append(v)
+
+    out = {
+        'summary.delta.mean': _st.fmean(vals),
+        'summary.delta.max': max(vals),
+        'summary.delta.min': min(vals),
+    }
+    for sp, a in by_sp.items():
+        out[f'summary.delta.sparsity.{sp}'] = _st.fmean(a)
+    for cr, a in by_cr.items():
+        out[f'summary.delta.criterion.{cr}'] = _st.fmean(a)
+    for md, a in by_md.items():
+        out[f'summary.delta.model.{md}'] = _st.fmean(a)
+
+    # counts are not deltas, so they are rendered verbatim rather than signed
+    out['#summary.delta.npositive'] = str(sum(1 for v in vals if v > 0))
+    out['#summary.delta.ncells'] = str(len(vals))
+    return out
+
+
+def render_summaries(summary):
+    if not summary:
+        return []
+    lines = ['% --- sweep-wide aggregates, derived from the deltas above -----',
+             '% Regenerated with the rest of this file; never hand-edit.']
+    for key in sorted(summary):
+        if key.startswith('#'):
+            lines.append(f'\\defresult{{{key[1:]}}}{{{summary[key]}}}')
+        else:
+            lines.append(f'\\defresult{{{key}}}{{{fmt_delta(summary[key])}}}')
+    lines.append('')
+    return lines
+
+
 def render(agg, delta_map, source: Path) -> str:
     lines = [
         '',
@@ -479,6 +531,8 @@ def render(agg, delta_map, source: Path) -> str:
                 lines.append(f'\\defresultsd{{{name}}}{{{fmt_sd(sd)}}}')
             lines.append(f'\\defresultn{{{name}}}{{{n}}}')
         lines.append('')
+
+    lines.extend(render_summaries(summaries(delta_map)))
 
     if delta_map:
         lines += ['% --- BaCP minus the matched iterative-pruning baseline ---', '']

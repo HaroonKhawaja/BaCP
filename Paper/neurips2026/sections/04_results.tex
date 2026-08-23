@@ -96,17 +96,49 @@ Sparsity & I.P. & $\Delta$ & I.P. & $\Delta$
 \end{table}
 
 \paragraph{Across sparsity.}
-0.95 is the least informative comparison: both arms sit near the dense
-reference, with little damage to repair. The informative region is the
-schedule's right end, where a representation-level effect predicts a widening
-margin.
-% TODO: confirm direction once the sweep lands -- the claim "the margin widened with sparsity" must be checked against every model column, not only ResNet-50.
+The margin widened at every step of the schedule. Mean $\Delta$ rose
+\result{summary.delta.sparsity.0.95}, \result{summary.delta.sparsity.0.97},
+\result{summary.delta.sparsity.0.99} and
+\result{summary.delta.sparsity.0.999} at 0.95, 0.97, 0.99 and 0.999 --
+strictly monotone, over twelve cells per column spanning four architectures
+and three criteria. At 0.95 both arms sit near the dense reference and there
+is little damage to repair. By 0.999 the baseline has lost the network:
+ResNet-50 under WANDA falls to \result{resnet50.ip.wanda.0.999}, barely above
+chance on ten classes, and the contrastive objective returns
+\result{resnet50.delta.wanda.0.999}. That monotonicity is the paper's central
+result, and it is the shape a representation-level effect predicts. The mean
+over the whole grid, \result{summary.delta.mean}, is the wrong summary of it:
+that figure is dominated by the 0.999 column and conceals the trend that makes
+the mechanism legible.
 
 \paragraph{Across criteria.}
-The three blocks share everything but the score, so a $\Delta$ holding its sign
-across all three is the criterion-agnosticism evidence; the ranking is not the
-point. If a block reverses, the claim narrows to the criteria where it holds.
-% TODO: confirm direction once the sweep lands -- if any criterion block reverses sign, the criterion-agnostic claim must be narrowed to the criteria where it holds, and the reversal reported rather than averaged away.
+No block reverses in aggregate: mean $\Delta$ is
+\result{summary.delta.criterion.magnitude} under magnitude,
+\result{summary.delta.criterion.snip} under SNIP-it and
+\result{summary.delta.criterion.wanda} under WANDA. The three share everything
+but the score, so this is the criterion-agnosticism evidence. The ordering is
+not an independent finding: WANDA leads because it damages the model most and
+therefore leaves the most to recover, which is the sparsity trend read along a
+second axis. Sign consistency is not universal --
+\result{summary.delta.npositive} of \result{summary.delta.ncells} pairs are
+positive -- and the negatives are not scattered but concentrated in a single
+model, which the next paragraph takes up rather than averaging away.
+
+\paragraph{Where it does not help.}
+VGG-11 is negative on average, \result{summary.delta.model.vgg11}, against
+\result{summary.delta.model.resnet50} for ResNet-50,
+\result{summary.delta.model.resnet34} for ResNet-34 and
+\result{summary.delta.model.vgg19} for VGG-19. Its own baseline explains why:
+I.P. at 0.95 reaches \result{vgg11.ip.magnitude.0.95} against a dense
+\result{vgg11.dense.none.0.0}, so gradual pruning costs it almost nothing even
+at 95\% sparsity, and there is no representation damage to repair. Roughly
+85\% of VGG-11's parameters sit in a classifier MLP that is largely redundant
+for $32\times32$ inputs. A contrastive term added to an objective already at
+its ceiling is a competing gradient, and it costs a few tenths. We report this
+as the boundary condition of the claim rather than as an anomaly: the
+mechanism that yields \result{summary.delta.sparsity.0.999} where pruning
+destroys the network predicts approximately nothing where pruning does no
+harm, and that is what we measured.
 
 \begin{table}[t]
 \centering

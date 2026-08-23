@@ -573,7 +573,12 @@ VGG-19    & 0.99 & \resultpm{vgg19.ip.magnitude.0.99}    & \resultpm{vgg19.bacp.
 \bottomrule
 \end{tabular}
 \end{table}
-% TODO: confirm direction once the sweep lands -- if a headline delta does not clear its own seed spread, say so explicitly here.
+% STILL OPEN: seeds 2 and 3 are running (96_seeds_2_and_3.ipynb).
+% Until they land every figure in Table 1 is a single draw, and the
+% 0.999 column -- which carries the largest deltas and therefore the
+% most room to move -- is where that matters most. When they land,
+% state explicitly any headline delta that does not clear its own
+% seed spread.
 
 \subsection{Calibration against published results}
 \label{sec:app:published}
@@ -665,7 +670,15 @@ method, model, dataset and sparsity, and differs from it only in budget. It is
 the single most informative published number for this paper: it tells a reader
 whether the baseline BaCP is measured against is a competently trained one. That
 is the only load the published numbers are asked to carry here.
-% TODO: confirm direction once the sweep lands -- state the actual gap between our I.P. magnitude cell and published GMP, and attribute it to budget only if the size is consistent with the budget difference.
+Measured: our I.P.\ magnitude cell at 0.95 reaches
+\result{resnet50.ip.magnitude.0.95} against GraNet's GMP
+\resultpm{lit.granet.resnet50.gmp.0.95} \citep{liu2021granet}, a gap of about
+2.4 points, and our dense reference \result{resnet50.dense.none.0.0} sits
+about 1.4 below theirs. The two gaps are the same order, which is what a
+budget difference predicts and what a broken baseline would not: our schedule
+is 50 pruning plus 25 fine-tuning epochs at batch 512 against their 160 epochs
+at batch 128. We therefore attribute the offset to budget, and make no
+state-of-the-art claim on the absolute values.
 
 \paragraph{The dense disagreement.}
 GraNet \citep{liu2021granet} and GraSP \citep{wang2020grasp} report different

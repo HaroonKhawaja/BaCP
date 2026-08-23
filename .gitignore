@@ -46,3 +46,7 @@ results/results.csv
 # Generated flat export of the paper for upload into Overleaf, which has no
 # folders. Rebuilt by the staging script; the real tree is sections/ + statements/.
 Paper/neurips2026/overleaf_flat/
+
+# Disposable: seed-1 records reconstructed from /dbfs results.csv so the macro
+# generator can run locally. The authoritative records live on /dbfs.
+results/runs_snapshot_seed1/
