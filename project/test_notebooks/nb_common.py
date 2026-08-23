@@ -909,6 +909,19 @@ def run_parallel(cells, gpu=0, max_parallel=4, poll_s=30):
     is gained. So this returns per-cell wall-clock and prints the speedup
     against the sequential total, rather than claiming one.
 
+    MEASURED ON THIS WORKLOAD, 2026-08-24: four VGG-11 BaCP cells reached
+    ~20.25 of 50 contrastive epochs in 33 min (1.63 min/epoch/cell) against a
+    sequential ~0.354 min/contrastive-epoch -- a 4.6x per-cell slowdown against
+    an ideal 4.0x, so 0.87x AGGREGATE throughput. Four at a time was slower
+    than one at a time. A single cell already saturates the A100; the 4.15 GB
+    peak memory never implied otherwise. Prefer run_group unless you have
+    re-measured and found idle GPU.
+
+    ALSO: on Databricks, /dbfs materialises a file only on CLOSE. An
+    in-progress cell's log is therefore INVISIBLE to dbfs/list, and every log
+    appears at once when the run ends or is killed. Absence of a log file is
+    NOT evidence that a cell is not running -- poll the run records instead.
+
     IMPORTANT: the cells share the machine. Pass num_workers small enough that
     max_parallel * num_workers stays at or under the core count, e.g.
     make_cell(..., num_workers=6) for four cells on 24 vCPUs. Leaving it at 24
@@ -937,7 +950,8 @@ def run_parallel(cells, gpu=0, max_parallel=4, poll_s=30):
         print('nothing to run -- every cell is already recorded')
         return []
 
-    print(f'{len(queue)} cell(s), {max_parallel} at a time, gpu {gpu}\n')
+    print(f'{len(queue)} cell(s), {max_parallel} at a time, gpu {gpu}\n',
+          flush=True)
     live = {}
     results = []
     t_start = time.perf_counter()
@@ -957,7 +971,7 @@ def run_parallel(cells, gpu=0, max_parallel=4, poll_s=30):
                                 stdout=fh, stderr=subprocess.STDOUT, env=env)
         live[proc] = {'cell': cell, 'fh': fh, 'path': path,
                       't0': time.perf_counter()}
-        print(f"START {cell['key']}")
+        print(f"START {cell['key']}", flush=True)
 
     try:
         while queue or live:
@@ -974,12 +988,13 @@ def run_parallel(cells, gpu=0, max_parallel=4, poll_s=30):
                 results.append({'key': info['cell']['key'], 'ok': ok,
                                 'seconds': dt, 'returncode': proc.returncode})
                 verdict = 'done ' if ok else f'FAILED rc={proc.returncode}'
-                print(f"{verdict} {info['cell']['key']}  {dt/60:.1f} min")
+                print(f"{verdict} {info['cell']['key']}  {dt/60:.1f} min",
+                      flush=True)
 
             if live:
                 elapsed = (time.perf_counter() - t_start) / 60
                 print(f'--- {elapsed:.0f} min elapsed, {len(live)} running, '
-                      f'{len(queue)} queued ---')
+                      f'{len(queue)} queued ---', flush=True)
                 for info in live.values():
                     tag = info['cell']['key'].split('.', 2)[-1]
                     print(f"    {tag:<52} {_latest_epoch_line(info['path'])}")
