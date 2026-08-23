@@ -878,17 +878,166 @@ def run_group(cells, gpu=0):
     return outcomes
 
 
+def _latest_epoch_line(path):
+    """The newest 'Epoch [k/N]' line in a log, for the status display."""
+    try:
+        text = path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return ''
+    line = ''
+    for raw in text.replace('\r', '\n').splitlines():
+        if 'Epoch [' in raw:
+            line = raw.strip()
+    return line[:110]
+
+
+def run_parallel(cells, gpu=0, max_parallel=4, poll_s=30):
+    """Run several cells at once on ONE gpu and report what that actually cost.
+
+    run() streams a single cell into the notebook. This runs several and
+    streams none of them -- four interleaved epoch streams are unreadable.
+    Every cell still writes results/logs/<key>.log exactly as before; this
+    prints one status block every poll_s seconds with the newest epoch line
+    from each live cell.
+
+    Why this exists, and what it does NOT assume: a cell peaks around 4 GB on
+    an 80 GB card, so memory is not the thing stopping us running several at
+    once. Whether total throughput improves depends on whether ONE cell leaves
+    the GPU idle -- waiting on the loader or on kernel launches -- and that is
+    a property of this workload, not of the hardware. If a cell already
+    saturates the SMs, four cells each run about four times slower and nothing
+    is gained. So this returns per-cell wall-clock and prints the speedup
+    against the sequential total, rather than claiming one.
+
+    IMPORTANT: the cells share the machine. Pass num_workers small enough that
+    max_parallel * num_workers stays at or under the core count, e.g.
+    make_cell(..., num_workers=6) for four cells on 24 vCPUs. Leaving it at 24
+    means 96 loader processes fighting for 24 cores, and every cell gets
+    slower for no reason at all.
+
+    num_workers is not part of a cell's key, so a cell run this way satisfies
+    the same record as a sequential run -- but it IS stored in the record, so
+    the provenance of every number stays visible.
+    """
+    import runner as R
+
+    done = R.completed_keys()
+    queue = []
+    for cell in cells:
+        if cell['key'] in done:
+            print(f"SKIP  {cell['key']} -- already recorded.")
+            continue
+        # Sparse cells start from the dense checkpoint of the SAME seed; this
+        # raises here rather than inside a subprocess if it is missing.
+        if cell['script'] != 'baseline':
+            cell = R.attach_checkpoint(cell)
+        queue.append(cell)
+
+    if not queue:
+        print('nothing to run -- every cell is already recorded')
+        return []
+
+    print(f'{len(queue)} cell(s), {max_parallel} at a time, gpu {gpu}\n')
+    live = {}
+    results = []
+    t_start = time.perf_counter()
+
+    def _launch(cell):
+        argv = R.build_command(cell, python=sys.executable)
+        env = {**os.environ,
+               'BACP_EXPERIMENT_GROUP': cell['key'],
+               'CUDA_VISIBLE_DEVICES': str(gpu),
+               'PYTHONUNBUFFERED': '1',
+               'MPLBACKEND': 'Agg'}
+        path = _log_path(cell['key'])
+        fh = path.open('w', encoding='utf-8', errors='replace')
+        fh.write(f"=== {cell['key']}\n=== {' '.join(argv)}\n\n")
+        fh.flush()
+        proc = subprocess.Popen(argv, cwd=str(REPO / 'project' / 'scripts'),
+                                stdout=fh, stderr=subprocess.STDOUT, env=env)
+        live[proc] = {'cell': cell, 'fh': fh, 'path': path,
+                      't0': time.perf_counter()}
+        print(f"START {cell['key']}")
+
+    try:
+        while queue or live:
+            while queue and len(live) < max_parallel:
+                _launch(queue.pop(0))
+
+            time.sleep(poll_s)
+
+            for proc in [p for p in live if p.poll() is not None]:
+                info = live.pop(proc)
+                info['fh'].close()
+                dt = time.perf_counter() - info['t0']
+                ok = proc.returncode == 0
+                results.append({'key': info['cell']['key'], 'ok': ok,
+                                'seconds': dt, 'returncode': proc.returncode})
+                verdict = 'done ' if ok else f'FAILED rc={proc.returncode}'
+                print(f"{verdict} {info['cell']['key']}  {dt/60:.1f} min")
+
+            if live:
+                elapsed = (time.perf_counter() - t_start) / 60
+                print(f'--- {elapsed:.0f} min elapsed, {len(live)} running, '
+                      f'{len(queue)} queued ---')
+                for info in live.values():
+                    tag = info['cell']['key'].split('.', 2)[-1]
+                    print(f"    {tag:<52} {_latest_epoch_line(info['path'])}")
+
+    except KeyboardInterrupt:
+        print('\ninterrupted -- terminating child processes')
+        for proc, info in live.items():
+            proc.terminate()
+            info['fh'].close()
+        raise
+
+    wall = time.perf_counter() - t_start
+    serial = sum(r['seconds'] for r in results)
+    print('\n--- parallel summary ---')
+    for r in sorted(results, key=lambda r: -r['seconds']):
+        flag = '' if r['ok'] else '   <-- FAILED'
+        print(f"  {r['key']:<58} {r['seconds']/60:6.1f} min{flag}")
+    print(f'\n  wall clock            {wall/60:.1f} min')
+    print(f'  sum of cell times     {serial/60:.1f} min')
+    if wall > 0:
+        print(f'  concurrency gain      {serial/wall:.2f}x')
+    print('\n  NOTE: the gain above is against the SUM OF THESE CELLS AS RUN\n'
+          '  CONCURRENTLY, which is not the sequential baseline -- each cell\n'
+          '  is slower here than it would be alone. To judge whether\n'
+          '  concurrency helped, compare wall clock against the sequential\n'
+          '  time for the same configurations (seed 1, in results/runs/).')
+    return results
+
+
 # --- results ----------------------------------------------------------------
 
 # Which record phase carries the final number, best first.
 _PHASE_PRIORITY = ('finetune', 'prune', 'dense', 'contrastive')
 
 
+def _sparsity_scope(rec):
+    """(prunable share of the model, true whole-model sparsity) for one record.
+
+    sparsity_reported is measured over the PRUNABLE set alone, so on a model
+    where excluded_keywords() holds real weight mass dense it is not the number
+    a reader takes it for; scaling it by the prunable share gives the sparsity
+    of the model as shipped.
+    """
+    total, prunable = rec.get('total_params'), rec.get('prunable_params')
+    if not total or not prunable:
+        return None, None
+    frac = prunable / total
+    reported = rec.get('sparsity_reported')      # null on some older records
+    return frac, (None if reported is None else reported * frac)
+
+
 def _our_numbers(model_name, dataset):
-    """{(phase, tag): {seed: acc}} from the ok run records of this model."""
+    """({group: acc}, [(target, prunable share, true sparsity), ...]) from the
+    ok run records of this model."""
     from results import iter_records
     prefix = 'static.'
     out = {}
+    scope = []
     for rec in iter_records():
         group = rec.get('experiment_group') or ''
         if rec.get('status') != 'ok' or not group.startswith(prefix):
@@ -897,6 +1046,11 @@ def _our_numbers(model_name, dataset):
         # static.<phase>.<model>.<dataset>.<tag...>.seed<n>[.smoke]
         if 'smoke' in parts or model_name not in group or dataset not in group:
             continue
+        # before the acc check on purpose: a run that never reported an accuracy
+        # still says how much of the model the pruner was never allowed to touch
+        frac, true_sparsity = _sparsity_scope(rec)
+        if frac is not None:
+            scope.append((rec.get('sparsity_requested'), frac, true_sparsity))
         acc = rec.get('test_acc_pct')
         if acc is None:
             continue
@@ -906,13 +1060,40 @@ def _our_numbers(model_name, dataset):
         best = out.setdefault(group, (prio, acc))
         if prio < best[0]:
             out[group] = (prio, acc)
-    return {k: v[1] for k, v in out.items()}
+    return {k: v[1] for k, v in out.items()}, scope
+
+
+def _print_sparsity_scope(model_name, scope):
+    """Footnote for models whose nominal target is not their real sparsity.
+
+    excluded_keywords() holds every 'embedding' parameter dense. That is a
+    rounding error on a CNN and not on a transformer: vgg19 is 99.99% prunable
+    so 0.999 nominal is 0.9989 true, while vit-tiny is 96.09% prunable and the
+    same nominal target lands at 0.9600 -- a different experiment wearing the
+    same label.
+    """
+    fracs = [f for _, f, _ in scope]
+    # 99%: at or above it nominal and true agree to within 0.001, i.e. inside
+    # the precision this table prints, so the CNN rows stay untouched.
+    if not fracs or min(fracs) >= 0.99:
+        return
+    frac = min(fracs)          # they should agree; the lowest never flatters us
+    print(f'note: only {frac * 100:.2f}% of {model_name} is prunable -- '
+          f'embeddings are held dense,')
+    print('      so "@ s" above is s of the PRUNABLE set, not of the model.')
+    achieved = {}
+    for target, _, true_sparsity in scope:
+        if target is not None and true_sparsity is not None:
+            achieved.setdefault(float(target), []).append(true_sparsity)
+    for target, vals in sorted(achieved.items()):
+        print(f'      nominal {target:<6g} -> true whole-model '
+              f'{sum(vals) / len(vals):.4f}')
 
 
 def results_table(model_name, dataset=None):
     """Print our accuracy per pruner x sparsity next to the paper's numbers."""
     dataset = dataset or FAMILIES[model_name]['base']['dataset_name']
-    ours = _our_numbers(model_name, dataset)
+    ours, scope = _our_numbers(model_name, dataset)
     paper = PAPER.get((model_name, dataset), {})
 
     def mean(keys):
@@ -945,6 +1126,7 @@ def results_table(model_name, dataset=None):
             acc, n = mean(find('bacp', tag))
             print(f'{"BaCP " + pruner + " @ " + str(sp):<24} {fmt(acc):>8} '
                   f'{n:>2} {"":>10} {fmt(pub[1]):>10}')
+    _print_sparsity_scope(model_name, scope)
     if (model_name, dataset) not in PAPER:
         print('note: no published row for this model/dataset in the paper '
               '-- the nearest comparator is stated in the notebook header.')

@@ -30,6 +30,45 @@ project/
 └── test_notebooks/       what you actually run -- see its README
 ```
 
+## Install
+
+Python **3.10–3.12**. The ceiling is `torchvision==0.20.1`: it publishes cp39–
+cp312 wheels and no sdist, so on 3.13 pip fails with an error naming
+torchvision, not Python. The floor is `scipy==1.14.1` (test suite only,
+`Requires-Python >=3.10`); training alone would run back to 3.9. The reference
+environment is 3.12.10.
+
+The two requirement files are alternatives, not layers — they pin different
+torch builds, so use one per virtualenv.
+
+**Training** — `requirements.txt`:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate         # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+PyPI's torch wheel only carries CUDA on Linux/x86_64, where it pulls the
+`nvidia-*-cu12` 12.4 runtime as a dependency. The Windows wheel is CPU-only and
+macOS has no CUDA build at all, so a Windows GPU box takes torch from PyTorch's
+own index first and the rest afterwards:
+
+```bash
+pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+pip install -r requirements.txt
+```
+
+`nb_common.setup()` prints `cuda=` and the GPU name; check it before starting a
+real cell, because a CPU-only torch does not fail — it just trains on the CPU.
+
+**Tests only** — `requirements-dev.txt`. No GPU, no training extras (no wandb,
+no fvcore); it pins the `+cpu` torch builds and adds pytest, pyflakes and scipy:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 ## Running
 
 Everything runs from `project/test_notebooks/` (see its README): a smoke

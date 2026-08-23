@@ -158,15 +158,22 @@ def attach_checkpoint(cell, *, root=None, same_seed=True, allow_missing=False):
 
     from results import resolve_checkpoint
     seed = cell['seed'] if same_seed else None
+    # A smoke cell may chain from a smoke checkpoint; that is exactly what
+    # 00_smoke_test_all does, and refusing it would leave the pipeline check
+    # unable to exercise the prune and BaCP pipelines at all. A real cell never
+    # may -- see resolve_checkpoint.
+    allow_smoke = str(cell.get('key', '')).endswith('.smoke')
     try:
         path = resolve_checkpoint(cell['model_name'], cell['dataset_name'],
-                                  seed=seed, method='dense', root=root)
+                                  seed=seed, method='dense', root=root,
+                                  allow_smoke=allow_smoke)
     except FileNotFoundError:
         try:
             if not same_seed:
                 raise
             path = resolve_checkpoint(cell['model_name'], cell['dataset_name'],
-                                      seed=None, method='dense', root=root)
+                                      seed=None, method='dense', root=root,
+                                      allow_smoke=allow_smoke)
             print(f'  ! no dense checkpoint for seed {seed}; falling back to {path}. '
                   f'The pairing is broken for this cell -- it is recorded, but treat '
                   f'the rung as unpaired.')

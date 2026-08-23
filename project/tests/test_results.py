@@ -308,7 +308,9 @@ def test_resolve_checkpoint_finds_the_dense_run(initialized_args, rroot):
 
 
 def test_resolve_checkpoint_error_names_the_fix(rroot):
-    with pytest.raises(FileNotFoundError, match="02_dense_baselines"):
+    # Was "02_dense_baselines", a notebook that does not exist. The test name is
+    # the contract -- the error must name the fix -- so it now asserts the real one.
+    with pytest.raises(FileNotFoundError, match=r"resnet50/resnet50\.ipynb"):
         resolve_checkpoint("resnet50", "cifar100", root=rroot)
 
 

@@ -42,3 +42,7 @@ results/runs/*.patch
 
 # generated from the run records by nb_common.update_results_csv
 results/results.csv
+
+# Generated flat export of the paper for upload into Overleaf, which has no
+# folders. Rebuilt by the staging script; the real tree is sections/ + statements/.
+Paper/neurips2026/overleaf_flat/

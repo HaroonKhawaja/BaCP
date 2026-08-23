@@ -1159,16 +1159,36 @@ def load_record(record_id: str, root=None) -> dict:
     return json.loads(path.read_text(encoding='utf-8'))
 
 
+def is_smoke_record(payload) -> bool:
+    """Whether a record describes a tier-0 smoke run.
+
+    Two signals because they are set by different layers and either can be the
+    only one present: `is_smoke` is derived from the loader limits at record
+    time, the `.smoke` key suffix is appended by the notebook cell builder.
+    """
+    if payload.get('is_smoke'):
+        return True
+    return (payload.get('experiment_group') or '').endswith('.smoke')
+
+
 def resolve_checkpoint(model_name, dataset_name, *, seed=None, method='dense',
-                       root=None) -> str:
+                       root=None, allow_smoke=False) -> str:
     """Find a completed checkpoint by querying the records.
 
     This is what replaces hardcoded /dbfs paths in the notebooks: a pruning run asks
     for its dense baseline by name and gets the one that actually finished and whose
     file still exists.
+
+    `allow_smoke` is the one exception, and it is directional. A smoke cell
+    chaining from a smoke checkpoint is the whole point of 00_smoke_test_all --
+    it checks the prune and BaCP pipelines end to end on 2 batches. A REAL cell
+    resolving a smoke checkpoint is the silent-wrong-number hazard this guard
+    exists to stop. So callers pass allow_smoke=True only when the cell asking
+    is itself a smoke cell; the default refuses.
     """
     out_root = results_dir(root)
     candidates = []
+    smoke_skipped = 0
     for payload in iter_records(out_root):
         if payload.get('status') != 'ok':
             continue
@@ -1179,6 +1199,14 @@ def resolve_checkpoint(model_name, dataset_name, *, seed=None, method='dense',
         if payload.get('method') != method:
             continue
         if seed is not None and payload.get('seed') != seed:
+            continue
+        # A smoke checkpoint is 2 epochs over 2 batches. Seeding a real sparse run
+        # from one does not fail -- it trains, converges to something, and writes a
+        # record indistinguishable from a good one. A plausible wrong number is
+        # worse than an error, and the notebook README tells people to run
+        # 00_smoke_test_all before "any cell, in any order", which is this path.
+        if is_smoke_record(payload) and not allow_smoke:
+            smoke_skipped += 1
             continue
         candidates.append(payload)
 
@@ -1207,8 +1235,10 @@ def resolve_checkpoint(model_name, dataset_name, *, seed=None, method='dense',
     raise FileNotFoundError(
         f'No completed {method} checkpoint for {model_name}/{dataset_name}'
         + (f' seed={seed}' if seed is not None else '')
-        + f'. {len(candidates)} matching record(s), none with a file on disk. '
-        'Run 02_dense_baselines first.'
+        + f'. {len(candidates)} matching record(s), none with a file on disk'
+        + (f' ({smoke_skipped} smoke record(s) ignored)' if smoke_skipped else '')
+        + '. Run the model\'s own notebook first: '
+        f'project/test_notebooks/<family>/{model_name}/{model_name}.ipynb'
     )
 
 
