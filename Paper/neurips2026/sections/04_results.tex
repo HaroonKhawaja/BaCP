@@ -5,8 +5,9 @@
 % number.  Both labels therefore sit on the section itself.
 \label{sec:results:ablation}
 
-Within each cell of Table~\ref{tab:main} the two arms differ only in the
-objective (Section~\ref{sec:method}), so $\Delta$ is what this paper measures.
+Within each cell of Table~\ref{tab:main} the two arms are matched in schedule,
+criterion, epoch budget and fine-tuning stage (Section~\ref{sec:method}),
+differing in the objective; $\Delta$ is what this paper measures.
 \resultif{vgg19.delta.wanda.0.999}%
   {The grid is complete.}%
   {The sweep is still running; unmeasured cells render as a red \textbf{??}.}

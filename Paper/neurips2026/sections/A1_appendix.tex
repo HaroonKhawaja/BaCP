@@ -252,10 +252,12 @@ and BaCP columns are identical on every row except the last.
 \centering
 \small
 \caption{Training protocol. The I.P.\ and BaCP arms are identical on every row
-except \emph{objective}. Both arms received the same initialisation, the same
-sparsity schedule, the same mask-update interval, the same epoch budget and the
-same fine-tune; this matched budget is what makes the I.P.--BaCP difference
-attributable to the objective.}
+but \emph{optimizer} and \emph{objective}. Both arms received the same
+initialisation, the same sparsity schedule, the same mask-update interval, the
+same epoch budget and the same fine-tune; the learning-rate asymmetry in the
+Optimizer row is deliberate, measured, and named in
+Section~\ref{sec:experiments:vgglr} rather than hidden in this table. Matching
+everything else is what lets the Objective row carry the causal claim.}
 \label{tab:protocol}
 \begin{tabular}{llll}
 \toprule

@@ -94,8 +94,8 @@ it into a sparsity regime CAP did not report. We trained ResNet-34/50 and
 VGG-11/19 on CIFAR-10 under three global pruning criteria --- magnitude,
 SNIP-it and WANDA --- at sparsities from 95\% to 99.9\%, against an
 iterative-pruning baseline that shared the identical schedule, criterion, epoch
-budget and fine-tuning stage and differed \emph{only} in the training
-objective. In an objective ablation on ResNet-50 under magnitude pruning, the
+budget and fine-tuning stage, differing in the training objective under an
+otherwise matched protocol. In an objective ablation on ResNet-50 under magnitude pruning, the
 contrastive objective improved top-1 accuracy over that matched baseline by
 \result{abl.resnet50.delta.magnitude.0.95} points at 95\% sparsity and
 \result{abl.resnet50.delta.magnitude.0.99} points at 99\%, against a

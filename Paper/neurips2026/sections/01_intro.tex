@@ -31,8 +31,9 @@ Contrastive Pruning} (BaCP) --- in three settings CAP did not examine:
 \citep{lee2019snip,verdenius2020snipit} and WANDA \citep{sun2024wanda} under one
 global threshold, the criterion the only variable between blocks; and
 (iii) sparsity to 99.9\%, where CAP reported 97\%. Every BaCP run was matched
-against an iterative pruning (I.P.) baseline differing in nothing but the
-objective, so $\Delta$, not any absolute accuracy, is the unit of evidence.
+against an iterative pruning (I.P.) baseline matched in schedule, criterion,
+epoch budget and fine-tuning stage, so $\Delta$, not any absolute accuracy, is
+the unit of evidence.
 
 \paragraph{Related work.} The prune--retrain template and its cubic
 ramp-then-hold schedule \citep{han2015learning,zhu2018prune,gale2019state} are
