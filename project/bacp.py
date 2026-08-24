@@ -46,6 +46,8 @@ from training_utils import (
     _log_metrics,
     _maybe_limit,
     _optimizer_step,
+    reset_grad_norm_log,
+    summarize_grad_norm_log,
 )
 from dataset_factory import get_dataloaders
 from dyrelu_adapter import step_dyrelu_adapter, set_t_for_dyrelu_adapter
@@ -303,6 +305,7 @@ class BaCPTrainer:
 
     def train(self, run=None):
         _initialize_logs(self)
+        reset_grad_norm_log()
 
         for epoch in range(self.epochs):
             # Training phase
@@ -328,6 +331,8 @@ class BaCPTrainer:
             self._handle_snapshot_creation()
             torch.save(self.model.state_dict(), self.save_path)
         
+        summarize_grad_norm_log(f'{self.model_name} bacp contrastive')
+
         if self.enable_finetune:
             self.finetune(run)
 
@@ -404,6 +409,7 @@ class BaCPTrainer:
         self.learning_rate = self.learning_rate_ft
         _initialize_optimizer(self)
 
+        reset_grad_norm_log()
         for epoch in range(self.epochs_ft):
             # Training phase
             curr_ft_epoch_str = f"Fine-tuning Epoch [{epoch+1}/{self.epochs_ft}]"
@@ -428,6 +434,8 @@ class BaCPTrainer:
             
             # Saving model
             self._handle_save(epoch)
+
+        summarize_grad_norm_log(f'{self.model_name} bacp finetune')
 
         final_metrics = self.evaluate(self.save_path, run)
         for k, v in final_metrics.items():

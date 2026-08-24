@@ -518,6 +518,40 @@ def amp_dtype_and_scaler(device):
 # Max gradient norm. See _optimizer_step for the citation.
 GRAD_CLIP_NORM = 10.0
 
+# --- optional gradient-norm telemetry --------------------------------------
+# clip_grad_norm_ returns the PRE-CLIP total norm; nothing has ever captured
+# it, so whether the threshold above actually binds on a given model has
+# never been measured, only inferred from the comment below. Gated by an env
+# var so the sweep and seed reruns are unaffected either way -- this exists
+# for one question (see 97_grad_norm_probe.ipynb): is clipping shaping most
+# of VGG's steps, or rescuing an occasional spike.
+_LOG_GRAD_NORM = os.environ.get('BACP_LOG_GRAD_NORM') == '1'
+_grad_norm_log: list = []
+
+
+def reset_grad_norm_log():
+    if _LOG_GRAD_NORM:
+        _grad_norm_log.clear()
+
+
+def summarize_grad_norm_log(label=''):
+    if not _LOG_GRAD_NORM:
+        return
+    if not _grad_norm_log:
+        print(f'[grad-norm] {label}: no steps logged')
+        return
+    ns = sorted(_grad_norm_log)
+    n = len(ns)
+    clipped = sum(1 for v in ns if v > GRAD_CLIP_NORM)
+
+    def pct(p):
+        return ns[min(n - 1, int(p * n))]
+
+    mean = sum(ns) / n
+    print(f'[grad-norm] {label}: n={n} mean={mean:.2f} '
+          f'p50={pct(0.50):.2f} p90={pct(0.90):.2f} p99={pct(0.99):.2f} '
+          f'max={ns[-1]:.2f} clipped={clipped}/{n} ({100 * clipped / n:.1f}%)')
+
 
 def _optimizer_step(args, loss, global_step):
     """
@@ -541,7 +575,10 @@ def _optimizer_step(args, loss, global_step):
     # sizes sit far below it, so it changes nothing until a step would
     # otherwise explode. Without it, VGG-19's depth forced a reduced learning
     # rate to stay finite.
-    torch.nn.utils.clip_grad_norm_(args.model.parameters(), GRAD_CLIP_NORM)
+    total_norm = torch.nn.utils.clip_grad_norm_(args.model.parameters(),
+                                                 GRAD_CLIP_NORM)
+    if _LOG_GRAD_NORM:
+        _grad_norm_log.append(float(total_norm))
 
     # === Pruning Step ===
     if args.pruner:
