@@ -21,7 +21,8 @@ Our 50 pruning plus 25 fine-tuning epochs at batch 512 are nearly an order of
 magnitude fewer updates than 160 \citep{liu2021granet} or 250 \citep{li2025east}
 epochs at batch 128; nothing here is a state-of-the-art claim, though both arms
 are equally under-trained, so the comparison holds. Results are CIFAR-10 only,
-and three seeds cover the headline cells alone against a
+and only the headline cells get seed replication at all --- three seeds once
+seeds 2 and 3 land, one for now, like the rest of the grid --- against a
 \result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} point floor:
 consistency of sign is not replication \citep{bouthillier2021variance}. We did
 not re-run RigL, GraNet, GraSP or SynFlow, so whether objective- and

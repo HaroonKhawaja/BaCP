@@ -19,8 +19,10 @@ budget. $\mathrm{BaCP} = \mathrm{I.P.} + \Delta$, so no absolute is lost; the
 full three-column form is Table~\ref{tab:main-abs}. Sparsity is the fraction of
 prunable weights masked; the classifier head is in the prunable scope and the
 projection head is not. Positive $\Delta$ favours BaCP. The four cells marked
-$\dagger$ are 3-seed, with mean $\pm$ standard deviation in the appendix; every
-other cell is single-seed. Reported at partial sweep completion, with unmeasured
+$\dagger$ are the headline cells prioritised for seed replication;
+Table~\ref{tab:seeds} gives their seed count directly and carries mean $\pm$
+standard deviation once it exceeds one, exactly like every other cell in this
+table. Reported at partial sweep completion, with unmeasured
 cells visibly marked --- a partly populated table is an honest state, not a
 defect.}
 \label{tab:main}
@@ -171,11 +173,11 @@ $2B \times 2B$ form with per-model trainable heads; \emph{control} is CAP's
 head. Legacy led control at every measured sparsity --- why it is the objective
 studied, and why the losing arm is reported --- and both contrastive arms sat at
 or above I.P.: the direction does not depend on the realisation, only its size.
-The legacy margin grew as sparsity rose ---
-\result{resnet50.abldelta.magnitude.0.95},
-\result{resnet50.abldelta.magnitude.0.97},
-\result{resnet50.abldelta.magnitude.0.99} points --- so the grid was extended to
-0.999. Caveats: single seed; a gap above but not far above the
+The legacy margin held near
+\result{resnet50.abldelta.magnitude.0.95} through
+\result{resnet50.abldelta.magnitude.0.97} points before rising to
+\result{resnet50.abldelta.magnitude.0.99} at 0.99 --- so the grid was extended
+to 0.999. Caveats: single seed; a gap above but not far above the
 \result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi}-point noise
 floor; an earlier protocol, so ordering only; and a winner carrying the
 trainable head (Section~\ref{sec:discussion}). That ordering is not what our

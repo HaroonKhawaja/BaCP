@@ -66,9 +66,10 @@ accuracy covers all \num{10000} test images. The grid ran 100 cells: 4 models
 $\times$ 3 criteria $\times$ 4 sparsities $\times$ 2 arms, plus 4 dense.
 BaCP's contrastive phase selected on \emph{training loss}, lacking a
 supervised validation signal, both fine-tunes on \emph{validation accuracy};
-the test set selected nothing. Headline cells ran
-3 seeds, the rest single-seed, against a measured floor of
-\result{cifar10.noise.floor.lo}--%
+the test set selected nothing. Four headline cells were prioritised for seed
+replication (seeds 2 and 3 running as this draft stands; Table~\ref{tab:seeds}
+gives the count directly), the rest single-seed by design, against a measured
+floor of \result{cifar10.noise.floor.lo}--%
 \result{cifar10.noise.floor.hi} points \citep{bouthillier2021variance}.
 
 \paragraph{Matched budget.}
