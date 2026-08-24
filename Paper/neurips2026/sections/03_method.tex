@@ -92,6 +92,21 @@ at 0.01, the objectives not sharing a gradient scale. On
 \texttt{vgg19}/\texttt{magnitude}/0.95, everything else identical, LR 0.10
 reached \result{vgg19.probelr010.magnitude.0.95}, LR 0.05
 \result{vgg19.probelr005.magnitude.0.95} and matched I.P.\
-\result{vgg19.probeip.magnitude.0.95}. Fixed before the sweep, applied uniformly
-to both VGGs, chosen on one cell, not swept; I.P.'s rate was not tuned in reply,
+\result{vgg19.probeip.magnitude.0.95}. Fixed before the sweep from this single
+cell and applied uniformly to both VGGs; I.P.'s rate was not tuned in reply,
 conservative in the direction that matters.
+
+The uniform choice was confirmed, not merely assumed, once the sweep completed:
+\texttt{vgg11}/\texttt{magnitude} was re-run at LR 0.1 across all four
+sparsities. 0.05 wins at 0.95
+(\result{vgg11.bacp.magnitude.0.95} vs \result{vgg11.probelr010.magnitude.0.95}),
+0.97 (\result{vgg11.bacp.magnitude.0.97} vs
+\result{vgg11.probelr010.magnitude.0.97}) and 0.99
+(\result{vgg11.bacp.magnitude.0.99} vs \result{vgg11.probelr010.magnitude.0.99});
+0.1 is marginally ahead only at 0.999
+(\result{vgg11.probelr010.magnitude.0.999} vs \result{vgg11.bacp.magnitude.0.999}),
+where both arms sit closest to the I.P.\ baseline and the gap is smallest. The
+architecture argument -- zero BatchNorm layers, unable to absorb the higher
+step size -- was the reason for trying 0.05 in the first place; this is the
+measurement that shows it was the right call on both models, not only the one
+it was measured on.

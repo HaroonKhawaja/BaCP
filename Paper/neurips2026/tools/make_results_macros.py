@@ -231,6 +231,26 @@ MEASURED = r"""
 \defresult{vgg19.probeip.magnitude.0.95}{91.02}
 \defresult{probe.vgg19.ip.magnitude.0.95}{91.02}
 
+% --- VGG-11 learning-rate confirmation -------------------------------------
+% vgg11 / CIFAR-10 / magnitude, all four sparsities, everything else identical
+% to the matched sweep (95_vgg11_lr_probe, run 441994225603083, sequential --
+% run_parallel was tried first and measured 0.87x aggregate throughput on
+% this workload, so it was re-run one cell at a time). The uniform-0.05
+% choice was fixed from a SINGLE vgg19 cell before the sweep and applied to
+% vgg11 without a vgg11-specific measurement; this closes that gap. 0.05 wins
+% at 0.95, 0.97 and 0.99; 0.1 is marginally ahead only at 0.999, where both
+% arms sit closest to the I.P. baseline. Mean over the four cells: 0.05 gives
+% -0.57, 0.1 gives -0.87 -- 0.05 remains the better choice on the evidence,
+% not merely the untested default.
+\defresult{vgg11.probelr010.magnitude.0.95}{89.17}
+\defresult{probe.vgg11.bacplr010.magnitude.0.95}{89.17}
+\defresult{vgg11.probelr010.magnitude.0.97}{88.93}
+\defresult{probe.vgg11.bacplr010.magnitude.0.97}{88.93}
+\defresult{vgg11.probelr010.magnitude.0.99}{88.68}
+\defresult{probe.vgg11.bacplr010.magnitude.0.99}{88.68}
+\defresult{vgg11.probelr010.magnitude.0.999}{83.82}
+\defresult{probe.vgg11.bacplr010.magnitude.0.999}{83.82}
+
 % --- Noise floor -----------------------------------------------------------
 \defresult{cifar10.noise.floor.lo}{0.1}
 \defresult{probe.noisefloor.lo}{0.1}
