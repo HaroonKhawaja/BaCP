@@ -8,8 +8,7 @@ Four stages per cell: ImageNet-pretrained initialisation
 pruning under one of two objectives; a fine-tune with the mask frozen. That is
 \citet{han2015learning}'s prune--retrain on
 \citet{zhu2018prune}'s schedule, with \citet{xu2022cap}'s contrastive
-supervision at stage three --- the only place the arms differ. Figure~\ref{fig:framework}
-in the appendix diagrams this pipeline and the stage-three objective in full.
+supervision at stage three --- the only place the arms differ.
 
 \paragraph{Objective.}
 With $z = \mathrm{normalize}(g(f_\theta(x)))$ --- so $z_i^{\top} z_j$ is cosine

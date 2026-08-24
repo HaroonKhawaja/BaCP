@@ -50,8 +50,6 @@
 \usepackage{nicefrac}
 \usepackage{microtype}
 \usepackage{siunitx}      % \num, \si
-\usepackage{tikz}         % Figure~\ref{fig:framework} only
-\usetikzlibrary{arrows.meta, positioning, calc}
 % hyperref goes last: loading it before amsmath/siunitx is a known source of
 % redefinition clashes.  (The kit's own template puts it first; this ordering
 % is strictly safer and changes nothing about the output.)
@@ -59,15 +57,6 @@
 \usepackage{url}
 
 \sisetup{detect-weight=true, detect-family=true}
-
-% Colours for Figure~\ref{fig:framework} (sections/fig_framework.tex). Named
-% for the role they mark, not the hue, so a palette swap is a five-line edit.
-\definecolor{bacpblue}{RGB}{51,102,187}
-\definecolor{ipgray}{RGB}{110,110,110}
-\definecolor{prcpurple}{RGB}{124,92,182}
-\definecolor{ficamber}{RGB}{188,138,23}
-\definecolor{sncteal}{RGB}{35,133,120}
-\definecolor{cepink}{RGB}{188,68,99}
 
 % The result registry.  MUST come after xcolor.
 \input{results_macros}
