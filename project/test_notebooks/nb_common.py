@@ -289,6 +289,15 @@ FAMILIES = {
                   bacp=dict(_CNN_BACP, learning_rate=0.05)),
     'vgg19': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
                   bacp=dict(_CNN_BACP, learning_rate=0.05)),
+
+    # UNVERIFIED protocol: same recipe as ResNet/VGG by default, not measured
+    # for this architecture. VGG needed its own learning-rate fix after
+    # measurement (Section sec:experiments:vgglr); MobileNetV2 -- 6x fewer
+    # parameters than resnet34, entirely depthwise-separable convs -- has no
+    # precedent here at all. Treat any result from this family as a spot-check
+    # of whether the effect appears, not as a tuned number.
+    'mobilenet_v2': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
+                         bacp=_CNN_BACP),
     # ViTs: hub weights, 224px inputs, batch 256. I.P. uses AdamW 1e-3 and
     # BaCP's contrastive phase SGD 0.01 (appendix B.5 note).
     'vit-tiny': dict(base=_VIT_BASE, dense=_CNN_DENSE,
@@ -404,6 +413,7 @@ _TORCHVISION = {
     'resnet101': ('resnet101', 'ResNet101_Weights'),
     'vgg11': ('vgg11', 'VGG11_Weights'),
     'vgg19': ('vgg19', 'VGG19_Weights'),
+    'mobilenet_v2': ('mobilenet_v2', 'MobileNet_V2_Weights'),
 }
 
 

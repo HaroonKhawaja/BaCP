@@ -70,6 +70,23 @@ def _hf_mlm(checkpoint):
     return build
 
 
+def _torchvision_cv(ctor_name):
+    """Wrap a stock torchvision CV builder that has no DyReLU hook.
+
+    Unlike this project's own ResNet/VGG ports (_local_vision), torchvision's
+    native constructors do not accept dyrelu_en/dyrelu_phasing_en -- there is
+    no equivalent hook wired into their blocks, the same reason HF models
+    reject it via _reject_dyrelu. Built with weights=None: ImageNet weights are
+    loaded afterwards from the registry's checkpoint path, same as every other
+    'cv' model here, not from torchvision's own weights enum.
+    """
+    def build(num_classes=1000, dyrelu_en=False, dyrelu_phasing_en=False):
+        _reject_dyrelu(ctor_name, dyrelu_en, dyrelu_phasing_en)
+        import torchvision.models as tvm
+        return getattr(tvm, ctor_name)(weights=None)
+    return build
+
+
 def _reject_dyrelu(checkpoint, dyrelu_en, dyrelu_phasing_en):
     """Fail loudly rather than silently ignoring an EAST flag.
 
@@ -104,6 +121,9 @@ MODELS = {
     'resnet101':  ModelSpec(_local_vision(resnet101),  '/dbfs/research/bacp/resnet101_imagenet.pth', 'resnet', 'cv'),
     'vgg11':      ModelSpec(_local_vision(local_vgg11), '/dbfs/research/bacp/vgg11_imagenet.pth',    'vgg',    'cv'),
     'vgg19':      ModelSpec(_local_vision(local_vgg19), '/dbfs/research/bacp/vgg19_imagenet.pth',    'vgg',    'cv'),
+    'mobilenet_v2': ModelSpec(_torchvision_cv('mobilenet_v2'),
+                              '/dbfs/research/bacp/mobilenet_v2_imagenet.pth',
+                              'mobilenet', 'cv'),
 
     # --- Vision Transformers (weights from the HF hub; no DyReLU) ---
     # Expect --image_size 224. ignore_mismatched_sizes lets the 1000-way
@@ -194,6 +214,23 @@ def adapt_resnet_for_small_images(model):
         model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
 
 
+def adapt_mobilenet_for_small_images(model):
+    """CIFAR-scale stem fix for MobileNetV2, mirroring the ResNet one.
+
+    features[0] is torchvision's Conv2dNormActivation -- an nn.Sequential of
+    (Conv2d(3,32,k=3,s=2,p=1), BatchNorm2d, ReLU6), confirmed by inspection.
+    Only the stride is wrong for 32x32 input, so only the stride changes --
+    kernel size, padding and the surrounding BatchNorm/activation are left
+    exactly as ImageNet pretraining produced them, same principle as the
+    ResNet stem fix (kernel/channels preserved, only the resolution-discarding
+    stride removed).
+    """
+    if hasattr(model, 'features') and len(model.features) > 0:
+        conv = model.features[0][0]
+        if isinstance(conv, nn.Conv2d):
+            conv.stride = (1, 1)
+
+
 def make_classification_head(embedded_dim: int, num_out_features: int):
     return nn.Linear(embedded_dim, num_out_features)
 
@@ -274,6 +311,8 @@ class BaseModelWrapper(nn.Module):
 
         if adapt and self.model_family == 'resnet':
             adapt_resnet_for_small_images(self.model)
+        elif adapt and self.model_family == 'mobilenet':
+            adapt_mobilenet_for_small_images(self.model)
 
         self.to(device)
 

@@ -52,7 +52,7 @@ def test_spec_fields_are_well_formed(name):
     spec = MODELS[name]
     assert isinstance(spec, ModelSpec)
     assert spec.type in ("cv", "llm")
-    assert spec.family in ("resnet", "vgg", "vit", "bert")
+    assert spec.family in ("resnet", "vgg", "mobilenet", "vit", "bert")
     assert spec.task in ("classification", "mlm")
     assert callable(spec.builder)
 
@@ -86,7 +86,7 @@ def test_local_vision_specs_carry_a_checkpoint_path():
     initialize_model_components skips load_weights for them.
     """
     for name, spec in MODELS.items():
-        if spec.family in ("resnet", "vgg"):
+        if spec.family in ("resnet", "vgg", "mobilenet"):
             assert spec.weight, f"{name} has no checkpoint path"
         else:
             assert spec.weight == "", f"{name} should not carry a local path"
