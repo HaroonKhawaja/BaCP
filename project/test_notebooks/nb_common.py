@@ -290,13 +290,34 @@ FAMILIES = {
     'vgg19': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
                   bacp=dict(_CNN_BACP, learning_rate=0.05)),
 
-    # UNVERIFIED protocol: same recipe as ResNet/VGG by default, not measured
-    # for this architecture. VGG needed its own learning-rate fix after
-    # measurement (Section sec:experiments:vgglr); MobileNetV2 -- 6x fewer
-    # parameters than resnet34, entirely depthwise-separable convs -- has no
-    # precedent here at all. Treat any result from this family as a spot-check
-    # of whether the effect appears, not as a tuned number.
-    'mobilenet_v2': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
+    # MobileNetV2 runs BOTH arms at SGD 0.1 -- the one family where I.P. does
+    # not use 0.01. This was measured, not assumed. The model first inherited
+    # the ResNet recipe untuned; at that setting its I.P. arm collapses to
+    # chance under magnitude while BaCP does not, which reads as an enormous
+    # win for the objective and is really just an undertrained baseline:
+    #
+    #   sparsity   I.P.@0.01          I.P.@0.1        BaCP@0.1
+    #   0.95       80.06 +/- 11.74    83.46 +/- 1.32  87.38 +/- 0.32
+    #   0.97       56.84 +/- 24.48    82.64 +/- 1.36  85.67 +/- 0.56
+    #   0.99       10.02 +/-  0.03    78.63 +/- 3.51  80.34 +/- 0.23
+    #
+    # At 0.99 that is the difference between a reported +70.3 and the true
+    # +1.7. BaCP was probed too and 0.1 is its optimum as well (0.5 is 7.2
+    # points worse at 0.99), so 0.1 is each arm's measured best, not a
+    # handicap imposed on one of them.
+    #
+    # Setting it here rather than passing learning_rate=0.1 at every call site
+    # is what keeps the record namespace honest: a `variant=` suffix means
+    # "deviates from the family default", so tagging the CORRECT rate as a
+    # deviation is backwards, and it is how magnitude I.P. ended up under
+    # `.lr0.1` keys while SNIP/WANDA I.P. sat under main keys for the same
+    # protocol. Pinned by test_mobilenet_arms_share_learning_rate.
+    #
+    # Sparsity 0.999 is dead for both arms on this architecture at every rate
+    # tried (I.P. 0.001/0.01/0.1, BaCP 0.01/0.1/0.5): ~2,200 of 2.2M weights
+    # survive, about 42 per tensor. Prefer 0.995 as the extreme point.
+    'mobilenet_v2': dict(base=_CV_BASE, dense=_CNN_DENSE,
+                         prune=dict(_CNN_PRUNE, learning_rate=0.1),
                          bacp=_CNN_BACP),
     # ViTs: hub weights, 224px inputs, batch 256. I.P. uses AdamW 1e-3 and
     # BaCP's contrastive phase SGD 0.01 (appendix B.5 note).
