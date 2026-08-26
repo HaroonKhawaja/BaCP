@@ -143,6 +143,56 @@ mechanism that yields \result{summary.delta.sparsity.0.999} where pruning
 destroys the network predicts approximately nothing where pruning does no
 harm, and that is what we measured.
 
+\paragraph{A fourth architecture.}
+The three families above are all dense-convolutional. To test whether the
+effect is specific to that shape we added MobileNetV2
+\citep{sandler2018mobilenetv2}, which is inverted-residual and entirely
+depthwise-separable, with \num{2.2}M prunable weights against ResNet-34's
+\num{21}M. Under magnitude pruning at three seeds BaCP is ahead at every
+sparsity where the model survives:
+\result{mobilenet.delta.magnitude.0.95} points at 0.95,
+\result{mobilenet.delta.magnitude.0.97} at 0.97 and
+\result{mobilenet.delta.magnitude.0.99} at 0.99
+(Table~\ref{tab:mobilenet}). Two qualifications matter more than the deltas.
+First, the ordering is inverted relative to Table~\ref{tab:main}: here
+$\Delta$ \emph{shrinks} as sparsity rises, because this baseline already sits
+far below its dense reference at 0.95
+(\result{mobilenet.ip.magnitude.0.95} against \result{mobilenet.dense}), so
+the room to recover closes rather than opens. Second, both arms run SGD
+$0.1$ on this model rather than the grid's $0.01/0.1$ split. MobileNetV2
+inherited the ResNet recipe untuned, and a learning-rate probe showed $0.01$
+is wrong for its I.P.\ arm --- at 0.99 that arm falls to chance while $0.1$
+reaches \result{mobilenet.ip.magnitude.0.99}. Reporting the untuned baseline
+would have manufactured a seventy-point delta, so we tuned it and report the
+smaller one. At 0.999 both arms sit at chance for this architecture at every
+rate we tried, with roughly \num{2200} of \num{2.2}M weights surviving. That
+is a MobileNetV2 statement and not a general one: ResNet-50 and VGG-19 both
+retain most of their accuracy at the same sparsity.
+
+\begin{table}[t]
+\centering
+\small
+\caption{MobileNetV2 / CIFAR-10 / magnitude, three seeds, mean $\pm$ standard
+deviation. Both arms run SGD $0.1$ --- each arm's measured optimum on this
+architecture --- rather than the $0.01/0.1$ split used in
+Table~\ref{tab:main}; see the text. Dense reference
+\resultpm{mobilenet.dense}. At 0.999 both arms are at chance for this model
+at every learning rate tried, which is a property of a \num{2.2}M-parameter
+depthwise-separable network at that sparsity rather than of the objective.}
+\label{tab:mobilenet}
+\begin{tabular}{lccc}
+\toprule
+Sparsity & I.P. & BaCP & $\Delta$ \\
+\midrule
+0.5   & \resultpm{mobilenet.ip.magnitude.0.5}   & \resultpm{mobilenet.bacp.magnitude.0.5}   & \result{mobilenet.delta.magnitude.0.5} \\
+0.95  & \resultpm{mobilenet.ip.magnitude.0.95}  & \resultpm{mobilenet.bacp.magnitude.0.95}  & \result{mobilenet.delta.magnitude.0.95} \\
+0.97  & \resultpm{mobilenet.ip.magnitude.0.97}  & \resultpm{mobilenet.bacp.magnitude.0.97}  & \result{mobilenet.delta.magnitude.0.97} \\
+0.99  & \resultpm{mobilenet.ip.magnitude.0.99}  & \resultpm{mobilenet.bacp.magnitude.0.99}  & \result{mobilenet.delta.magnitude.0.99} \\
+0.999 & \resultpm{mobilenet.ip.magnitude.0.999} & \resultpm{mobilenet.bacp.magnitude.0.999} & \result{mobilenet.delta.magnitude.0.999} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \begin{table}[t]
 \centering
 \small

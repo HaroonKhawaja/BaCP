@@ -74,6 +74,71 @@
 % These are the only numbers of ours that may be stated as results today.
 % ==========================================================================
 
+% --- MobileNetV2 spot-check ------------------------------------------------
+% CIFAR-10 / magnitude / 3 seeds, mean and sample sd.  A fourth architecture
+% family, added to test whether the effect is specific to the ResNet/VGG
+% shapes: MobileNetV2 is inverted-residual and entirely depthwise-separable,
+% with 2.2M prunable weights against ResNet-34's 21M.
+%
+% PROTOCOL DEVIATION, stated because it is a real degree of freedom.  Both
+% arms run SGD 0.1 here, not the grid's I.P. 0.01 / BaCP 0.1.  MobileNetV2
+% inherited the ResNet recipe untuned, and a learning-rate probe showed 0.01
+% is simply wrong for this model's I.P. arm: at 0.99 it collapses to chance
+% (10.02 +/- 0.03) while 0.1 reaches 78.63.  Reporting the 0.01 arm would
+% have manufactured a +70 point delta out of an untuned baseline.  BaCP was
+% probed at 0.5 as well and is 7.2 points worse there, so 0.1 is each arm's
+% measured optimum at the sparsities that matter.
+%
+% 0.999 is dead for BOTH arms on this architecture in every configuration
+% measured -- I.P. at 0.001/0.01/0.1 and BaCP at 0.01/0.1/0.5 all land on
+% 10.0, chance on CIFAR-10.  Only ~2,200 of 2.2M prunable weights survive
+% there, about 42 per tensor.  This is a MobileNetV2 result, NOT a general
+% one: ResNet-50 and VGG-19 both retain ~80-85 at 0.999.
+\defresult{mobilenet.dense}{92.36}
+\defresultsd{mobilenet.dense}{0.12}
+\defresultn{mobilenet.dense}{3}
+\defresult{mobilenet.dense.none.0.0}{92.36}
+
+\defresult{mobilenet.ip.magnitude.0.5}{84.61}
+\defresultsd{mobilenet.ip.magnitude.0.5}{0.14}
+\defresultn{mobilenet.ip.magnitude.0.5}{3}
+\defresult{mobilenet.bacp.magnitude.0.5}{89.92}
+\defresultsd{mobilenet.bacp.magnitude.0.5}{0.21}
+\defresultn{mobilenet.bacp.magnitude.0.5}{3}
+\defresult{mobilenet.delta.magnitude.0.5}{+5.31}
+
+\defresult{mobilenet.ip.magnitude.0.95}{83.46}
+\defresultsd{mobilenet.ip.magnitude.0.95}{1.32}
+\defresultn{mobilenet.ip.magnitude.0.95}{3}
+\defresult{mobilenet.bacp.magnitude.0.95}{87.38}
+\defresultsd{mobilenet.bacp.magnitude.0.95}{0.32}
+\defresultn{mobilenet.bacp.magnitude.0.95}{3}
+\defresult{mobilenet.delta.magnitude.0.95}{+3.92}
+
+\defresult{mobilenet.ip.magnitude.0.97}{82.64}
+\defresultsd{mobilenet.ip.magnitude.0.97}{1.36}
+\defresultn{mobilenet.ip.magnitude.0.97}{3}
+\defresult{mobilenet.bacp.magnitude.0.97}{85.67}
+\defresultsd{mobilenet.bacp.magnitude.0.97}{0.56}
+\defresultn{mobilenet.bacp.magnitude.0.97}{3}
+\defresult{mobilenet.delta.magnitude.0.97}{+3.04}
+
+\defresult{mobilenet.ip.magnitude.0.99}{78.63}
+\defresultsd{mobilenet.ip.magnitude.0.99}{3.51}
+\defresultn{mobilenet.ip.magnitude.0.99}{3}
+\defresult{mobilenet.bacp.magnitude.0.99}{80.34}
+\defresultsd{mobilenet.bacp.magnitude.0.99}{0.23}
+\defresultn{mobilenet.bacp.magnitude.0.99}{3}
+\defresult{mobilenet.delta.magnitude.0.99}{+1.71}
+
+\defresult{mobilenet.ip.magnitude.0.999}{10.00}
+\defresultsd{mobilenet.ip.magnitude.0.999}{0.00}
+\defresultn{mobilenet.ip.magnitude.0.999}{3}
+\defresult{mobilenet.bacp.magnitude.0.999}{10.00}
+\defresultsd{mobilenet.bacp.magnitude.0.999}{0.00}
+\defresultn{mobilenet.bacp.magnitude.0.999}{3}
+\defresult{mobilenet.delta.magnitude.0.999}{+0.00}
+
 % --- Objective ablation ----------------------------------------------------
 % ResNet-50 / CIFAR-10 / magnitude, seed 1, under the PREVIOUS protocol
 % (60 epochs, delta_T 88, no validation split).  Single seed.  The `abl`
