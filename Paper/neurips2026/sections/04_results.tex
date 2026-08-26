@@ -148,47 +148,61 @@ The three families above are all dense-convolutional. To test whether the
 effect is specific to that shape we added MobileNetV2
 \citep{sandler2018mobilenetv2}, which is inverted-residual and entirely
 depthwise-separable, with \num{2.2}M prunable weights against ResNet-34's
-\num{21}M. Under magnitude pruning at three seeds BaCP is ahead at every
-sparsity where the model survives:
-\result{mobilenet.delta.magnitude.0.95} points at 0.95,
-\result{mobilenet.delta.magnitude.0.97} at 0.97 and
-\result{mobilenet.delta.magnitude.0.99} at 0.99
-(Table~\ref{tab:mobilenet}). Two qualifications matter more than the deltas.
-First, the ordering is inverted relative to Table~\ref{tab:main}: here
-$\Delta$ \emph{shrinks} as sparsity rises, because this baseline already sits
-far below its dense reference at 0.95
-(\result{mobilenet.ip.magnitude.0.95} against \result{mobilenet.dense}), so
-the room to recover closes rather than opens. Second, both arms run SGD
-$0.1$ on this model rather than the grid's $0.01/0.1$ split. MobileNetV2
-inherited the ResNet recipe untuned, and a learning-rate probe showed $0.01$
-is wrong for its I.P.\ arm --- at 0.99 that arm falls to chance while $0.1$
-reaches \result{mobilenet.ip.magnitude.0.99}. Reporting the untuned baseline
-would have manufactured a seventy-point delta, so we tuned it and report the
-smaller one. At 0.999 both arms sit at chance for this architecture at every
-rate we tried, with roughly \num{2200} of \num{2.2}M weights surviving. That
-is a MobileNetV2 statement and not a general one: ResNet-50 and VGG-19 both
-retain most of their accuracy at the same sparsity.
+\num{21}M. Three seeds, all three criteria, both arms at SGD $0.1$
+(Table~\ref{tab:mobilenet}). At 0.95 and 0.97 the criteria agree and BaCP is
+ahead by roughly three to five points throughout. Above that they diverge, and
+the divergence is the informative part: under SNIP-it the gap \emph{widens}
+as sparsity rises, to \result{mobilenet.delta.snip.0.99} at 0.99 and
+\result{mobilenet.delta.snip.0.995} at 0.995, because BaCP degrades far more
+slowly than the baseline (\result{mobilenet.ip.snip.0.995} against
+\result{mobilenet.bacp.snip.0.995}); under magnitude it \emph{narrows}, to
+\result{mobilenet.delta.magnitude.0.99}; and under WANDA both arms fail
+outright at 0.99 and beyond. So on this architecture the criterion decides
+whether anything survives extreme sparsity at all, and BaCP helps most where
+the criterion leaves something to recover. That is a sharper statement of the
+mechanism than the ResNet and VGG rows can make, because there sparsity and
+damage move together.
+
+Two caveats belong with these numbers. WANDA's statistic is undefined for
+grouped convolutions in our implementation --- \verb|F.unfold| is
+group-unaware --- so those layers fall back to magnitude ranking. On
+MobileNetV2 that is \result{mobilenet.wanda.dwlayers} of
+\result{mobilenet.wanda.convlayers} convolutional layers, holding
+\result{mobilenet.wanda.fallback.pct}\% of the prunable weights; the
+remaining \result{mobilenet.wanda.scored.pct}\% is scored as WANDA proper.
+The row is therefore not purely WANDA and we do not present it as such. And
+the WANDA cell at 0.99 is a collapse rather than a result: its per-seed
+accuracies are \num{39.76}, \num{10.00} and \num{10.00} against BaCP's three
+dead seeds, so the baseline mean of \result{mobilenet.ip.wanda.0.99} is one
+surviving run averaged with two failures. We register no $\Delta$ there.
 
 \begin{table}[t]
 \centering
 \small
-\caption{MobileNetV2 / CIFAR-10 / magnitude, three seeds, mean $\pm$ standard
-deviation. Both arms run SGD $0.1$ --- each arm's measured optimum on this
-architecture --- rather than the $0.01/0.1$ split used in
-Table~\ref{tab:main}; see the text. Dense reference
-\resultpm{mobilenet.dense}. At 0.999 both arms are at chance for this model
-at every learning rate tried, which is a property of a \num{2.2}M-parameter
-depthwise-separable network at that sparsity rather than of the objective.}
+\caption{MobileNetV2 / CIFAR-10, three seeds, mean $\pm$ standard deviation.
+Both arms run SGD $0.1$ --- each arm's measured optimum on this architecture
+--- rather than the $0.01/0.1$ split used in Table~\ref{tab:main}; see the
+text. Dense reference \resultpm{mobilenet.dense}. Sparsity 0.995 replaces
+0.999 for SNIP-it and WANDA because 0.999 is dead for both arms here at every
+learning rate tried, which is a property of a \num{2.2}M-parameter
+depthwise-separable network at that sparsity rather than of the objective;
+\num{10.00} is chance on CIFAR-10. The WANDA column is partly magnitude
+ranking (\result{mobilenet.wanda.fallback.pct}\% of prunable weights) and its
+0.99 cell is a collapse, not an effect --- see the text.}
 \label{tab:mobilenet}
-\begin{tabular}{lccc}
+\begin{tabular}{lcc cc cc}
 \toprule
-Sparsity & I.P. & BaCP & $\Delta$ \\
+& \multicolumn{2}{c}{Magnitude} & \multicolumn{2}{c}{SNIP-it}
+& \multicolumn{2}{c}{WANDA} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+Sparsity & I.P. & BaCP & I.P. & BaCP & I.P. & BaCP \\
 \midrule
-0.5   & \resultpm{mobilenet.ip.magnitude.0.5}   & \resultpm{mobilenet.bacp.magnitude.0.5}   & \result{mobilenet.delta.magnitude.0.5} \\
-0.95  & \resultpm{mobilenet.ip.magnitude.0.95}  & \resultpm{mobilenet.bacp.magnitude.0.95}  & \result{mobilenet.delta.magnitude.0.95} \\
-0.97  & \resultpm{mobilenet.ip.magnitude.0.97}  & \resultpm{mobilenet.bacp.magnitude.0.97}  & \result{mobilenet.delta.magnitude.0.97} \\
-0.99  & \resultpm{mobilenet.ip.magnitude.0.99}  & \resultpm{mobilenet.bacp.magnitude.0.99}  & \result{mobilenet.delta.magnitude.0.99} \\
-0.999 & \resultpm{mobilenet.ip.magnitude.0.999} & \resultpm{mobilenet.bacp.magnitude.0.999} & \result{mobilenet.delta.magnitude.0.999} \\
+0.5   & \resultpm{mobilenet.ip.magnitude.0.5}   & \resultpm{mobilenet.bacp.magnitude.0.5}   & ---                                  & ---                                   & ---                                 & ---                                  \\
+0.95  & \resultpm{mobilenet.ip.magnitude.0.95}  & \resultpm{mobilenet.bacp.magnitude.0.95}  & \resultpm{mobilenet.ip.snip.0.95}    & \resultpm{mobilenet.bacp.snip.0.95}   & \resultpm{mobilenet.ip.wanda.0.95}  & \resultpm{mobilenet.bacp.wanda.0.95} \\
+0.97  & \resultpm{mobilenet.ip.magnitude.0.97}  & \resultpm{mobilenet.bacp.magnitude.0.97}  & \resultpm{mobilenet.ip.snip.0.97}    & \resultpm{mobilenet.bacp.snip.0.97}   & \resultpm{mobilenet.ip.wanda.0.97}  & \resultpm{mobilenet.bacp.wanda.0.97} \\
+0.99  & \resultpm{mobilenet.ip.magnitude.0.99}  & \resultpm{mobilenet.bacp.magnitude.0.99}  & \resultpm{mobilenet.ip.snip.0.99}    & \resultpm{mobilenet.bacp.snip.0.99}   & \resultpm{mobilenet.ip.wanda.0.99}  & \resultpm{mobilenet.bacp.wanda.0.99} \\
+0.995 & ---                                     & ---                                       & \resultpm{mobilenet.ip.snip.0.995}   & \resultpm{mobilenet.bacp.snip.0.995}  & \resultpm{mobilenet.ip.wanda.0.995} & \resultpm{mobilenet.bacp.wanda.0.995}\\
+0.999 & \resultpm{mobilenet.ip.magnitude.0.999} & \resultpm{mobilenet.bacp.magnitude.0.999} & ---                                  & ---                                   & ---                                 & ---                                  \\
 \bottomrule
 \end{tabular}
 \end{table}

@@ -231,6 +231,95 @@ MEASURED = r"""
 \defresultn{mobilenet.bacp.magnitude.0.999}{3}
 \defresult{mobilenet.delta.magnitude.0.999}{+0.00}
 
+% --- MobileNetV2 spot-check: SNIP-it and WANDA -----------------------------
+% Same protocol as the magnitude block above: CIFAR-10, three seeds, BOTH arms
+% at SGD 0.1.  Sparsity 0.995 replaces 0.999 for these two criteria because
+% 0.999 is dead for both arms on this architecture in every configuration
+% measured, so three more criteria x three seeds there would only reproduce
+% chance.
+%
+% WANDA CAVEAT.  pruning_factory's WANDA path falls back to plain magnitude
+% ranking for any layer whose activation statistic width does not match the
+% flattened weight, and grouped/depthwise Conv2d hit this deterministically
+% because F.unfold is group-unaware.  Measured on the trained model (param
+% counts cross-checked against the run records, 2,236,682 total / 2,202,560
+% prunable): 17 of 52 convolutional layers are depthwise, holding 64,224
+% weights = 2.92% of the prunable pool.  So 97.08% of the pool is genuinely
+% WANDA-scored, but the row is not purely WANDA and must not be reported as
+% though it were.
+%
+% WANDA AT 0.99 IS A COLLAPSE, NOT A DELTA.  Per-seed I.P. is 39.76 / 10.00 /
+% 10.00 and BaCP is 10.00 / 10.00 / 10.00.  The I.P. mean of 19.92 is one
+% surviving seed averaged with two dead ones; its sd of 17.18 is the tell.
+% Both arms fail here.  No delta is registered for that cell on purpose.
+\defresult{mobilenet.ip.snip.0.95}{83.52}
+\defresultsd{mobilenet.ip.snip.0.95}{0.19}
+\defresultn{mobilenet.ip.snip.0.95}{3}
+\defresult{mobilenet.bacp.snip.0.95}{87.26}
+\defresultsd{mobilenet.bacp.snip.0.95}{0.17}
+\defresultn{mobilenet.bacp.snip.0.95}{3}
+\defresult{mobilenet.delta.snip.0.95}{+3.74}
+
+\defresult{mobilenet.ip.snip.0.97}{82.56}
+\defresultsd{mobilenet.ip.snip.0.97}{1.36}
+\defresultn{mobilenet.ip.snip.0.97}{3}
+\defresult{mobilenet.bacp.snip.0.97}{85.54}
+\defresultsd{mobilenet.bacp.snip.0.97}{0.11}
+\defresultn{mobilenet.bacp.snip.0.97}{3}
+\defresult{mobilenet.delta.snip.0.97}{+2.98}
+
+\defresult{mobilenet.ip.snip.0.99}{74.40}
+\defresultsd{mobilenet.ip.snip.0.99}{1.37}
+\defresultn{mobilenet.ip.snip.0.99}{3}
+\defresult{mobilenet.bacp.snip.0.99}{80.33}
+\defresultsd{mobilenet.bacp.snip.0.99}{0.15}
+\defresultn{mobilenet.bacp.snip.0.99}{3}
+\defresult{mobilenet.delta.snip.0.99}{+5.93}
+
+\defresult{mobilenet.ip.snip.0.995}{61.13}
+\defresultsd{mobilenet.ip.snip.0.995}{0.38}
+\defresultn{mobilenet.ip.snip.0.995}{3}
+\defresult{mobilenet.bacp.snip.0.995}{74.43}
+\defresultsd{mobilenet.bacp.snip.0.995}{0.28}
+\defresultn{mobilenet.bacp.snip.0.995}{3}
+\defresult{mobilenet.delta.snip.0.995}{+13.30}
+
+\defresult{mobilenet.ip.wanda.0.95}{82.47}
+\defresultsd{mobilenet.ip.wanda.0.95}{0.48}
+\defresultn{mobilenet.ip.wanda.0.95}{3}
+\defresult{mobilenet.bacp.wanda.0.95}{85.85}
+\defresultsd{mobilenet.bacp.wanda.0.95}{0.30}
+\defresultn{mobilenet.bacp.wanda.0.95}{3}
+\defresult{mobilenet.delta.wanda.0.95}{+3.38}
+
+\defresult{mobilenet.ip.wanda.0.97}{79.10}
+\defresultsd{mobilenet.ip.wanda.0.97}{0.82}
+\defresultn{mobilenet.ip.wanda.0.97}{3}
+\defresult{mobilenet.bacp.wanda.0.97}{84.08}
+\defresultsd{mobilenet.bacp.wanda.0.97}{0.57}
+\defresultn{mobilenet.bacp.wanda.0.97}{3}
+\defresult{mobilenet.delta.wanda.0.97}{+4.98}
+
+\defresult{mobilenet.ip.wanda.0.99}{19.92}
+\defresultsd{mobilenet.ip.wanda.0.99}{17.18}
+\defresultn{mobilenet.ip.wanda.0.99}{3}
+\defresult{mobilenet.bacp.wanda.0.99}{10.00}
+\defresultsd{mobilenet.bacp.wanda.0.99}{0.00}
+\defresultn{mobilenet.bacp.wanda.0.99}{3}
+
+\defresult{mobilenet.ip.wanda.0.995}{10.00}
+\defresultsd{mobilenet.ip.wanda.0.995}{0.00}
+\defresultn{mobilenet.ip.wanda.0.995}{3}
+\defresult{mobilenet.bacp.wanda.0.995}{10.00}
+\defresultsd{mobilenet.bacp.wanda.0.995}{0.00}
+\defresultn{mobilenet.bacp.wanda.0.995}{3}
+
+\defresult{mobilenet.wanda.fallback.pct}{2.92}
+\defresult{mobilenet.wanda.scored.pct}{97.08}
+\defresult{mobilenet.wanda.dwlayers}{17}
+\defresult{mobilenet.wanda.convlayers}{52}
+
+
 % --- Objective ablation ----------------------------------------------------
 % ResNet-50 / CIFAR-10 / magnitude, seed 1, under the PREVIOUS protocol
 % (60 epochs, delta_T 88, no validation split).  Single seed.  The `abl`
