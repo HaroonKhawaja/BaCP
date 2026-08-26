@@ -149,19 +149,21 @@ effect is specific to that shape we added MobileNetV2
 \citep{sandler2018mobilenetv2}, which is inverted-residual and entirely
 depthwise-separable, with \num{2.2}M prunable weights against ResNet-34's
 \num{21}M. Three seeds, all three criteria, both arms at SGD $0.1$
-(Table~\ref{tab:mobilenet}). At 0.95 and 0.97 the criteria agree and BaCP is
-ahead by roughly three to five points throughout. Above that they diverge, and
-the divergence is the informative part: under SNIP-it the gap \emph{widens}
-as sparsity rises, to \result{mobilenet.delta.snip.0.99} at 0.99 and
-\result{mobilenet.delta.snip.0.995} at 0.995, because BaCP degrades far more
-slowly than the baseline (\result{mobilenet.ip.snip.0.995} against
-\result{mobilenet.bacp.snip.0.995}); under magnitude it \emph{narrows}, to
-\result{mobilenet.delta.magnitude.0.99}; and under WANDA both arms fail
-outright at 0.99 and beyond. So on this architecture the criterion decides
-whether anything survives extreme sparsity at all, and BaCP helps most where
-the criterion leaves something to recover. That is a sharper statement of the
-mechanism than the ResNet and VGG rows can make, because there sparsity and
-damage move together.
+(Table~\ref{tab:mobilenet}). Every criterion traces the same shape: a few
+points while the network is only lightly damaged, a large margin at the
+sparsity where the baseline begins to fail, and nothing once both arms are
+dead. What differs between criteria is \emph{where} that failure falls.
+WANDA breaks first --- both arms are at chance by 0.99. Magnitude survives to
+0.995, where I.P.\ becomes unstable at
+\resultpm{mobilenet.ip.magnitude.0.995} (one seed already at chance) while
+BaCP holds \resultpm{mobilenet.bacp.magnitude.0.995}, a margin of
+\result{mobilenet.delta.magnitude.0.995}. SNIP-it survives furthest, still
+returning \result{mobilenet.bacp.snip.0.995} against
+\result{mobilenet.ip.snip.0.995} at the same sparsity. So on this
+architecture the criterion sets the sparsity at which the network breaks, and
+the contrastive objective is worth most just below that point --- which is
+the damage-based reading of Table~\ref{tab:main} stated in a setting where
+sparsity and damage can be varied separately.
 
 Two caveats belong with these numbers. WANDA's statistic is undefined for
 grouped convolutions in our implementation --- \verb|F.unfold| is
@@ -201,7 +203,7 @@ Sparsity & I.P. & BaCP & I.P. & BaCP & I.P. & BaCP \\
 0.95  & \resultpm{mobilenet.ip.magnitude.0.95}  & \resultpm{mobilenet.bacp.magnitude.0.95}  & \resultpm{mobilenet.ip.snip.0.95}    & \resultpm{mobilenet.bacp.snip.0.95}   & \resultpm{mobilenet.ip.wanda.0.95}  & \resultpm{mobilenet.bacp.wanda.0.95} \\
 0.97  & \resultpm{mobilenet.ip.magnitude.0.97}  & \resultpm{mobilenet.bacp.magnitude.0.97}  & \resultpm{mobilenet.ip.snip.0.97}    & \resultpm{mobilenet.bacp.snip.0.97}   & \resultpm{mobilenet.ip.wanda.0.97}  & \resultpm{mobilenet.bacp.wanda.0.97} \\
 0.99  & \resultpm{mobilenet.ip.magnitude.0.99}  & \resultpm{mobilenet.bacp.magnitude.0.99}  & \resultpm{mobilenet.ip.snip.0.99}    & \resultpm{mobilenet.bacp.snip.0.99}   & \resultpm{mobilenet.ip.wanda.0.99}  & \resultpm{mobilenet.bacp.wanda.0.99} \\
-0.995 & ---                                     & ---                                       & \resultpm{mobilenet.ip.snip.0.995}   & \resultpm{mobilenet.bacp.snip.0.995}  & \resultpm{mobilenet.ip.wanda.0.995} & \resultpm{mobilenet.bacp.wanda.0.995}\\
+0.995 & \resultpm{mobilenet.ip.magnitude.0.995} & \resultpm{mobilenet.bacp.magnitude.0.995} & \resultpm{mobilenet.ip.snip.0.995}   & \resultpm{mobilenet.bacp.snip.0.995}  & \resultpm{mobilenet.ip.wanda.0.995} & \resultpm{mobilenet.bacp.wanda.0.995}\\
 0.999 & \resultpm{mobilenet.ip.magnitude.0.999} & \resultpm{mobilenet.bacp.magnitude.0.999} & ---                                  & ---                                   & ---                                 & ---                                  \\
 \bottomrule
 \end{tabular}

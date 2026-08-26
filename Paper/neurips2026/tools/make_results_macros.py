@@ -320,6 +320,22 @@ MEASURED = r"""
 \defresult{mobilenet.wanda.convlayers}{52}
 
 
+% --- MobileNetV2: magnitude at 0.995 ---------------------------------------
+% Run after SNIP/WANDA to close the one hole in the grid. It overturned the
+% reading that was in 04_results.tex: magnitude's margin does NOT keep
+% narrowing. It is +1.71 at 0.99 and +42.49 at 0.995, because the baseline
+% starts to fail there (24.98 +/- 13.47, per-seed 36.10 / 28.84 / 10.00 --
+% one seed already at chance) while BaCP holds 67.47 +/- 1.60.
+% Same protocol: three seeds, both arms SGD 0.1.
+\defresult{mobilenet.ip.magnitude.0.995}{24.98}
+\defresultsd{mobilenet.ip.magnitude.0.995}{13.47}
+\defresultn{mobilenet.ip.magnitude.0.995}{3}
+\defresult{mobilenet.bacp.magnitude.0.995}{67.47}
+\defresultsd{mobilenet.bacp.magnitude.0.995}{1.60}
+\defresultn{mobilenet.bacp.magnitude.0.995}{3}
+\defresult{mobilenet.delta.magnitude.0.995}{+42.49}
+
+
 % --- Objective ablation ----------------------------------------------------
 % ResNet-50 / CIFAR-10 / magnitude, seed 1, under the PREVIOUS protocol
 % (60 epochs, delta_T 88, no validation split).  Single seed.  The `abl`
