@@ -281,6 +281,28 @@ def test_cli_model_choices_are_all_registered():
     )
 
 
+def test_every_registered_model_is_a_cli_choice():
+    """The reverse of test_cli_model_choices_are_all_registered.
+
+    That test only caught the CLI offering an unregistered model; it says
+    nothing if a model is registered in MODELS but the CLI's own hardcoded
+    `models` list never got the matching entry added -- exactly what happened
+    when mobilenet_v2 was added to MODELS without updating scripting_utils.py,
+    so every training script rejected it with "invalid choice" after argument
+    parsing had already succeeded.
+    """
+    sys.path.insert(0, str(PROJECT / "scripts"))
+    import scripting_utils
+
+    from model_factory import MODELS
+
+    missing = sorted(set(MODELS) - set(scripting_utils.models))
+    assert not missing, (
+        f"model_factory.MODELS registers models the CLI does not offer: "
+        f"{missing}. Add them to scripting_utils.models."
+    )
+
+
 def test_cli_dataset_choices_are_all_registered():
     """Every --dataset_name the CLI accepts must be loadable.
 

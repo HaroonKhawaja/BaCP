@@ -26,6 +26,8 @@ def get_timestamp():
 models = [
     # vision (this project's backbones, DyReLU-capable)
     'resnet34', 'resnet50', 'resnet101', 'vgg11', 'vgg19',
+    # vision (stock torchvision, no DyReLU hook -- see _torchvision_cv)
+    'mobilenet_v2',
     # vision transformers (HF hub; no DyReLU; use --image_size 224)
     'vit-tiny', 'vit-small',
     # language: sequence classification (SST-2)
