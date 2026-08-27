@@ -138,128 +138,20 @@ mechanism that yields \result{summary.delta.sparsity.0.999} where pruning
 destroys the network predicts approximately nothing where pruning does no
 harm, and that is what we measured.
 
-\paragraph{A fourth architecture.}
-The three families above are all dense-convolutional. To test whether the
-effect is specific to that shape we added MobileNetV2
-\citep{sandler2018mobilenetv2}, which is inverted-residual and entirely
-depthwise-separable, with \num{2.2}M prunable weights against ResNet-34's
-\num{21}M. Three seeds, all three criteria, both arms at SGD $0.1$
-(Table~\ref{tab:mobilenet}). Every criterion traces the same shape: a few
-points while the network is only lightly damaged, a large margin at the
-sparsity where the baseline begins to fail, and nothing once both arms are
-dead. What differs between criteria is \emph{where} that failure falls.
-WANDA breaks first --- both arms are at chance by 0.99. Magnitude survives to
-0.995, where I.P.\ becomes unstable at
-\resultpm{mobilenet.ip.magnitude.0.995} (one seed already at chance) while
-BaCP holds \resultpm{mobilenet.bacp.magnitude.0.995}, a margin of
-\result{mobilenet.delta.magnitude.0.995}. SNIP-it survives furthest, still
-returning \result{mobilenet.bacp.snip.0.995} against
-\result{mobilenet.ip.snip.0.995} at the same sparsity. So on this
-architecture the criterion sets the sparsity at which the network breaks, and
-the contrastive objective is worth most just below that point --- which is
-the damage-based reading of Table~\ref{tab:main} stated in a setting where
-sparsity and damage can be varied separately.
+\paragraph{Beyond the grid.}
+Two checks outside Table~\ref{tab:main} test whether the effect is tied to the
+dense-convolutional shapes above or to CIFAR-10. MobileNetV2 --- inverted
+residual, entirely depthwise-separable, \num{2.2}M prunable weights against
+ResNet-34's \num{21}M --- reproduces the pattern across all three criteria, and
+so does ResNet-34 on CIFAR-100, where BaCP leads all twelve cells. Both run at
+three seeds under the same matched protocol, and both show the ordering
+Table~\ref{tab:main} shows: small margins while the network is intact, large
+ones where the baseline begins to fail. Appendix~\ref{app:beyond} gives the
+tables and the two qualifications that belong with them --- WANDA's statistic
+is undefined for grouped convolutions, and MobileNetV2 is dead at 0.999 for
+both arms at every learning rate we tried.
 
-Two caveats belong with these numbers. WANDA's statistic is undefined for
-grouped convolutions in our implementation --- \verb|F.unfold| is
-group-unaware --- so those layers fall back to magnitude ranking. On
-MobileNetV2 that is \result{mobilenet.wanda.dwlayers} of
-\result{mobilenet.wanda.convlayers} convolutional layers, holding
-\result{mobilenet.wanda.fallback.pct}\% of the prunable weights; the
-remaining \result{mobilenet.wanda.scored.pct}\% is scored as WANDA proper.
-The row is therefore not purely WANDA and we do not present it as such. And
-the WANDA cell at 0.99 is a collapse rather than a result: its per-seed
-accuracies are \num{39.76}, \num{10.00} and \num{10.00} against BaCP's three
-dead seeds, so the baseline mean of \result{mobilenet.ip.wanda.0.99} is one
-surviving run averaged with two failures. We register no $\Delta$ there.
 
-\begin{table}[t]
-\centering
-\small
-\caption{MobileNetV2 / CIFAR-10, three seeds, mean $\pm$ standard deviation.
-Both arms run SGD $0.1$ --- each arm's measured optimum on this architecture
---- rather than the $0.01/0.1$ split used in Table~\ref{tab:main}; see the
-text. Dense reference \resultpm{mobilenet.dense}. Sparsity 0.995 replaces
-0.999 for SNIP-it and WANDA because 0.999 is dead for both arms here at every
-learning rate tried, which is a property of a \num{2.2}M-parameter
-depthwise-separable network at that sparsity rather than of the objective;
-\num{10.00} is chance on CIFAR-10. The WANDA column is partly magnitude
-ranking (\result{mobilenet.wanda.fallback.pct}\% of prunable weights) and its
-0.99 cell is a collapse, not an effect --- see the text.}
-\label{tab:mobilenet}
-\begin{tabular}{lcc cc cc}
-\toprule
-& \multicolumn{2}{c}{Magnitude} & \multicolumn{2}{c}{SNIP-it}
-& \multicolumn{2}{c}{WANDA} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
-Sparsity & I.P. & BaCP & I.P. & BaCP & I.P. & BaCP \\
-\midrule
-0.5   & \resultpm{mobilenet.ip.magnitude.0.5}   & \resultpm{mobilenet.bacp.magnitude.0.5}   & ---                                  & ---                                   & ---                                 & ---                                  \\
-0.95  & \resultpm{mobilenet.ip.magnitude.0.95}  & \resultpm{mobilenet.bacp.magnitude.0.95}  & \resultpm{mobilenet.ip.snip.0.95}    & \resultpm{mobilenet.bacp.snip.0.95}   & \resultpm{mobilenet.ip.wanda.0.95}  & \resultpm{mobilenet.bacp.wanda.0.95} \\
-0.97  & \resultpm{mobilenet.ip.magnitude.0.97}  & \resultpm{mobilenet.bacp.magnitude.0.97}  & \resultpm{mobilenet.ip.snip.0.97}    & \resultpm{mobilenet.bacp.snip.0.97}   & \resultpm{mobilenet.ip.wanda.0.97}  & \resultpm{mobilenet.bacp.wanda.0.97} \\
-0.99  & \resultpm{mobilenet.ip.magnitude.0.99}  & \resultpm{mobilenet.bacp.magnitude.0.99}  & \resultpm{mobilenet.ip.snip.0.99}    & \resultpm{mobilenet.bacp.snip.0.99}   & \resultpm{mobilenet.ip.wanda.0.99}  & \resultpm{mobilenet.bacp.wanda.0.99} \\
-0.995 & \resultpm{mobilenet.ip.magnitude.0.995} & \resultpm{mobilenet.bacp.magnitude.0.995} & \resultpm{mobilenet.ip.snip.0.995}   & \resultpm{mobilenet.bacp.snip.0.995}  & \resultpm{mobilenet.ip.wanda.0.995} & \resultpm{mobilenet.bacp.wanda.0.995}\\
-0.999 & \resultpm{mobilenet.ip.magnitude.0.999} & \resultpm{mobilenet.bacp.magnitude.0.999} & ---                                  & ---                                   & ---                                 & ---                                  \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{A second dataset.}
-Everything above is CIFAR-10. We repeated the grid on CIFAR-100 with
-ResNet-34 --- the one backbone with no published comparator row, so these
-numbers carry no reproduction pressure --- under the same matched protocol,
-three criteria, four sparsities, three seeds (Table~\ref{tab:cifar100}). The
-protocol was checked rather than assumed to transfer: a 100-way
-cross-entropy has a different loss scale than a 10-way one, so a
-learning-rate probe was run first, and the CIFAR-10 setting won by
-\num{6.82} points; nothing was retuned. BaCP is ahead in \emph{all twelve
-cells}, and by a larger margin than on CIFAR-10 in eleven of them. The
-ordering is the one Table~\ref{tab:main} shows: small margins while the
-network is intact, large ones where the baseline begins to fail ---
-\result{c100.delta.wanda.0.99} for WANDA at 0.99, where I.P.\ falls to
-\result{c100.ip.wanda.0.99} while BaCP holds
-\resultpm{c100.bacp.wanda.0.99}, and \result{c100.delta.magnitude.0.999} for
-magnitude at 0.999. The single cell where CIFAR-10 shows the larger gain is
-WANDA at 0.999, where both arms are near-destroyed --- I.P.\ scores
-\result{c100.ip.wanda.0.999} against a chance floor of \num{1.00} --- and
-there is correspondingly little left to recover.
-
-Two things temper this. The dense reference is
-\resultpm{c100.dense}, some five points below what this backbone reaches on
-CIFAR-100 under a full-length schedule; the second dataset inherits the
-budget limitation of Section~\ref{sec:method} rather than answering it. And
-its seed spread is wider than CIFAR-10's, so the sub-two-point margins in the
-magnitude column at 0.95--0.99 are modest relative to run-to-run noise, while
-the large cells carry the result. What does not vary is the variance itself:
-BaCP's standard deviation is below I.P.'s in all twelve cells, frequently by
-an order of magnitude (\resultpm{c100.bacp.snip.0.99} against
-\resultpm{c100.ip.snip.0.99}), the same pattern seen on every architecture in
-Table~\ref{tab:main}.
-
-\begin{table}[t]
-\centering
-\small
-\caption{ResNet-34 / CIFAR-100, three seeds, mean $\pm$ standard deviation,
-under the protocol of Table~\ref{tab:protocol}. Dense reference
-\resultpm{c100.dense}. BaCP leads in every cell; the margin tracks how badly
-the baseline is damaged rather than sparsity alone, which is clearest in the
-WANDA column. Chance is \num{1.00} here, so the WANDA row at 0.999 is two
-near-destroyed arms rather than a recovery.}
-\label{tab:cifar100}
-\begin{tabular}{lcc cc cc}
-\toprule
-& \multicolumn{2}{c}{Magnitude} & \multicolumn{2}{c}{SNIP-it}
-& \multicolumn{2}{c}{WANDA} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
-Sparsity & I.P. & BaCP & I.P. & BaCP & I.P. & BaCP \\
-\midrule
-0.95  & \resultpm{c100.ip.magnitude.0.95}  & \resultpm{c100.bacp.magnitude.0.95}  & \resultpm{c100.ip.snip.0.95}  & \resultpm{c100.bacp.snip.0.95}  & \resultpm{c100.ip.wanda.0.95}  & \resultpm{c100.bacp.wanda.0.95}  \\
-0.97  & \resultpm{c100.ip.magnitude.0.97}  & \resultpm{c100.bacp.magnitude.0.97}  & \resultpm{c100.ip.snip.0.97}  & \resultpm{c100.bacp.snip.0.97}  & \resultpm{c100.ip.wanda.0.97}  & \resultpm{c100.bacp.wanda.0.97}  \\
-0.99  & \resultpm{c100.ip.magnitude.0.99}  & \resultpm{c100.bacp.magnitude.0.99}  & \resultpm{c100.ip.snip.0.99}  & \resultpm{c100.bacp.snip.0.99}  & \resultpm{c100.ip.wanda.0.99}  & \resultpm{c100.bacp.wanda.0.99}  \\
-0.999 & \resultpm{c100.ip.magnitude.0.999} & \resultpm{c100.bacp.magnitude.0.999} & \resultpm{c100.ip.snip.0.999} & \resultpm{c100.bacp.snip.0.999} & \resultpm{c100.ip.wanda.0.999} & \resultpm{c100.bacp.wanda.0.999} \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 
 
