@@ -486,7 +486,9 @@ MEASURED = r"""
 \defresult{resnet50.ablip.magnitude.0.99}{89.80}
 \defresult{abl.resnet50.ip.magnitude.0.99}{89.80}
 % resnet50.ablcontrol.magnitude.0.99 is deliberately UNREGISTERED: that run was
-% killed.  It renders ?? and must be reported as not run, not as a gap.
+% killed and never re-run.  The table wraps it in \resultif so the cell prints
+% --- rather than a red ??, which would read as a broken document rather than
+% as a cell that was never measured.  Registering it later needs no table edit.
 \defresult{resnet50.abllegacy.magnitude.0.99}{91.24}
 \defresult{abl.resnet50.legacy.magnitude.0.99}{91.24}
 \defresult{resnet50.abldelta.magnitude.0.99}{+1.44}
