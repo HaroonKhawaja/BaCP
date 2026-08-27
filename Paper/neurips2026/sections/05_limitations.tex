@@ -16,17 +16,34 @@ models, not preserved representations. The variant licensing the stronger claim 
 and teachers --- lost at every measured sparsity (Table~\ref{tab:ablation}): the
 clean interpretation is not the better configuration, and we chose the numbers.
 
-\paragraph{Budget, data, seeds and scope.} The 25-epoch fine-tune ran on the BaCP arm only, so every $\Delta$ bundles the objective with 25 extra epochs; the two are not separated here.
+\paragraph{What $\Delta$ actually contains.}
+Three things separate the arms besides the objective, and we name them rather
+than let them be inferred. The 25-epoch mask-frozen fine-tune runs on the BaCP
+arm only. The pruning-phase learning rate differs ($0.01$ against $0.1$;
+Section~\ref{sec:experiments:vgglr}). And BaCP's contrastive terms require two
+independently augmented views, so its pruning phase runs the SimCLR
+crop/colour/blur stack while I.P.\ runs crop-and-flip. Every $\Delta$ we report
+carries all four together. The third matters most for the trend we emphasise:
+recovery training and stronger augmentation both buy little on an intact
+network and a great deal on a damaged one, which is the shape we attribute to
+the objective. Separating them needs a baseline given the same fine-tune,
+learning rate and augmentation, and we have not run it.
+
+\paragraph{Budget, data and scope.}
 Our 50 pruning plus 25 fine-tuning epochs at batch 512 are nearly an order of
 magnitude fewer updates than 160 \citep{liu2021granet} or 250 \citep{li2025east}
-epochs at batch 128; nothing here is a state-of-the-art claim, though both arms
-are equally under-trained, so the comparison holds. Results are CIFAR-10 only,
-and three seeds per cell shows a spread rather than significance: we run no
-significance test, and consistency of sign is not replication --- against a
-\result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} point floor:
-consistency of sign is not replication \citep{bouthillier2021variance}. We did
-not re-run RigL, GraNet, GraSP or SynFlow, so whether objective- and
-support-level interventions compose is open.
+epochs at batch 128, so nothing here is a state-of-the-art claim and the
+absolute accuracies sit below the published literature. Results cover two
+datasets, both CIFAR-scale and single-modality --- CIFAR-10 on five backbones,
+CIFAR-100 on ResNet-34 --- so generality across resolution, dataset scale and
+modality is untested, and in particular not CAP's own language setting: the
+transfer we demonstrate runs one way. Three seeds bound the run-to-run spread
+against a \result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi}
+point floor \citep{bouthillier2021variance}; the paired tests in
+Section~\ref{sec:results} are over cells that share models and data, so they
+describe this grid rather than a population. We did not re-run RigL, GraNet,
+GraSP or SynFlow, so whether objective- and support-level interventions compose
+is open.
 
 \paragraph{Conclusion.}
 We studied CAP's contrastive pruning objective \citep{xu2022cap} --- theirs, not

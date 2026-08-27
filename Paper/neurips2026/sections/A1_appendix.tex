@@ -254,10 +254,15 @@ and BaCP columns are identical on every row but Optimizer and Objective.
 \caption{Training protocol. The I.P.\ and BaCP arms are identical on every row
 but \emph{optimizer} and \emph{objective}. Both arms received the same
 initialisation, the same sparsity schedule, the same mask-update interval, the
-same epoch budget and the same fine-tune; the learning-rate asymmetry in the
-Optimizer row is deliberate, measured, and named in
-Section~\ref{sec:experiments:vgglr} rather than hidden in this table. Matching
-everything else is what lets the Objective row carry the causal claim.}
+same 50-epoch pruning budget. Three rows are \emph{not} matched and are set
+in the table rather than left to be inferred: Optimizer (the learning-rate
+asymmetry, measured and discussed in
+Section~\ref{sec:experiments:vgglr}), Fine-tune (the 25-epoch mask-frozen
+stage runs on the BaCP arm only), and Augmentation (BaCP's contrastive terms
+require two independently augmented views, so its pruning phase runs the
+SimCLR crop/colour/blur stack while I.P.\ runs crop-and-flip). Every reported
+$\Delta$ therefore carries the objective together with those three
+differences, and we do not separate them here.}
 \label{tab:protocol}
 \begin{tabular}{llll}
 \toprule
@@ -266,9 +271,10 @@ everything else is what lets the Objective row carry the causal claim.}
 Initialisation      & ImageNet-pretrained & dense checkpoint & dense checkpoint \\
 Optimizer           & SGD, LR 0.01 & SGD, LR 0.01 & SGD, LR 0.1 (VGG: 0.05) \\
 Epochs              & 100, patience 20 & 50 & 50 \\
-Fine-tune           & --- & AdamW $10^{-4}$, 25 ep. & AdamW $10^{-4}$, 25 ep. \\
+Fine-tune           & --- & \textit{none} & AdamW $10^{-4}$, 25 ep. \\
 Mask interval $\Delta T$ & --- & 100 steps & 100 steps \\
 Sparsity schedule   & --- & cubic, 80/20 ramp/hold & cubic, 80/20 ramp/hold \\
+Augmentation        & crop\,+\,flip & crop\,+\,flip & SimCLR stack, 2 views \\
 Batch size          & 512 & 512 & 512 \\
 Precision           & bf16 autocast & bf16 autocast & bf16 autocast \\
 Gradient clipping   & 10.0 global norm & 10.0 global norm & 10.0 global norm \\
