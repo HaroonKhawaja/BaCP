@@ -14,81 +14,44 @@ differing in the objective; $\Delta$ is what this paper measures.
 
 \begin{table}[t]
 \centering
-\small
-\caption{Test accuracy (\%) on the held-out CIFAR-10 test set under a matched
-budget. $\mathrm{BaCP} = \mathrm{I.P.} + \Delta$, so no absolute is lost; the
-full three-column form is Table~\ref{tab:main-abs}. Sparsity is the fraction of
-prunable weights masked; the classifier head is in the prunable scope and the
-projection head is not. Positive $\Delta$ favours BaCP. Every cell is a mean over three
-seeds; Table~\ref{tab:seeds} gives the per-cell standard deviations.}
+\caption{\textbf{CIFAR-10 test accuracy (\%), four backbones, three pruning
+criteria.} I.P.\ is the iterative-pruning baseline, BaCP the contrastive
+objective, and $\Delta = \mathrm{BaCP} - \mathrm{I.P.}$; positive favours
+BaCP. Both arms share the initialisation, dense checkpoint, criterion,
+schedule, splits and prunable scope, and differ in the stage-three
+objective (Figure~\ref{fig:framework}). Sparsity is the fraction of
+prunable weights masked; the classifier head is in scope, the projection
+head is not. Every cell is a mean over three seeds; per-cell standard
+deviations are in Table~\ref{tab:seeds}.}
 \label{tab:main}
-\begin{tabular}{lcc cc cc cc}
+\setlength{\tabcolsep}{3pt}
+\footnotesize
+\begin{tabular}{l ccc ccc ccc ccc}
 \toprule
-& \multicolumn{2}{c}{ResNet-34} & \multicolumn{2}{c}{ResNet-50}
-& \multicolumn{2}{c}{VGG-11} & \multicolumn{2}{c}{VGG-19} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
-Sparsity & I.P. & $\Delta$ & I.P. & $\Delta$
-         & I.P. & $\Delta$ & I.P. & $\Delta$ \\
+& \multicolumn{3}{c}{ResNet-34} & \multicolumn{3}{c}{ResNet-50} & \multicolumn{3}{c}{VGG-11} & \multicolumn{3}{c}{VGG-19} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}
+Sparsity & I.P. & BaCP & $\Delta$ & I.P. & BaCP & $\Delta$ & I.P. & BaCP & $\Delta$ & I.P. & BaCP & $\Delta$ \\
 \midrule
-\multicolumn{9}{l}{\textit{Dense reference (unpruned, cross-entropy)}} \\
---- & \multicolumn{2}{c}{\result{resnet34.dense.none.0.0}}
-    & \multicolumn{2}{c}{\result{resnet50.dense.none.0.0}}
-    & \multicolumn{2}{c}{\result{vgg11.dense.none.0.0}}
-    & \multicolumn{2}{c}{\result{vgg19.dense.none.0.0}} \\
+\multicolumn{13}{l}{\textit{Dense reference (unpruned, cross-entropy)}} \\
+--- & \multicolumn{3}{c}{\result{resnet34.dense.none.0.0}} & \multicolumn{3}{c}{\result{resnet50.dense.none.0.0}} & \multicolumn{3}{c}{\result{vgg11.dense.none.0.0}} & \multicolumn{3}{c}{\result{vgg19.dense.none.0.0}} \\
 \midrule
-\multicolumn{9}{l}{\textit{Magnitude} \citep{han2015learning}} \\
-0.95  & \result{resnet34.ip.magnitude.0.95}  & \result{resnet34.delta.magnitude.0.95}
-      & \result{resnet50.ip.magnitude.0.95}  & \result{resnet50.delta.magnitude.0.95}$^{\dagger}$
-      & \result{vgg11.ip.magnitude.0.95}     & \result{vgg11.delta.magnitude.0.95}
-      & \result{vgg19.ip.magnitude.0.95}     & \result{vgg19.delta.magnitude.0.95}$^{\dagger}$ \\
-0.97  & \result{resnet34.ip.magnitude.0.97}  & \result{resnet34.delta.magnitude.0.97}
-      & \result{resnet50.ip.magnitude.0.97}  & \result{resnet50.delta.magnitude.0.97}
-      & \result{vgg11.ip.magnitude.0.97}     & \result{vgg11.delta.magnitude.0.97}
-      & \result{vgg19.ip.magnitude.0.97}     & \result{vgg19.delta.magnitude.0.97} \\
-0.99  & \result{resnet34.ip.magnitude.0.99}  & \result{resnet34.delta.magnitude.0.99}
-      & \result{resnet50.ip.magnitude.0.99}  & \result{resnet50.delta.magnitude.0.99}$^{\dagger}$
-      & \result{vgg11.ip.magnitude.0.99}     & \result{vgg11.delta.magnitude.0.99}
-      & \result{vgg19.ip.magnitude.0.99}     & \result{vgg19.delta.magnitude.0.99}$^{\dagger}$ \\
-0.999 & \result{resnet34.ip.magnitude.0.999} & \result{resnet34.delta.magnitude.0.999}
-      & \result{resnet50.ip.magnitude.0.999} & \result{resnet50.delta.magnitude.0.999}
-      & \result{vgg11.ip.magnitude.0.999}    & \result{vgg11.delta.magnitude.0.999}
-      & \result{vgg19.ip.magnitude.0.999}    & \result{vgg19.delta.magnitude.0.999} \\
+\multicolumn{13}{l}{\textit{Magnitude} \citep{han2015learning}} \\
+0.95 & \result{resnet34.ip.magnitude.0.95} & \result{resnet34.bacp.magnitude.0.95} & \result{resnet34.delta.magnitude.0.95} & \result{resnet50.ip.magnitude.0.95} & \result{resnet50.bacp.magnitude.0.95} & \result{resnet50.delta.magnitude.0.95} & \result{vgg11.ip.magnitude.0.95} & \result{vgg11.bacp.magnitude.0.95} & \result{vgg11.delta.magnitude.0.95} & \result{vgg19.ip.magnitude.0.95} & \result{vgg19.bacp.magnitude.0.95} & \result{vgg19.delta.magnitude.0.95} \\
+0.97 & \result{resnet34.ip.magnitude.0.97} & \result{resnet34.bacp.magnitude.0.97} & \result{resnet34.delta.magnitude.0.97} & \result{resnet50.ip.magnitude.0.97} & \result{resnet50.bacp.magnitude.0.97} & \result{resnet50.delta.magnitude.0.97} & \result{vgg11.ip.magnitude.0.97} & \result{vgg11.bacp.magnitude.0.97} & \result{vgg11.delta.magnitude.0.97} & \result{vgg19.ip.magnitude.0.97} & \result{vgg19.bacp.magnitude.0.97} & \result{vgg19.delta.magnitude.0.97} \\
+0.99 & \result{resnet34.ip.magnitude.0.99} & \result{resnet34.bacp.magnitude.0.99} & \result{resnet34.delta.magnitude.0.99} & \result{resnet50.ip.magnitude.0.99} & \result{resnet50.bacp.magnitude.0.99} & \result{resnet50.delta.magnitude.0.99} & \result{vgg11.ip.magnitude.0.99} & \result{vgg11.bacp.magnitude.0.99} & \result{vgg11.delta.magnitude.0.99} & \result{vgg19.ip.magnitude.0.99} & \result{vgg19.bacp.magnitude.0.99} & \result{vgg19.delta.magnitude.0.99} \\
+0.999 & \result{resnet34.ip.magnitude.0.999} & \result{resnet34.bacp.magnitude.0.999} & \result{resnet34.delta.magnitude.0.999} & \result{resnet50.ip.magnitude.0.999} & \result{resnet50.bacp.magnitude.0.999} & \result{resnet50.delta.magnitude.0.999} & \result{vgg11.ip.magnitude.0.999} & \result{vgg11.bacp.magnitude.0.999} & \result{vgg11.delta.magnitude.0.999} & \result{vgg19.ip.magnitude.0.999} & \result{vgg19.bacp.magnitude.0.999} & \result{vgg19.delta.magnitude.0.999} \\
 \midrule
-\multicolumn{9}{l}{\textit{SNIP-it} \citep{lee2019snip,verdenius2020snipit}} \\
-0.95  & \result{resnet34.ip.snip.0.95}  & \result{resnet34.delta.snip.0.95}
-      & \result{resnet50.ip.snip.0.95}  & \result{resnet50.delta.snip.0.95}
-      & \result{vgg11.ip.snip.0.95}     & \result{vgg11.delta.snip.0.95}
-      & \result{vgg19.ip.snip.0.95}     & \result{vgg19.delta.snip.0.95} \\
-0.97  & \result{resnet34.ip.snip.0.97}  & \result{resnet34.delta.snip.0.97}
-      & \result{resnet50.ip.snip.0.97}  & \result{resnet50.delta.snip.0.97}
-      & \result{vgg11.ip.snip.0.97}     & \result{vgg11.delta.snip.0.97}
-      & \result{vgg19.ip.snip.0.97}     & \result{vgg19.delta.snip.0.97} \\
-0.99  & \result{resnet34.ip.snip.0.99}  & \result{resnet34.delta.snip.0.99}
-      & \result{resnet50.ip.snip.0.99}  & \result{resnet50.delta.snip.0.99}
-      & \result{vgg11.ip.snip.0.99}     & \result{vgg11.delta.snip.0.99}
-      & \result{vgg19.ip.snip.0.99}     & \result{vgg19.delta.snip.0.99} \\
-0.999 & \result{resnet34.ip.snip.0.999} & \result{resnet34.delta.snip.0.999}
-      & \result{resnet50.ip.snip.0.999} & \result{resnet50.delta.snip.0.999}
-      & \result{vgg11.ip.snip.0.999}    & \result{vgg11.delta.snip.0.999}
-      & \result{vgg19.ip.snip.0.999}    & \result{vgg19.delta.snip.0.999} \\
+\multicolumn{13}{l}{\textit{SNIP-it} \citep{lee2019snip,verdenius2020snipit}} \\
+0.95 & \result{resnet34.ip.snip.0.95} & \result{resnet34.bacp.snip.0.95} & \result{resnet34.delta.snip.0.95} & \result{resnet50.ip.snip.0.95} & \result{resnet50.bacp.snip.0.95} & \result{resnet50.delta.snip.0.95} & \result{vgg11.ip.snip.0.95} & \result{vgg11.bacp.snip.0.95} & \result{vgg11.delta.snip.0.95} & \result{vgg19.ip.snip.0.95} & \result{vgg19.bacp.snip.0.95} & \result{vgg19.delta.snip.0.95} \\
+0.97 & \result{resnet34.ip.snip.0.97} & \result{resnet34.bacp.snip.0.97} & \result{resnet34.delta.snip.0.97} & \result{resnet50.ip.snip.0.97} & \result{resnet50.bacp.snip.0.97} & \result{resnet50.delta.snip.0.97} & \result{vgg11.ip.snip.0.97} & \result{vgg11.bacp.snip.0.97} & \result{vgg11.delta.snip.0.97} & \result{vgg19.ip.snip.0.97} & \result{vgg19.bacp.snip.0.97} & \result{vgg19.delta.snip.0.97} \\
+0.99 & \result{resnet34.ip.snip.0.99} & \result{resnet34.bacp.snip.0.99} & \result{resnet34.delta.snip.0.99} & \result{resnet50.ip.snip.0.99} & \result{resnet50.bacp.snip.0.99} & \result{resnet50.delta.snip.0.99} & \result{vgg11.ip.snip.0.99} & \result{vgg11.bacp.snip.0.99} & \result{vgg11.delta.snip.0.99} & \result{vgg19.ip.snip.0.99} & \result{vgg19.bacp.snip.0.99} & \result{vgg19.delta.snip.0.99} \\
+0.999 & \result{resnet34.ip.snip.0.999} & \result{resnet34.bacp.snip.0.999} & \result{resnet34.delta.snip.0.999} & \result{resnet50.ip.snip.0.999} & \result{resnet50.bacp.snip.0.999} & \result{resnet50.delta.snip.0.999} & \result{vgg11.ip.snip.0.999} & \result{vgg11.bacp.snip.0.999} & \result{vgg11.delta.snip.0.999} & \result{vgg19.ip.snip.0.999} & \result{vgg19.bacp.snip.0.999} & \result{vgg19.delta.snip.0.999} \\
 \midrule
-\multicolumn{9}{l}{\textit{WANDA} \citep{sun2024wanda}, global threshold} \\
-0.95  & \result{resnet34.ip.wanda.0.95}  & \result{resnet34.delta.wanda.0.95}
-      & \result{resnet50.ip.wanda.0.95}  & \result{resnet50.delta.wanda.0.95}
-      & \result{vgg11.ip.wanda.0.95}     & \result{vgg11.delta.wanda.0.95}
-      & \result{vgg19.ip.wanda.0.95}     & \result{vgg19.delta.wanda.0.95} \\
-0.97  & \result{resnet34.ip.wanda.0.97}  & \result{resnet34.delta.wanda.0.97}
-      & \result{resnet50.ip.wanda.0.97}  & \result{resnet50.delta.wanda.0.97}
-      & \result{vgg11.ip.wanda.0.97}     & \result{vgg11.delta.wanda.0.97}
-      & \result{vgg19.ip.wanda.0.97}     & \result{vgg19.delta.wanda.0.97} \\
-0.99  & \result{resnet34.ip.wanda.0.99}  & \result{resnet34.delta.wanda.0.99}
-      & \result{resnet50.ip.wanda.0.99}  & \result{resnet50.delta.wanda.0.99}
-      & \result{vgg11.ip.wanda.0.99}     & \result{vgg11.delta.wanda.0.99}
-      & \result{vgg19.ip.wanda.0.99}     & \result{vgg19.delta.wanda.0.99} \\
-0.999 & \result{resnet34.ip.wanda.0.999} & \result{resnet34.delta.wanda.0.999}
-      & \result{resnet50.ip.wanda.0.999} & \result{resnet50.delta.wanda.0.999}
-      & \result{vgg11.ip.wanda.0.999}    & \result{vgg11.delta.wanda.0.999}
-      & \result{vgg19.ip.wanda.0.999}    & \result{vgg19.delta.wanda.0.999} \\
+\multicolumn{13}{l}{\textit{WANDA} \citep{sun2024wanda}, one global threshold} \\
+0.95 & \result{resnet34.ip.wanda.0.95} & \result{resnet34.bacp.wanda.0.95} & \result{resnet34.delta.wanda.0.95} & \result{resnet50.ip.wanda.0.95} & \result{resnet50.bacp.wanda.0.95} & \result{resnet50.delta.wanda.0.95} & \result{vgg11.ip.wanda.0.95} & \result{vgg11.bacp.wanda.0.95} & \result{vgg11.delta.wanda.0.95} & \result{vgg19.ip.wanda.0.95} & \result{vgg19.bacp.wanda.0.95} & \result{vgg19.delta.wanda.0.95} \\
+0.97 & \result{resnet34.ip.wanda.0.97} & \result{resnet34.bacp.wanda.0.97} & \result{resnet34.delta.wanda.0.97} & \result{resnet50.ip.wanda.0.97} & \result{resnet50.bacp.wanda.0.97} & \result{resnet50.delta.wanda.0.97} & \result{vgg11.ip.wanda.0.97} & \result{vgg11.bacp.wanda.0.97} & \result{vgg11.delta.wanda.0.97} & \result{vgg19.ip.wanda.0.97} & \result{vgg19.bacp.wanda.0.97} & \result{vgg19.delta.wanda.0.97} \\
+0.99 & \result{resnet34.ip.wanda.0.99} & \result{resnet34.bacp.wanda.0.99} & \result{resnet34.delta.wanda.0.99} & \result{resnet50.ip.wanda.0.99} & \result{resnet50.bacp.wanda.0.99} & \result{resnet50.delta.wanda.0.99} & \result{vgg11.ip.wanda.0.99} & \result{vgg11.bacp.wanda.0.99} & \result{vgg11.delta.wanda.0.99} & \result{vgg19.ip.wanda.0.99} & \result{vgg19.bacp.wanda.0.99} & \result{vgg19.delta.wanda.0.99} \\
+0.999 & \result{resnet34.ip.wanda.0.999} & \result{resnet34.bacp.wanda.0.999} & \result{resnet34.delta.wanda.0.999} & \result{resnet50.ip.wanda.0.999} & \result{resnet50.bacp.wanda.0.999} & \result{resnet50.delta.wanda.0.999} & \result{vgg11.ip.wanda.0.999} & \result{vgg11.bacp.wanda.0.999} & \result{vgg11.delta.wanda.0.999} & \result{vgg19.ip.wanda.0.999} & \result{vgg19.bacp.wanda.0.999} & \result{vgg19.delta.wanda.0.999} \\
 \bottomrule
 \end{tabular}
 \end{table}
