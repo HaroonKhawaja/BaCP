@@ -56,6 +56,23 @@ Sparsity & I.P. & BaCP & $\Delta$ & I.P. & BaCP & $\Delta$ & I.P. & BaCP & $\Del
 \end{tabular}
 \end{table}
 
+\paragraph{Is the effect real?}
+Counting cells is a weak summary, so we test it. Treating each of the
+\result{summary.test.ncells} cells (backbone $\times$ criterion $\times$
+sparsity) as one observation and pairing the arms \emph{by seed} within a
+cell --- both arms of a seed share an initialisation and a dense checkpoint,
+so their difference carries the least nuisance variance available --- BaCP is
+ahead in \result{summary.test.npositive}, and
+\result{summary.test.clears} cells have a mean difference exceeding their own
+paired standard deviation. A two-sided exact sign test gives
+$p = \result{summary.test.signp}$ and a Wilcoxon signed-rank test
+$W = \result{summary.test.wilcoxonw}$, $p = \result{summary.test.wilcoxonp}$.
+The cells are not independent --- four backbones, three criteria and four
+sparsities share models and data --- so this characterises the grid as run
+rather than a population, and it does not license a claim about any single
+cell: the per-cell spreads in Table~\ref{tab:seeds} remain the right guide to
+which individual margins are meaningful.
+
 \paragraph{Across sparsity.}
 The margin widened at every step of the schedule. Mean $\Delta$ rose
 \result{summary.delta.sparsity.0.95}, \result{summary.delta.sparsity.0.97},

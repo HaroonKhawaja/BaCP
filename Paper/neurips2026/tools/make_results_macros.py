@@ -453,6 +453,24 @@ MEASURED = r"""
 \defresult{c100.delta.wanda.0.999}{+9.64}
 
 
+% --- Paired significance test ----------------------------------------------
+% Computed by tools/significance.py from the same records the accuracy macros
+% come from; re-run it after any change to results/runs_grid and update these
+% together. The unit is the CELL (model x criterion x sparsity) and the arms
+% are paired BY SEED within a cell, since both arms of a seed share an
+% initialisation and a dense checkpoint.
+%
+% Cells are NOT independent -- four backbones x three criteria x four
+% sparsities share models and data -- so this is a statement about the grid as
+% run, not a population claim, and the paper says so.
+\defresult{summary.test.ncells}{48}
+\defresult{summary.test.npositive}{35}
+\defresult{summary.test.clears}{34}
+\defresult{summary.test.signp}{0.0021}
+\defresult{summary.test.wilcoxonp}{9.3\times10^{-6}}
+\defresult{summary.test.wilcoxonw}{179}
+
+
 % --- Objective ablation ----------------------------------------------------
 % ResNet-50 / CIFAR-10 / magnitude, seed 1, under the PREVIOUS protocol
 % (60 epochs, delta_T 88, no validation split).  Single seed.  The `abl`
