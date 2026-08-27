@@ -2,13 +2,34 @@
 \label{sec:method}
 \label{sec:experiments}
 
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{bacp_framework.png}
+\caption{\textbf{(a)} The four-stage pipeline. Both arms share the
+initialisation, the dense reference, the criterion, the cubic sparsity
+schedule and $\Delta T$, the data splits and the prunable scope; they differ
+at stage three in the training objective, and in the pruning-phase learning
+rate (Section~\ref{sec:experiments:vgglr}). The 25-epoch mask-frozen
+fine-tune runs on the BaCP arm; I.P.'s reported accuracy is that of its
+50-epoch pruning run. \textbf{(b)} The objective at stage three. The sparse
+student is embedded from view~1, the three frozen anchors from view~2, and
+each anchor contributes one term computed over the stacked $2B \times 2B$
+similarity matrix as the sum of a self-supervised (NT-Xent, positives are the
+same image) and a supervised instantiation (SupCon, positives share a label).
+SnC contrasts against $K$ retained snapshots of the run itself and is
+\emph{averaged} over them, so its scale is independent of $K$; we retain
+$K=2$. All four $\lambda$ are $0.25$, untuned.}
+\label{fig:framework}
+\end{figure}
+
 \paragraph{Pipeline.}
-Four stages per cell: ImageNet-pretrained initialisation
-\citep{deng2009imagenet}; a dense fine-tune giving the reference model; gradual
-pruning under one of two objectives; a fine-tune with the mask frozen. That is
-\citet{han2015learning}'s prune--retrain on
+Figure~\ref{fig:framework}(a) gives the four stages: ImageNet-pretrained
+initialisation \citep{deng2009imagenet}, a dense fine-tune giving the
+reference model, gradual pruning under one of two objectives, and a
+mask-frozen fine-tune. That is \citet{han2015learning}'s prune--retrain on
 \citet{zhu2018prune}'s schedule, with \citet{xu2022cap}'s contrastive
-supervision at stage three --- the only place the arms differ.
+supervision at stage three --- the only place the objectives differ.
 
 \paragraph{Objective.}
 With $z = \mathrm{normalize}(g(f_\theta(x)))$ --- so $z_i^{\top} z_j$ is cosine
