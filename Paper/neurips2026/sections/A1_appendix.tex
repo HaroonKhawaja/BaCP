@@ -299,13 +299,11 @@ Run-to-run variation on this task and protocol was measured at approximately
 \result{cifar10.noise.floor.lo}--\result{cifar10.noise.floor.hi} accuracy points.
 Because that floor is not negligible relative to the effects we are looking for,
 four headline cells (ResNet-50 and VGG-19, magnitude, at 0.95 and 0.99) were
-prioritised for seed replication; Table~\ref{tab:seeds} states their seed count
-directly and carries mean $\pm$ standard deviation once it exceeds one --- as
-this draft stands, seeds 2 and 3 (\texttt{96\_seeds\_2\_and\_3.ipynb}) are still
-running, so the count is 1, the same as every other cell in the grid. Every
-table marks which cells are prioritised and states the count actually achieved.
-This is a compromise forced by compute, and Section~\ref{sec:limitations}
-counts it as a limitation rather than presenting partial seed coverage as
+run at three seeds; Table~\ref{tab:seeds} states the count directly, read off
+the same records the values come from rather than asserted, and carries mean
+$\pm$ standard deviation throughout. Three seeds bound the run-to-run spread;
+they do not establish significance, and Section~\ref{sec:limitations} counts
+that as a limitation rather than presenting a spread as
 adequate \citep{bouthillier2021variance}.
 
 \subsection{Hyperparameters by family}
@@ -477,9 +475,8 @@ directly. The two tables report identical runs; only the presentation differs.
 budget --- the full form of body Table~\ref{tab:main}.
 $\Delta = \mathrm{BaCP} - \mathrm{I.P.}$; positive favours BaCP. Sparsity is the
 fraction of prunable weights masked; the classifier head is in the prunable scope
-and the projection head is not. Cells are single-seed except the headline cells
-of Table~\ref{tab:seeds}. Reported at partial sweep completion; unmeasured cells
-render as a red \textbf{??} rather than being omitted.}
+and the projection head is not. Every cell is a mean over three seeds; per-cell
+standard deviations are in Table~\ref{tab:seeds}.}
 \label{tab:main-abs}
 \begin{tabular}{lccc ccc ccc ccc}
 \toprule
@@ -558,21 +555,17 @@ Sparsity & I.P. & BaCP & $\Delta$ & I.P. & BaCP & $\Delta$
 The cells marked $\dagger$ in body Table~\ref{tab:main} are the ones
 prioritised for seed replication. Table~\ref{tab:seeds} gives their seed count
 directly --- $n$ is read off the same records the value and $\Delta$ come from,
-not asserted --- and carries mean $\pm$ standard deviation wherever $n>1$. As
-this draft stands, seeds 2 and 3 (\texttt{96\_seeds\_2\_and\_3.ipynb}) are
-still running, so every row here reads $n=1$, the same as the rest of the grid;
-regenerating \texttt{results\_macros.tex} once they land fills in the standard
-deviation with no further edit to this section. The comparison that will
-matter once $n>1$ is between the reported spread and the observed $\Delta$: a
-difference that does not clear its own seed spread is not a result.
+not asserted --- and carries mean $\pm$ standard deviation throughout. The
+comparison that matters is between the reported spread and the observed
+$\Delta$: a difference that does not clear its own seed spread is not a
+result, and we flag the cells where it does not.
 
 \begin{table}[h]
 \centering
 \small
 \caption{Headline cells, prioritised for seed replication. $n$ is the seed
 count behind each row, read directly from the records; the table carries mean
-$\pm$ standard deviation once $n>1$ and a bare value while $n=1$, exactly like
-every other cell in the paper.}
+$\pm$ standard deviation, over three seeds.}
 \label{tab:seeds}
 \begin{tabular}{llcccc}
 \toprule

@@ -1,0 +1,23 @@
+{
+ "experiment_group": "static.dense.resnet50.cifar10.dense.seed1",
+ "model_name": "resnet50",
+ "method": "dense",
+ "status": "ok",
+ "is_smoke": false,
+ "eval_samples_dropped": 0,
+ "seed": 1,
+ "phase": "dense",
+ "ended_at": "2026-08-22T23:20:57.152904+00:00",
+ "test_acc_exact_pct": 93.38,
+ "test_acc_pct": 93.30882352941177,
+ "dataset_name": "cifar10",
+ "duration_s": 486.964,
+ "total_params": 23520842,
+ "prunable_params": 23447232,
+ "sparsity_reported": 0,
+ "learning_rate": 0.01,
+ "epochs": 100,
+ "epochs_ft": 0,
+ "prune_task_head": false,
+ "wanda_group": "output"
+}

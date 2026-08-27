@@ -227,6 +227,7 @@
 \defresult{mobilenet.wanda.dwlayers}{17}
 \defresult{mobilenet.wanda.convlayers}{52}
 
+
 % --- MobileNetV2: magnitude at 0.995 ---------------------------------------
 % Run after SNIP/WANDA to close the one hole in the grid. It overturned the
 % reading that was in 04_results.tex: magnitude's margin does NOT keep
@@ -241,6 +242,7 @@
 \defresultsd{mobilenet.bacp.magnitude.0.995}{1.60}
 \defresultn{mobilenet.bacp.magnitude.0.995}{3}
 \defresult{mobilenet.delta.magnitude.0.995}{+42.49}
+
 
 % --- ResNet-34 / CIFAR-100: the second dataset -----------------------------
 % Three criteria x four sparsities x three seeds x two arms, plus three dense
@@ -357,6 +359,7 @@
 \defresultsd{c100.bacp.wanda.0.999}{0.84}
 \defresultn{c100.bacp.wanda.0.999}{3}
 \defresult{c100.delta.wanda.0.999}{+9.64}
+
 
 % --- Objective ablation ----------------------------------------------------
 % ResNet-50 / CIFAR-10 / magnitude, seed 1, under the PREVIOUS protocol
@@ -499,483 +502,587 @@
 
 % ========================================================================
 % GENERATED from the run records -- everything below this line is
-% rebuilt on every invocation.  Source: results/runs_snapshot_seed1
+% rebuilt on every invocation.  Source: results/runs_grid
 % ========================================================================
 
-% resnet34.bacp.magnitude.0.95: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.magnitude.0.95}{91.52}
-\defresultn{resnet34.bacp.magnitude.0.95}{1}
+% resnet34.bacp.magnitude.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.magnitude.0.95}{91.47}
+\defresultsd{resnet34.bacp.magnitude.0.95}{0.28}
+\defresultn{resnet34.bacp.magnitude.0.95}{3}
 
-% resnet34.bacp.magnitude.0.97: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.magnitude.0.97}{91.73}
-\defresultn{resnet34.bacp.magnitude.0.97}{1}
+% resnet34.bacp.magnitude.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.magnitude.0.97}{91.40}
+\defresultsd{resnet34.bacp.magnitude.0.97}{0.29}
+\defresultn{resnet34.bacp.magnitude.0.97}{3}
 
-% resnet34.bacp.magnitude.0.99: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.magnitude.0.99}{90.36}
-\defresultn{resnet34.bacp.magnitude.0.99}{1}
+% resnet34.bacp.magnitude.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.magnitude.0.99}{90.54}
+\defresultsd{resnet34.bacp.magnitude.0.99}{0.40}
+\defresultn{resnet34.bacp.magnitude.0.99}{3}
 
-% resnet34.bacp.magnitude.0.999: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.magnitude.0.999}{81.57}
-\defresultn{resnet34.bacp.magnitude.0.999}{1}
+% resnet34.bacp.magnitude.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.magnitude.0.999}{81.20}
+\defresultsd{resnet34.bacp.magnitude.0.999}{0.56}
+\defresultn{resnet34.bacp.magnitude.0.999}{3}
 
-% resnet34.bacp.snip.0.95: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.snip.0.95}{91.53}
-\defresultn{resnet34.bacp.snip.0.95}{1}
+% resnet34.bacp.snip.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.snip.0.95}{91.55}
+\defresultsd{resnet34.bacp.snip.0.95}{0.15}
+\defresultn{resnet34.bacp.snip.0.95}{3}
 
-% resnet34.bacp.snip.0.97: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.snip.0.97}{91.16}
-\defresultn{resnet34.bacp.snip.0.97}{1}
+% resnet34.bacp.snip.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.snip.0.97}{90.71}
+\defresultsd{resnet34.bacp.snip.0.97}{0.33}
+\defresultn{resnet34.bacp.snip.0.97}{3}
 
-% resnet34.bacp.snip.0.99: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.snip.0.99}{89.66}
-\defresultn{resnet34.bacp.snip.0.99}{1}
+% resnet34.bacp.snip.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.snip.0.99}{89.51}
+\defresultsd{resnet34.bacp.snip.0.99}{0.18}
+\defresultn{resnet34.bacp.snip.0.99}{3}
 
-% resnet34.bacp.snip.0.999: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.snip.0.999}{79.03}
-\defresultn{resnet34.bacp.snip.0.999}{1}
+% resnet34.bacp.snip.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.snip.0.999}{78.97}
+\defresultsd{resnet34.bacp.snip.0.999}{0.42}
+\defresultn{resnet34.bacp.snip.0.999}{3}
 
-% resnet34.bacp.wanda.0.95: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.wanda.0.95}{90.92}
-\defresultn{resnet34.bacp.wanda.0.95}{1}
+% resnet34.bacp.wanda.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.wanda.0.95}{90.48}
+\defresultsd{resnet34.bacp.wanda.0.95}{0.57}
+\defresultn{resnet34.bacp.wanda.0.95}{3}
 
-% resnet34.bacp.wanda.0.97: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.wanda.0.97}{90.37}
-\defresultn{resnet34.bacp.wanda.0.97}{1}
+% resnet34.bacp.wanda.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.wanda.0.97}{89.79}
+\defresultsd{resnet34.bacp.wanda.0.97}{0.62}
+\defresultn{resnet34.bacp.wanda.0.97}{3}
 
-% resnet34.bacp.wanda.0.99: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.wanda.0.99}{87.19}
-\defresultn{resnet34.bacp.wanda.0.99}{1}
+% resnet34.bacp.wanda.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.wanda.0.99}{87.15}
+\defresultsd{resnet34.bacp.wanda.0.99}{0.51}
+\defresultn{resnet34.bacp.wanda.0.99}{3}
 
-% resnet34.bacp.wanda.0.999: n=1, metric=test_acc_pct
-\defresult{resnet34.bacp.wanda.0.999}{58.67}
-\defresultn{resnet34.bacp.wanda.0.999}{1}
+% resnet34.bacp.wanda.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.bacp.wanda.0.999}{59.52}
+\defresultsd{resnet34.bacp.wanda.0.999}{0.78}
+\defresultn{resnet34.bacp.wanda.0.999}{3}
 
-% resnet34.dense.none.0.0: n=1, metric=test_acc_pct
-\defresult{resnet34.dense.none.0.0}{91.85}
-\defresultn{resnet34.dense.none.0.0}{1}
-\defresult{resnet34.dense}{91.85}
-\defresultn{resnet34.dense}{1}
+% resnet34.dense.none.0.0: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.dense.none.0.0}{90.79}
+\defresultsd{resnet34.dense.none.0.0}{0.98}
+\defresultn{resnet34.dense.none.0.0}{3}
+\defresult{resnet34.dense}{90.79}
+\defresultsd{resnet34.dense}{0.98}
+\defresultn{resnet34.dense}{3}
 
-% resnet34.ip.magnitude.0.95: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.magnitude.0.95}{91.57}
-\defresultn{resnet34.ip.magnitude.0.95}{1}
+% resnet34.ip.magnitude.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.magnitude.0.95}{90.65}
+\defresultsd{resnet34.ip.magnitude.0.95}{1.06}
+\defresultn{resnet34.ip.magnitude.0.95}{3}
 
-% resnet34.ip.magnitude.0.97: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.magnitude.0.97}{91.27}
-\defresultn{resnet34.ip.magnitude.0.97}{1}
+% resnet34.ip.magnitude.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.magnitude.0.97}{90.28}
+\defresultsd{resnet34.ip.magnitude.0.97}{0.91}
+\defresultn{resnet34.ip.magnitude.0.97}{3}
 
-% resnet34.ip.magnitude.0.99: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.magnitude.0.99}{90.41}
-\defresultn{resnet34.ip.magnitude.0.99}{1}
+% resnet34.ip.magnitude.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.magnitude.0.99}{89.59}
+\defresultsd{resnet34.ip.magnitude.0.99}{0.85}
+\defresultn{resnet34.ip.magnitude.0.99}{3}
 
-% resnet34.ip.magnitude.0.999: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.magnitude.0.999}{68.14}
-\defresultn{resnet34.ip.magnitude.0.999}{1}
+% resnet34.ip.magnitude.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.magnitude.0.999}{69.40}
+\defresultsd{resnet34.ip.magnitude.0.999}{1.50}
+\defresultn{resnet34.ip.magnitude.0.999}{3}
 
-% resnet34.ip.snip.0.95: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.snip.0.95}{90.90}
-\defresultn{resnet34.ip.snip.0.95}{1}
+% resnet34.ip.snip.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.snip.0.95}{89.93}
+\defresultsd{resnet34.ip.snip.0.95}{0.79}
+\defresultn{resnet34.ip.snip.0.95}{3}
 
-% resnet34.ip.snip.0.97: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.snip.0.97}{90.25}
-\defresultn{resnet34.ip.snip.0.97}{1}
+% resnet34.ip.snip.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.snip.0.97}{89.33}
+\defresultsd{resnet34.ip.snip.0.97}{0.88}
+\defresultn{resnet34.ip.snip.0.97}{3}
 
-% resnet34.ip.snip.0.99: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.snip.0.99}{88.41}
-\defresultn{resnet34.ip.snip.0.99}{1}
+% resnet34.ip.snip.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.snip.0.99}{88.07}
+\defresultsd{resnet34.ip.snip.0.99}{0.42}
+\defresultn{resnet34.ip.snip.0.99}{3}
 
-% resnet34.ip.snip.0.999: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.snip.0.999}{77.62}
-\defresultn{resnet34.ip.snip.0.999}{1}
+% resnet34.ip.snip.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.snip.0.999}{75.77}
+\defresultsd{resnet34.ip.snip.0.999}{2.07}
+\defresultn{resnet34.ip.snip.0.999}{3}
 
-% resnet34.ip.wanda.0.95: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.wanda.0.95}{89.49}
-\defresultn{resnet34.ip.wanda.0.95}{1}
+% resnet34.ip.wanda.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.wanda.0.95}{88.81}
+\defresultsd{resnet34.ip.wanda.0.95}{0.66}
+\defresultn{resnet34.ip.wanda.0.95}{3}
 
-% resnet34.ip.wanda.0.97: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.wanda.0.97}{87.58}
-\defresultn{resnet34.ip.wanda.0.97}{1}
+% resnet34.ip.wanda.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.wanda.0.97}{87.14}
+\defresultsd{resnet34.ip.wanda.0.97}{0.48}
+\defresultn{resnet34.ip.wanda.0.97}{3}
 
-% resnet34.ip.wanda.0.99: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.wanda.0.99}{78.63}
-\defresultn{resnet34.ip.wanda.0.99}{1}
+% resnet34.ip.wanda.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.wanda.0.99}{78.15}
+\defresultsd{resnet34.ip.wanda.0.99}{0.54}
+\defresultn{resnet34.ip.wanda.0.99}{3}
 
-% resnet34.ip.wanda.0.999: n=1, metric=test_acc_pct
-\defresult{resnet34.ip.wanda.0.999}{29.00}
-\defresultn{resnet34.ip.wanda.0.999}{1}
+% resnet34.ip.wanda.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet34.ip.wanda.0.999}{30.73}
+\defresultsd{resnet34.ip.wanda.0.999}{1.62}
+\defresultn{resnet34.ip.wanda.0.999}{3}
 
-% resnet50.bacp.magnitude.0.95: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.magnitude.0.95}{92.39}
-\defresultn{resnet50.bacp.magnitude.0.95}{1}
+% resnet50.bacp.magnitude.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.magnitude.0.95}{92.40}
+\defresultsd{resnet50.bacp.magnitude.0.95}{0.03}
+\defresultn{resnet50.bacp.magnitude.0.95}{3}
 
-% resnet50.bacp.magnitude.0.97: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.magnitude.0.97}{92.04}
-\defresultn{resnet50.bacp.magnitude.0.97}{1}
+% resnet50.bacp.magnitude.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.magnitude.0.97}{92.23}
+\defresultsd{resnet50.bacp.magnitude.0.97}{0.18}
+\defresultn{resnet50.bacp.magnitude.0.97}{3}
 
-% resnet50.bacp.magnitude.0.99: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.magnitude.0.99}{90.95}
-\defresultn{resnet50.bacp.magnitude.0.99}{1}
+% resnet50.bacp.magnitude.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.magnitude.0.99}{91.14}
+\defresultsd{resnet50.bacp.magnitude.0.99}{0.39}
+\defresultn{resnet50.bacp.magnitude.0.99}{3}
 
-% resnet50.bacp.magnitude.0.999: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.magnitude.0.999}{79.69}
-\defresultn{resnet50.bacp.magnitude.0.999}{1}
+% resnet50.bacp.magnitude.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.magnitude.0.999}{79.94}
+\defresultsd{resnet50.bacp.magnitude.0.999}{0.12}
+\defresultn{resnet50.bacp.magnitude.0.999}{3}
 
-% resnet50.bacp.snip.0.95: n=1, metric=test_acc_pct
+% resnet50.bacp.snip.0.95: n=3, metric=test_acc_exact_pct
 \defresult{resnet50.bacp.snip.0.95}{92.07}
-\defresultn{resnet50.bacp.snip.0.95}{1}
-
-% resnet50.bacp.snip.0.97: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.snip.0.97}{91.95}
-\defresultn{resnet50.bacp.snip.0.97}{1}
-
-% resnet50.bacp.snip.0.99: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.snip.0.99}{89.93}
-\defresultn{resnet50.bacp.snip.0.99}{1}
-
-% resnet50.bacp.snip.0.999: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.snip.0.999}{78.71}
-\defresultn{resnet50.bacp.snip.0.999}{1}
-
-% resnet50.bacp.wanda.0.95: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.wanda.0.95}{92.16}
-\defresultn{resnet50.bacp.wanda.0.95}{1}
-
-% resnet50.bacp.wanda.0.97: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.wanda.0.97}{91.81}
-\defresultn{resnet50.bacp.wanda.0.97}{1}
-
-% resnet50.bacp.wanda.0.99: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.wanda.0.99}{89.48}
-\defresultn{resnet50.bacp.wanda.0.99}{1}
-
-% resnet50.bacp.wanda.0.999: n=1, metric=test_acc_pct
-\defresult{resnet50.bacp.wanda.0.999}{65.52}
-\defresultn{resnet50.bacp.wanda.0.999}{1}
-
-% resnet50.dense.none.0.0: n=1, metric=test_acc_pct
-\defresult{resnet50.dense.none.0.0}{93.31}
-\defresultn{resnet50.dense.none.0.0}{1}
-\defresult{resnet50.dense}{93.31}
-\defresultn{resnet50.dense}{1}
-
-% resnet50.ip.magnitude.0.95: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.magnitude.0.95}{92.08}
-\defresultn{resnet50.ip.magnitude.0.95}{1}
-
-% resnet50.ip.magnitude.0.97: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.magnitude.0.97}{91.59}
-\defresultn{resnet50.ip.magnitude.0.97}{1}
-
-% resnet50.ip.magnitude.0.99: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.magnitude.0.99}{90.28}
-\defresultn{resnet50.ip.magnitude.0.99}{1}
-
-% resnet50.ip.magnitude.0.999: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.magnitude.0.999}{54.10}
-\defresultn{resnet50.ip.magnitude.0.999}{1}
-
-% resnet50.ip.snip.0.95: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.snip.0.95}{91.40}
-\defresultn{resnet50.ip.snip.0.95}{1}
-
-% resnet50.ip.snip.0.97: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.snip.0.97}{90.69}
-\defresultn{resnet50.ip.snip.0.97}{1}
-
-% resnet50.ip.snip.0.99: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.snip.0.99}{88.62}
-\defresultn{resnet50.ip.snip.0.99}{1}
-
-% resnet50.ip.snip.0.999: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.snip.0.999}{74.05}
-\defresultn{resnet50.ip.snip.0.999}{1}
-
-% resnet50.ip.wanda.0.95: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.wanda.0.95}{90.84}
-\defresultn{resnet50.ip.wanda.0.95}{1}
-
-% resnet50.ip.wanda.0.97: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.wanda.0.97}{89.91}
-\defresultn{resnet50.ip.wanda.0.97}{1}
-
-% resnet50.ip.wanda.0.99: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.wanda.0.99}{81.03}
-\defresultn{resnet50.ip.wanda.0.99}{1}
-
-% resnet50.ip.wanda.0.999: n=1, metric=test_acc_pct
-\defresult{resnet50.ip.wanda.0.999}{22.45}
-\defresultn{resnet50.ip.wanda.0.999}{1}
-
-% vgg11.bacp.magnitude.0.95: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.magnitude.0.95}{89.45}
-\defresultn{vgg11.bacp.magnitude.0.95}{1}
-
-% vgg11.bacp.magnitude.0.97: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.magnitude.0.97}{89.47}
-\defresultn{vgg11.bacp.magnitude.0.97}{1}
-
-% vgg11.bacp.magnitude.0.99: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.magnitude.0.99}{89.36}
-\defresultn{vgg11.bacp.magnitude.0.99}{1}
-
-% vgg11.bacp.magnitude.0.999: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.magnitude.0.999}{83.52}
-\defresultn{vgg11.bacp.magnitude.0.999}{1}
-
-% vgg11.bacp.snip.0.95: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.snip.0.95}{89.43}
-\defresultn{vgg11.bacp.snip.0.95}{1}
-
-% vgg11.bacp.snip.0.97: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.snip.0.97}{89.86}
-\defresultn{vgg11.bacp.snip.0.97}{1}
-
-% vgg11.bacp.snip.0.99: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.snip.0.99}{88.96}
-\defresultn{vgg11.bacp.snip.0.99}{1}
-
-% vgg11.bacp.snip.0.999: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.snip.0.999}{82.30}
-\defresultn{vgg11.bacp.snip.0.999}{1}
-
-% vgg11.bacp.wanda.0.95: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.wanda.0.95}{89.78}
-\defresultn{vgg11.bacp.wanda.0.95}{1}
-
-% vgg11.bacp.wanda.0.97: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.wanda.0.97}{89.69}
-\defresultn{vgg11.bacp.wanda.0.97}{1}
-
-% vgg11.bacp.wanda.0.99: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.wanda.0.99}{88.83}
-\defresultn{vgg11.bacp.wanda.0.99}{1}
-
-% vgg11.bacp.wanda.0.999: n=1, metric=test_acc_pct
-\defresult{vgg11.bacp.wanda.0.999}{82.32}
-\defresultn{vgg11.bacp.wanda.0.999}{1}
-
-% vgg11.dense.none.0.0: n=1, metric=test_acc_pct
-\defresult{vgg11.dense.none.0.0}{90.27}
-\defresultn{vgg11.dense.none.0.0}{1}
-\defresult{vgg11.dense}{90.27}
-\defresultn{vgg11.dense}{1}
-
-% vgg11.ip.magnitude.0.95: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.magnitude.0.95}{90.21}
-\defresultn{vgg11.ip.magnitude.0.95}{1}
-
-% vgg11.ip.magnitude.0.97: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.magnitude.0.97}{89.82}
-\defresultn{vgg11.ip.magnitude.0.97}{1}
-
-% vgg11.ip.magnitude.0.99: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.magnitude.0.99}{90.09}
-\defresultn{vgg11.ip.magnitude.0.99}{1}
-
-% vgg11.ip.magnitude.0.999: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.magnitude.0.999}{83.96}
-\defresultn{vgg11.ip.magnitude.0.999}{1}
-
-% vgg11.ip.snip.0.95: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.snip.0.95}{89.78}
-\defresultn{vgg11.ip.snip.0.95}{1}
-
-% vgg11.ip.snip.0.97: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.snip.0.97}{89.75}
-\defresultn{vgg11.ip.snip.0.97}{1}
-
-% vgg11.ip.snip.0.99: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.snip.0.99}{89.02}
-\defresultn{vgg11.ip.snip.0.99}{1}
-
-% vgg11.ip.snip.0.999: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.snip.0.999}{82.16}
-\defresultn{vgg11.ip.snip.0.999}{1}
-
-% vgg11.ip.wanda.0.95: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.wanda.0.95}{90.03}
-\defresultn{vgg11.ip.wanda.0.95}{1}
-
-% vgg11.ip.wanda.0.97: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.wanda.0.97}{89.77}
-\defresultn{vgg11.ip.wanda.0.97}{1}
-
-% vgg11.ip.wanda.0.99: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.wanda.0.99}{89.02}
-\defresultn{vgg11.ip.wanda.0.99}{1}
-
-% vgg11.ip.wanda.0.999: n=1, metric=test_acc_pct
-\defresult{vgg11.ip.wanda.0.999}{84.20}
-\defresultn{vgg11.ip.wanda.0.999}{1}
-
-% vgg19.bacp.magnitude.0.95: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.magnitude.0.95}{91.45}
-\defresultn{vgg19.bacp.magnitude.0.95}{1}
-
-% vgg19.bacp.magnitude.0.97: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.magnitude.0.97}{91.52}
-\defresultn{vgg19.bacp.magnitude.0.97}{1}
-
-% vgg19.bacp.magnitude.0.99: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.magnitude.0.99}{91.40}
-\defresultn{vgg19.bacp.magnitude.0.99}{1}
-
-% vgg19.bacp.magnitude.0.999: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.magnitude.0.999}{85.00}
-\defresultn{vgg19.bacp.magnitude.0.999}{1}
-
-% vgg19.bacp.snip.0.95: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.snip.0.95}{91.40}
-\defresultn{vgg19.bacp.snip.0.95}{1}
-
-% vgg19.bacp.snip.0.97: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.snip.0.97}{91.77}
-\defresultn{vgg19.bacp.snip.0.97}{1}
-
-% vgg19.bacp.snip.0.99: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.snip.0.99}{90.61}
-\defresultn{vgg19.bacp.snip.0.99}{1}
-
-% vgg19.bacp.snip.0.999: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.snip.0.999}{84.01}
-\defresultn{vgg19.bacp.snip.0.999}{1}
-
-% vgg19.bacp.wanda.0.95: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.wanda.0.95}{91.43}
-\defresultn{vgg19.bacp.wanda.0.95}{1}
-
-% vgg19.bacp.wanda.0.97: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.wanda.0.97}{91.62}
-\defresultn{vgg19.bacp.wanda.0.97}{1}
-
-% vgg19.bacp.wanda.0.99: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.wanda.0.99}{90.35}
-\defresultn{vgg19.bacp.wanda.0.99}{1}
-
-% vgg19.bacp.wanda.0.999: n=1, metric=test_acc_pct
-\defresult{vgg19.bacp.wanda.0.999}{83.20}
-\defresultn{vgg19.bacp.wanda.0.999}{1}
-
-% vgg19.dense.none.0.0: n=1, metric=test_acc_pct
-\defresult{vgg19.dense.none.0.0}{91.36}
-\defresultn{vgg19.dense.none.0.0}{1}
-\defresult{vgg19.dense}{91.36}
-\defresultn{vgg19.dense}{1}
-
-% vgg19.ip.magnitude.0.95: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.magnitude.0.95}{91.33}
-\defresultn{vgg19.ip.magnitude.0.95}{1}
-
-% vgg19.ip.magnitude.0.97: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.magnitude.0.97}{91.27}
-\defresultn{vgg19.ip.magnitude.0.97}{1}
-
-% vgg19.ip.magnitude.0.99: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.magnitude.0.99}{90.86}
-\defresultn{vgg19.ip.magnitude.0.99}{1}
-
-% vgg19.ip.magnitude.0.999: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.magnitude.0.999}{82.80}
-\defresultn{vgg19.ip.magnitude.0.999}{1}
-
-% vgg19.ip.snip.0.95: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.snip.0.95}{90.73}
-\defresultn{vgg19.ip.snip.0.95}{1}
-
-% vgg19.ip.snip.0.97: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.snip.0.97}{91.17}
-\defresultn{vgg19.ip.snip.0.97}{1}
-
-% vgg19.ip.snip.0.99: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.snip.0.99}{90.10}
-\defresultn{vgg19.ip.snip.0.99}{1}
-
-% vgg19.ip.snip.0.999: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.snip.0.999}{83.05}
-\defresultn{vgg19.ip.snip.0.999}{1}
-
-% vgg19.ip.wanda.0.95: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.wanda.0.95}{90.86}
-\defresultn{vgg19.ip.wanda.0.95}{1}
-
-% vgg19.ip.wanda.0.97: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.wanda.0.97}{91.37}
-\defresultn{vgg19.ip.wanda.0.97}{1}
-
-% vgg19.ip.wanda.0.99: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.wanda.0.99}{90.35}
-\defresultn{vgg19.ip.wanda.0.99}{1}
-
-% vgg19.ip.wanda.0.999: n=1, metric=test_acc_pct
-\defresult{vgg19.ip.wanda.0.999}{84.39}
-\defresultn{vgg19.ip.wanda.0.999}{1}
+\defresultsd{resnet50.bacp.snip.0.95}{0.16}
+\defresultn{resnet50.bacp.snip.0.95}{3}
+
+% resnet50.bacp.snip.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.snip.0.97}{91.93}
+\defresultsd{resnet50.bacp.snip.0.97}{0.23}
+\defresultn{resnet50.bacp.snip.0.97}{3}
+
+% resnet50.bacp.snip.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.snip.0.99}{90.10}
+\defresultsd{resnet50.bacp.snip.0.99}{0.15}
+\defresultn{resnet50.bacp.snip.0.99}{3}
+
+% resnet50.bacp.snip.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.snip.0.999}{78.84}
+\defresultsd{resnet50.bacp.snip.0.999}{0.33}
+\defresultn{resnet50.bacp.snip.0.999}{3}
+
+% resnet50.bacp.wanda.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.wanda.0.95}{92.02}
+\defresultsd{resnet50.bacp.wanda.0.95}{0.08}
+\defresultn{resnet50.bacp.wanda.0.95}{3}
+
+% resnet50.bacp.wanda.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.wanda.0.97}{91.51}
+\defresultsd{resnet50.bacp.wanda.0.97}{0.27}
+\defresultn{resnet50.bacp.wanda.0.97}{3}
+
+% resnet50.bacp.wanda.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.wanda.0.99}{89.22}
+\defresultsd{resnet50.bacp.wanda.0.99}{0.26}
+\defresultn{resnet50.bacp.wanda.0.99}{3}
+
+% resnet50.bacp.wanda.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.bacp.wanda.0.999}{65.26}
+\defresultsd{resnet50.bacp.wanda.0.999}{1.30}
+\defresultn{resnet50.bacp.wanda.0.999}{3}
+
+% resnet50.dense.none.0.0: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.dense.none.0.0}{92.81}
+\defresultsd{resnet50.dense.none.0.0}{0.84}
+\defresultn{resnet50.dense.none.0.0}{3}
+\defresult{resnet50.dense}{92.81}
+\defresultsd{resnet50.dense}{0.84}
+\defresultn{resnet50.dense}{3}
+
+% resnet50.ip.magnitude.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.magnitude.0.95}{92.01}
+\defresultsd{resnet50.ip.magnitude.0.95}{0.33}
+\defresultn{resnet50.ip.magnitude.0.95}{3}
+
+% resnet50.ip.magnitude.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.magnitude.0.97}{91.87}
+\defresultsd{resnet50.ip.magnitude.0.97}{0.48}
+\defresultn{resnet50.ip.magnitude.0.97}{3}
+
+% resnet50.ip.magnitude.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.magnitude.0.99}{90.14}
+\defresultsd{resnet50.ip.magnitude.0.99}{0.20}
+\defresultn{resnet50.ip.magnitude.0.99}{3}
+
+% resnet50.ip.magnitude.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.magnitude.0.999}{58.13}
+\defresultsd{resnet50.ip.magnitude.0.999}{3.50}
+\defresultn{resnet50.ip.magnitude.0.999}{3}
+
+% resnet50.ip.snip.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.snip.0.95}{91.30}
+\defresultsd{resnet50.ip.snip.0.95}{0.42}
+\defresultn{resnet50.ip.snip.0.95}{3}
+
+% resnet50.ip.snip.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.snip.0.97}{90.59}
+\defresultsd{resnet50.ip.snip.0.97}{0.14}
+\defresultn{resnet50.ip.snip.0.97}{3}
+
+% resnet50.ip.snip.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.snip.0.99}{88.55}
+\defresultsd{resnet50.ip.snip.0.99}{0.30}
+\defresultn{resnet50.ip.snip.0.99}{3}
+
+% resnet50.ip.snip.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.snip.0.999}{72.85}
+\defresultsd{resnet50.ip.snip.0.999}{2.29}
+\defresultn{resnet50.ip.snip.0.999}{3}
+
+% resnet50.ip.wanda.0.95: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.wanda.0.95}{90.88}
+\defresultsd{resnet50.ip.wanda.0.95}{0.38}
+\defresultn{resnet50.ip.wanda.0.95}{3}
+
+% resnet50.ip.wanda.0.97: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.wanda.0.97}{89.62}
+\defresultsd{resnet50.ip.wanda.0.97}{0.24}
+\defresultn{resnet50.ip.wanda.0.97}{3}
+
+% resnet50.ip.wanda.0.99: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.wanda.0.99}{78.97}
+\defresultsd{resnet50.ip.wanda.0.99}{3.17}
+\defresultn{resnet50.ip.wanda.0.99}{3}
+
+% resnet50.ip.wanda.0.999: n=3, metric=test_acc_exact_pct
+\defresult{resnet50.ip.wanda.0.999}{21.15}
+\defresultsd{resnet50.ip.wanda.0.999}{1.38}
+\defresultn{resnet50.ip.wanda.0.999}{3}
+
+% vgg11.bacp.magnitude.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.magnitude.0.95}{89.76}
+\defresultsd{vgg11.bacp.magnitude.0.95}{0.20}
+\defresultn{vgg11.bacp.magnitude.0.95}{3}
+
+% vgg11.bacp.magnitude.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.magnitude.0.97}{89.71}
+\defresultsd{vgg11.bacp.magnitude.0.97}{0.67}
+\defresultn{vgg11.bacp.magnitude.0.97}{3}
+
+% vgg11.bacp.magnitude.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.magnitude.0.99}{89.15}
+\defresultsd{vgg11.bacp.magnitude.0.99}{0.42}
+\defresultn{vgg11.bacp.magnitude.0.99}{3}
+
+% vgg11.bacp.magnitude.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.magnitude.0.999}{83.70}
+\defresultsd{vgg11.bacp.magnitude.0.999}{0.24}
+\defresultn{vgg11.bacp.magnitude.0.999}{3}
+
+% vgg11.bacp.snip.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.snip.0.95}{89.69}
+\defresultsd{vgg11.bacp.snip.0.95}{0.18}
+\defresultn{vgg11.bacp.snip.0.95}{3}
+
+% vgg11.bacp.snip.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.snip.0.97}{89.76}
+\defresultsd{vgg11.bacp.snip.0.97}{0.07}
+\defresultn{vgg11.bacp.snip.0.97}{3}
+
+% vgg11.bacp.snip.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.snip.0.99}{89.04}
+\defresultsd{vgg11.bacp.snip.0.99}{0.11}
+\defresultn{vgg11.bacp.snip.0.99}{3}
+
+% vgg11.bacp.snip.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.snip.0.999}{82.16}
+\defresultsd{vgg11.bacp.snip.0.999}{0.25}
+\defresultn{vgg11.bacp.snip.0.999}{3}
+
+% vgg11.bacp.wanda.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.wanda.0.95}{89.70}
+\defresultsd{vgg11.bacp.wanda.0.95}{0.18}
+\defresultn{vgg11.bacp.wanda.0.95}{3}
+
+% vgg11.bacp.wanda.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.wanda.0.97}{89.56}
+\defresultsd{vgg11.bacp.wanda.0.97}{0.14}
+\defresultn{vgg11.bacp.wanda.0.97}{3}
+
+% vgg11.bacp.wanda.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.wanda.0.99}{88.87}
+\defresultsd{vgg11.bacp.wanda.0.99}{0.04}
+\defresultn{vgg11.bacp.wanda.0.99}{3}
+
+% vgg11.bacp.wanda.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.bacp.wanda.0.999}{82.46}
+\defresultsd{vgg11.bacp.wanda.0.999}{0.30}
+\defresultn{vgg11.bacp.wanda.0.999}{3}
+
+% vgg11.dense.none.0.0: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.dense.none.0.0}{89.96}
+\defresultsd{vgg11.dense.none.0.0}{0.33}
+\defresultn{vgg11.dense.none.0.0}{3}
+\defresult{vgg11.dense}{89.96}
+\defresultsd{vgg11.dense}{0.33}
+\defresultn{vgg11.dense}{3}
+
+% vgg11.ip.magnitude.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.magnitude.0.95}{90.13}
+\defresultsd{vgg11.ip.magnitude.0.95}{0.16}
+\defresultn{vgg11.ip.magnitude.0.95}{3}
+
+% vgg11.ip.magnitude.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.magnitude.0.97}{89.87}
+\defresultsd{vgg11.ip.magnitude.0.97}{0.06}
+\defresultn{vgg11.ip.magnitude.0.97}{3}
+
+% vgg11.ip.magnitude.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.magnitude.0.99}{89.67}
+\defresultsd{vgg11.ip.magnitude.0.99}{0.35}
+\defresultn{vgg11.ip.magnitude.0.99}{3}
+
+% vgg11.ip.magnitude.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.magnitude.0.999}{83.98}
+\defresultsd{vgg11.ip.magnitude.0.999}{0.13}
+\defresultn{vgg11.ip.magnitude.0.999}{3}
+
+% vgg11.ip.snip.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.snip.0.95}{89.80}
+\defresultsd{vgg11.ip.snip.0.95}{0.05}
+\defresultn{vgg11.ip.snip.0.95}{3}
+
+% vgg11.ip.snip.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.snip.0.97}{89.69}
+\defresultsd{vgg11.ip.snip.0.97}{0.13}
+\defresultn{vgg11.ip.snip.0.97}{3}
+
+% vgg11.ip.snip.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.snip.0.99}{89.10}
+\defresultsd{vgg11.ip.snip.0.99}{0.16}
+\defresultn{vgg11.ip.snip.0.99}{3}
+
+% vgg11.ip.snip.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.snip.0.999}{82.48}
+\defresultsd{vgg11.ip.snip.0.999}{0.28}
+\defresultn{vgg11.ip.snip.0.999}{3}
+
+% vgg11.ip.wanda.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.wanda.0.95}{90.02}
+\defresultsd{vgg11.ip.wanda.0.95}{0.16}
+\defresultn{vgg11.ip.wanda.0.95}{3}
+
+% vgg11.ip.wanda.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.wanda.0.97}{89.79}
+\defresultsd{vgg11.ip.wanda.0.97}{0.05}
+\defresultn{vgg11.ip.wanda.0.97}{3}
+
+% vgg11.ip.wanda.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.wanda.0.99}{89.37}
+\defresultsd{vgg11.ip.wanda.0.99}{0.31}
+\defresultn{vgg11.ip.wanda.0.99}{3}
+
+% vgg11.ip.wanda.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg11.ip.wanda.0.999}{84.04}
+\defresultsd{vgg11.ip.wanda.0.999}{0.23}
+\defresultn{vgg11.ip.wanda.0.999}{3}
+
+% vgg19.bacp.magnitude.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.magnitude.0.95}{91.59}
+\defresultsd{vgg19.bacp.magnitude.0.95}{0.21}
+\defresultn{vgg19.bacp.magnitude.0.95}{3}
+
+% vgg19.bacp.magnitude.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.magnitude.0.97}{91.64}
+\defresultsd{vgg19.bacp.magnitude.0.97}{0.19}
+\defresultn{vgg19.bacp.magnitude.0.97}{3}
+
+% vgg19.bacp.magnitude.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.magnitude.0.99}{91.28}
+\defresultsd{vgg19.bacp.magnitude.0.99}{0.13}
+\defresultn{vgg19.bacp.magnitude.0.99}{3}
+
+% vgg19.bacp.magnitude.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.magnitude.0.999}{85.31}
+\defresultsd{vgg19.bacp.magnitude.0.999}{0.32}
+\defresultn{vgg19.bacp.magnitude.0.999}{3}
+
+% vgg19.bacp.snip.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.snip.0.95}{91.50}
+\defresultsd{vgg19.bacp.snip.0.95}{0.25}
+\defresultn{vgg19.bacp.snip.0.95}{3}
+
+% vgg19.bacp.snip.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.snip.0.97}{91.41}
+\defresultsd{vgg19.bacp.snip.0.97}{0.42}
+\defresultn{vgg19.bacp.snip.0.97}{3}
+
+% vgg19.bacp.snip.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.snip.0.99}{90.63}
+\defresultsd{vgg19.bacp.snip.0.99}{0.18}
+\defresultn{vgg19.bacp.snip.0.99}{3}
+
+% vgg19.bacp.snip.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.snip.0.999}{84.21}
+\defresultsd{vgg19.bacp.snip.0.999}{0.34}
+\defresultn{vgg19.bacp.snip.0.999}{3}
+
+% vgg19.bacp.wanda.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.wanda.0.95}{91.34}
+\defresultsd{vgg19.bacp.wanda.0.95}{0.17}
+\defresultn{vgg19.bacp.wanda.0.95}{3}
+
+% vgg19.bacp.wanda.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.wanda.0.97}{91.53}
+\defresultsd{vgg19.bacp.wanda.0.97}{0.04}
+\defresultn{vgg19.bacp.wanda.0.97}{3}
+
+% vgg19.bacp.wanda.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.wanda.0.99}{90.63}
+\defresultsd{vgg19.bacp.wanda.0.99}{0.38}
+\defresultn{vgg19.bacp.wanda.0.99}{3}
+
+% vgg19.bacp.wanda.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.bacp.wanda.0.999}{83.49}
+\defresultsd{vgg19.bacp.wanda.0.999}{0.06}
+\defresultn{vgg19.bacp.wanda.0.999}{3}
+
+% vgg19.dense.none.0.0: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.dense.none.0.0}{91.65}
+\defresultsd{vgg19.dense.none.0.0}{0.24}
+\defresultn{vgg19.dense.none.0.0}{3}
+\defresult{vgg19.dense}{91.65}
+\defresultsd{vgg19.dense}{0.24}
+\defresultn{vgg19.dense}{3}
+
+% vgg19.ip.magnitude.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.magnitude.0.95}{91.36}
+\defresultsd{vgg19.ip.magnitude.0.95}{0.40}
+\defresultn{vgg19.ip.magnitude.0.95}{3}
+
+% vgg19.ip.magnitude.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.magnitude.0.97}{91.40}
+\defresultsd{vgg19.ip.magnitude.0.97}{0.15}
+\defresultn{vgg19.ip.magnitude.0.97}{3}
+
+% vgg19.ip.magnitude.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.magnitude.0.99}{90.54}
+\defresultsd{vgg19.ip.magnitude.0.99}{0.37}
+\defresultn{vgg19.ip.magnitude.0.99}{3}
+
+% vgg19.ip.magnitude.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.magnitude.0.999}{82.59}
+\defresultsd{vgg19.ip.magnitude.0.999}{0.66}
+\defresultn{vgg19.ip.magnitude.0.999}{3}
+
+% vgg19.ip.snip.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.snip.0.95}{91.22}
+\defresultsd{vgg19.ip.snip.0.95}{0.39}
+\defresultn{vgg19.ip.snip.0.95}{3}
+
+% vgg19.ip.snip.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.snip.0.97}{91.12}
+\defresultsd{vgg19.ip.snip.0.97}{0.06}
+\defresultn{vgg19.ip.snip.0.97}{3}
+
+% vgg19.ip.snip.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.snip.0.99}{90.21}
+\defresultsd{vgg19.ip.snip.0.99}{0.16}
+\defresultn{vgg19.ip.snip.0.99}{3}
+
+% vgg19.ip.snip.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.snip.0.999}{81.47}
+\defresultsd{vgg19.ip.snip.0.999}{1.46}
+\defresultn{vgg19.ip.snip.0.999}{3}
+
+% vgg19.ip.wanda.0.95: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.wanda.0.95}{91.39}
+\defresultsd{vgg19.ip.wanda.0.95}{0.43}
+\defresultn{vgg19.ip.wanda.0.95}{3}
+
+% vgg19.ip.wanda.0.97: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.wanda.0.97}{91.13}
+\defresultsd{vgg19.ip.wanda.0.97}{0.28}
+\defresultn{vgg19.ip.wanda.0.97}{3}
+
+% vgg19.ip.wanda.0.99: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.wanda.0.99}{90.65}
+\defresultsd{vgg19.ip.wanda.0.99}{0.42}
+\defresultn{vgg19.ip.wanda.0.99}{3}
+
+% vgg19.ip.wanda.0.999: n=3, metric=test_acc_exact_pct
+\defresult{vgg19.ip.wanda.0.999}{84.35}
+\defresultsd{vgg19.ip.wanda.0.999}{0.17}
+\defresultn{vgg19.ip.wanda.0.999}{3}
 
 % --- sweep-wide aggregates, derived from the deltas above -----
 % Regenerated with the rest of this file; never hand-edit.
 \defresult{summary.delta.ncells}{48}
 \defresult{summary.delta.npositive}{34}
-\defresult{summary.delta.criterion.magnitude}{+2.60}
-\defresult{summary.delta.criterion.snip}{+0.92}
-\defresult{summary.delta.criterion.wanda}{+5.90}
-\defresult{summary.delta.max}{+43.07}
-\defresult{summary.delta.mean}{+3.14}
-\defresult{summary.delta.min}{-1.88}
-\defresult{summary.delta.model.resnet34}{+5.03}
-\defresult{summary.delta.model.resnet50}{+7.47}
-\defresult{summary.delta.model.vgg11}{-0.40}
-\defresult{summary.delta.model.vgg19}{+0.46}
-\defresult{summary.delta.sparsity.0.95}{+0.36}
-\defresult{summary.delta.sparsity.0.97}{+0.71}
-\defresult{summary.delta.sparsity.0.99}{+1.69}
-\defresult{summary.delta.sparsity.0.999}{+9.80}
+\defresult{summary.delta.criterion.magnitude}{+2.55}
+\defresult{summary.delta.criterion.snip}{+1.29}
+\defresult{summary.delta.criterion.wanda}{+6.02}
+\defresult{summary.delta.max}{+44.11}
+\defresult{summary.delta.mean}{+3.29}
+\defresult{summary.delta.min}{-1.58}
+\defresult{summary.delta.model.resnet34}{+5.37}
+\defresult{summary.delta.model.resnet50}{+7.55}
+\defresult{summary.delta.model.vgg11}{-0.36}
+\defresult{summary.delta.model.vgg19}{+0.59}
+\defresult{summary.delta.sparsity.0.95}{+0.51}
+\defresult{summary.delta.sparsity.0.97}{+0.78}
+\defresult{summary.delta.sparsity.0.99}{+2.02}
+\defresult{summary.delta.sparsity.0.999}{+9.85}
 
 % --- BaCP minus the matched iterative-pruning baseline ---
 
-\defresult{resnet34.delta.magnitude.0.95}{-0.06}
-\defresult{resnet34.delta.magnitude.0.97}{+0.46}
-\defresult{resnet34.delta.magnitude.0.99}{-0.06}
-\defresult{resnet34.delta.magnitude.0.999}{+13.43}
-\defresult{resnet34.delta.snip.0.95}{+0.62}
-\defresult{resnet34.delta.snip.0.97}{+0.92}
-\defresult{resnet34.delta.snip.0.99}{+1.24}
-\defresult{resnet34.delta.snip.0.999}{+1.41}
-\defresult{resnet34.delta.wanda.0.95}{+1.43}
-\defresult{resnet34.delta.wanda.0.97}{+2.78}
-\defresult{resnet34.delta.wanda.0.99}{+8.56}
-\defresult{resnet34.delta.wanda.0.999}{+29.67}
-\defresult{resnet50.delta.magnitude.0.95}{+0.32}
-\defresult{resnet50.delta.magnitude.0.97}{+0.45}
-\defresult{resnet50.delta.magnitude.0.99}{+0.66}
-\defresult{resnet50.delta.magnitude.0.999}{+25.60}
-\defresult{resnet50.delta.snip.0.95}{+0.67}
-\defresult{resnet50.delta.snip.0.97}{+1.26}
-\defresult{resnet50.delta.snip.0.99}{+1.31}
-\defresult{resnet50.delta.snip.0.999}{+4.66}
-\defresult{resnet50.delta.wanda.0.95}{+1.32}
-\defresult{resnet50.delta.wanda.0.97}{+1.91}
-\defresult{resnet50.delta.wanda.0.99}{+8.46}
-\defresult{resnet50.delta.wanda.0.999}{+43.07}
-\defresult{vgg11.delta.magnitude.0.95}{-0.76}
-\defresult{vgg11.delta.magnitude.0.97}{-0.35}
-\defresult{vgg11.delta.magnitude.0.99}{-0.73}
-\defresult{vgg11.delta.magnitude.0.999}{-0.44}
-\defresult{vgg11.delta.snip.0.95}{-0.35}
-\defresult{vgg11.delta.snip.0.97}{+0.11}
+\defresult{resnet34.delta.magnitude.0.95}{+0.83}
+\defresult{resnet34.delta.magnitude.0.97}{+1.11}
+\defresult{resnet34.delta.magnitude.0.99}{+0.95}
+\defresult{resnet34.delta.magnitude.0.999}{+11.80}
+\defresult{resnet34.delta.snip.0.95}{+1.62}
+\defresult{resnet34.delta.snip.0.97}{+1.39}
+\defresult{resnet34.delta.snip.0.99}{+1.45}
+\defresult{resnet34.delta.snip.0.999}{+3.20}
+\defresult{resnet34.delta.wanda.0.95}{+1.67}
+\defresult{resnet34.delta.wanda.0.97}{+2.66}
+\defresult{resnet34.delta.wanda.0.99}{+9.00}
+\defresult{resnet34.delta.wanda.0.999}{+28.79}
+\defresult{resnet50.delta.magnitude.0.95}{+0.39}
+\defresult{resnet50.delta.magnitude.0.97}{+0.37}
+\defresult{resnet50.delta.magnitude.0.99}{+1.01}
+\defresult{resnet50.delta.magnitude.0.999}{+21.82}
+\defresult{resnet50.delta.snip.0.95}{+0.77}
+\defresult{resnet50.delta.snip.0.97}{+1.35}
+\defresult{resnet50.delta.snip.0.99}{+1.55}
+\defresult{resnet50.delta.snip.0.999}{+6.00}
+\defresult{resnet50.delta.wanda.0.95}{+1.14}
+\defresult{resnet50.delta.wanda.0.97}{+1.89}
+\defresult{resnet50.delta.wanda.0.99}{+10.26}
+\defresult{resnet50.delta.wanda.0.999}{+44.11}
+\defresult{vgg11.delta.magnitude.0.95}{-0.37}
+\defresult{vgg11.delta.magnitude.0.97}{-0.16}
+\defresult{vgg11.delta.magnitude.0.99}{-0.52}
+\defresult{vgg11.delta.magnitude.0.999}{-0.28}
+\defresult{vgg11.delta.snip.0.95}{-0.11}
+\defresult{vgg11.delta.snip.0.97}{+0.08}
 \defresult{vgg11.delta.snip.0.99}{-0.06}
-\defresult{vgg11.delta.snip.0.999}{+0.14}
-\defresult{vgg11.delta.wanda.0.95}{-0.25}
-\defresult{vgg11.delta.wanda.0.97}{-0.08}
-\defresult{vgg11.delta.wanda.0.99}{-0.19}
-\defresult{vgg11.delta.wanda.0.999}{-1.88}
-\defresult{vgg19.delta.magnitude.0.95}{+0.12}
-\defresult{vgg19.delta.magnitude.0.97}{+0.25}
-\defresult{vgg19.delta.magnitude.0.99}{+0.54}
-\defresult{vgg19.delta.magnitude.0.999}{+2.20}
-\defresult{vgg19.delta.snip.0.95}{+0.67}
-\defresult{vgg19.delta.snip.0.97}{+0.61}
-\defresult{vgg19.delta.snip.0.99}{+0.51}
-\defresult{vgg19.delta.snip.0.999}{+0.96}
-\defresult{vgg19.delta.wanda.0.95}{+0.58}
-\defresult{vgg19.delta.wanda.0.97}{+0.25}
-\defresult{vgg19.delta.wanda.0.99}{-0.00}
-\defresult{vgg19.delta.wanda.0.999}{-1.19}
+\defresult{vgg11.delta.snip.0.999}{-0.32}
+\defresult{vgg11.delta.wanda.0.95}{-0.31}
+\defresult{vgg11.delta.wanda.0.97}{-0.23}
+\defresult{vgg11.delta.wanda.0.99}{-0.50}
+\defresult{vgg11.delta.wanda.0.999}{-1.58}
+\defresult{vgg19.delta.magnitude.0.95}{+0.23}
+\defresult{vgg19.delta.magnitude.0.97}{+0.24}
+\defresult{vgg19.delta.magnitude.0.99}{+0.74}
+\defresult{vgg19.delta.magnitude.0.999}{+2.72}
+\defresult{vgg19.delta.snip.0.95}{+0.28}
+\defresult{vgg19.delta.snip.0.97}{+0.28}
+\defresult{vgg19.delta.snip.0.99}{+0.42}
+\defresult{vgg19.delta.snip.0.999}{+2.74}
+\defresult{vgg19.delta.wanda.0.95}{-0.05}
+\defresult{vgg19.delta.wanda.0.97}{+0.40}
+\defresult{vgg19.delta.wanda.0.99}{-0.03}
+\defresult{vgg19.delta.wanda.0.999}{-0.86}

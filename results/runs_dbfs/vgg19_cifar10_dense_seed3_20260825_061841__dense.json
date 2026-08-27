@@ -1,0 +1,23 @@
+{
+ "experiment_group": "static.dense.vgg19.cifar10.dense.seed3",
+ "model_name": "vgg19",
+ "method": "dense",
+ "status": "ok",
+ "is_smoke": false,
+ "eval_samples_dropped": 0,
+ "seed": 3,
+ "phase": "dense",
+ "ended_at": "2026-08-25T06:53:06.494696+00:00",
+ "test_acc_exact_pct": 91.79,
+ "test_acc_pct": 91.80606617647058,
+ "dataset_name": "cifar10",
+ "duration_s": 2067.078,
+ "total_params": 139611210,
+ "prunable_params": 139556544,
+ "sparsity_reported": 0,
+ "learning_rate": 0.01,
+ "epochs": 100,
+ "epochs_ft": 0,
+ "prune_task_head": false,
+ "wanda_group": "output"
+}
