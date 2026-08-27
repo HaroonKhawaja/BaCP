@@ -336,6 +336,123 @@ MEASURED = r"""
 \defresult{mobilenet.delta.magnitude.0.995}{+42.49}
 
 
+% --- ResNet-34 / CIFAR-100: the second dataset -----------------------------
+% Three criteria x four sparsities x three seeds x two arms, plus three dense
+% baselines. Same matched protocol as the CIFAR-10 grid, and the transfer was
+% verified rather than assumed: a 100-way cross-entropy has a different loss
+% scale than a 10-way one, which changes how the CE term competes with the
+% contrastive terms. A learning-rate probe (dense 72.67, I.P. at 0.95 scoring
+% 70.27 under 0.01 against 63.45 under 0.1) confirmed the CIFAR-10 split
+% transfers, so nothing was retuned.
+%
+% ResNet-34 carries no published comparator row -- the original work used
+% ResNet-50/101 -- so these numbers are not under reproduction pressure.
+%
+% BaCP is ahead in all twelve cells, and by more than on CIFAR-10 in eleven of
+% them. The exception is WANDA at 0.999, where both arms are near-destroyed
+% (I.P. 2.87 against a 1.00 chance floor) and there is little left to recover.
+\defresult{c100.dense}{70.24}
+\defresultsd{c100.dense}{2.10}
+\defresultn{c100.dense}{3}
+\defresult{c100.dense.none.0.0}{70.24}
+
+\defresult{c100.ip.magnitude.0.95}{68.77}
+\defresultsd{c100.ip.magnitude.0.95}{1.30}
+\defresultn{c100.ip.magnitude.0.95}{3}
+\defresult{c100.bacp.magnitude.0.95}{70.48}
+\defresultsd{c100.bacp.magnitude.0.95}{0.14}
+\defresultn{c100.bacp.magnitude.0.95}{3}
+\defresult{c100.delta.magnitude.0.95}{+1.71}
+
+\defresult{c100.ip.magnitude.0.97}{68.47}
+\defresultsd{c100.ip.magnitude.0.97}{1.30}
+\defresultn{c100.ip.magnitude.0.97}{3}
+\defresult{c100.bacp.magnitude.0.97}{69.97}
+\defresultsd{c100.bacp.magnitude.0.97}{0.15}
+\defresultn{c100.bacp.magnitude.0.97}{3}
+\defresult{c100.delta.magnitude.0.97}{+1.50}
+
+\defresult{c100.ip.magnitude.0.99}{66.42}
+\defresultsd{c100.ip.magnitude.0.99}{1.34}
+\defresultn{c100.ip.magnitude.0.99}{3}
+\defresult{c100.bacp.magnitude.0.99}{66.92}
+\defresultsd{c100.bacp.magnitude.0.99}{0.35}
+\defresultn{c100.bacp.magnitude.0.99}{3}
+\defresult{c100.delta.magnitude.0.99}{+0.50}
+
+\defresult{c100.ip.magnitude.0.999}{19.84}
+\defresultsd{c100.ip.magnitude.0.999}{2.17}
+\defresultn{c100.ip.magnitude.0.999}{3}
+\defresult{c100.bacp.magnitude.0.999}{42.80}
+\defresultsd{c100.bacp.magnitude.0.999}{0.44}
+\defresultn{c100.bacp.magnitude.0.999}{3}
+\defresult{c100.delta.magnitude.0.999}{+22.96}
+
+\defresult{c100.ip.snip.0.95}{66.10}
+\defresultsd{c100.ip.snip.0.95}{1.48}
+\defresultn{c100.ip.snip.0.95}{3}
+\defresult{c100.bacp.snip.0.95}{69.84}
+\defresultsd{c100.bacp.snip.0.95}{0.16}
+\defresultn{c100.bacp.snip.0.95}{3}
+\defresult{c100.delta.snip.0.95}{+3.74}
+
+\defresult{c100.ip.snip.0.97}{65.71}
+\defresultsd{c100.ip.snip.0.97}{1.45}
+\defresultn{c100.ip.snip.0.97}{3}
+\defresult{c100.bacp.snip.0.97}{68.76}
+\defresultsd{c100.bacp.snip.0.97}{0.38}
+\defresultn{c100.bacp.snip.0.97}{3}
+\defresult{c100.delta.snip.0.97}{+3.05}
+
+\defresult{c100.ip.snip.0.99}{61.91}
+\defresultsd{c100.ip.snip.0.99}{0.54}
+\defresultn{c100.ip.snip.0.99}{3}
+\defresult{c100.bacp.snip.0.99}{64.33}
+\defresultsd{c100.bacp.snip.0.99}{0.04}
+\defresultn{c100.bacp.snip.0.99}{3}
+\defresult{c100.delta.snip.0.99}{+2.42}
+
+\defresult{c100.ip.snip.0.999}{30.66}
+\defresultsd{c100.ip.snip.0.999}{0.58}
+\defresultn{c100.ip.snip.0.999}{3}
+\defresult{c100.bacp.snip.0.999}{36.18}
+\defresultsd{c100.bacp.snip.0.999}{0.62}
+\defresultn{c100.bacp.snip.0.999}{3}
+\defresult{c100.delta.snip.0.999}{+5.52}
+
+\defresult{c100.ip.wanda.0.95}{63.93}
+\defresultsd{c100.ip.wanda.0.95}{0.76}
+\defresultn{c100.ip.wanda.0.95}{3}
+\defresult{c100.bacp.wanda.0.95}{68.20}
+\defresultsd{c100.bacp.wanda.0.95}{0.39}
+\defresultn{c100.bacp.wanda.0.95}{3}
+\defresult{c100.delta.wanda.0.95}{+4.27}
+
+\defresult{c100.ip.wanda.0.97}{57.42}
+\defresultsd{c100.ip.wanda.0.97}{1.16}
+\defresultn{c100.ip.wanda.0.97}{3}
+\defresult{c100.bacp.wanda.0.97}{66.28}
+\defresultsd{c100.bacp.wanda.0.97}{0.34}
+\defresultn{c100.bacp.wanda.0.97}{3}
+\defresult{c100.delta.wanda.0.97}{+8.86}
+
+\defresult{c100.ip.wanda.0.99}{30.40}
+\defresultsd{c100.ip.wanda.0.99}{1.14}
+\defresultn{c100.ip.wanda.0.99}{3}
+\defresult{c100.bacp.wanda.0.99}{58.11}
+\defresultsd{c100.bacp.wanda.0.99}{0.15}
+\defresultn{c100.bacp.wanda.0.99}{3}
+\defresult{c100.delta.wanda.0.99}{+27.71}
+
+\defresult{c100.ip.wanda.0.999}{2.87}
+\defresultsd{c100.ip.wanda.0.999}{1.35}
+\defresultn{c100.ip.wanda.0.999}{3}
+\defresult{c100.bacp.wanda.0.999}{12.51}
+\defresultsd{c100.bacp.wanda.0.999}{0.84}
+\defresultn{c100.bacp.wanda.0.999}{3}
+\defresult{c100.delta.wanda.0.999}{+9.64}
+
+
 % --- Objective ablation ----------------------------------------------------
 % ResNet-50 / CIFAR-10 / magnitude, seed 1, under the PREVIOUS protocol
 % (60 epochs, delta_T 88, no validation split).  Single seed.  The `abl`
