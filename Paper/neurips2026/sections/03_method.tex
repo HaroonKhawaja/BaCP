@@ -95,16 +95,20 @@ run-to-run floor of \result{cifar10.noise.floor.lo}--%
 \paragraph{Matched budget.}
 The I.P.\ baseline is not a separately tuned competitor but the \emph{same run}
 --- same pretrained initialisation, same dense checkpoint, same criterion, same
-cubic schedule, same $\Delta T$, same prunable scope, same 50 pruning epochs,
-same 25-epoch AdamW $10^{-4}$ fine-tune \citep{loshchilov2019adamw}, same splits,
+cubic schedule, same $\Delta T$, same prunable scope, same 50 pruning epochs, same splits,
 same bf16 autocast, same gradient clipping at global norm 10.0 (SNIP-it's
 published value \citep{verdenius2020snipit}, applied symmetrically because an
 asymmetric stabiliser would itself be a difference between arms) --- with
-Eq.~\eqref{eq:functional} replaced by plain cross-entropy. The fine-tune ran on
-both arms: without it the comparison degenerates into 75 epochs of BaCP against
-50 of I.P.\ and the objective cannot be separated from the extra training.
-\citet{blalock2020state} document how often pruning comparisons fail here;
-Table~\ref{tab:protocol} gives the protocol.
+Eq.~\eqref{eq:functional} replaced by plain cross-entropy. One element is
+\emph{not} matched, and we state it rather than leave it to be inferred: the
+25-epoch mask-frozen AdamW $10^{-4}$ fine-tune \citep{loshchilov2019adamw} ran
+on the BaCP arm only. I.P.'s reported accuracy is that of its 50-epoch pruning
+run; BaCP's follows 50 pruning plus 25 fine-tuning epochs. Every $\Delta$ we
+report therefore carries the objective and those 25 epochs together and does
+not separate them. \citet{blalock2020state} document how often pruning
+comparisons fail on exactly this kind of unstated budget difference, which is
+why we state it here and count it in Section~\ref{sec:limitations};
+Table~\ref{tab:protocol} gives the protocol as run.
 
 \paragraph{The one asymmetry.}
 \label{sec:experiments:vgglr}

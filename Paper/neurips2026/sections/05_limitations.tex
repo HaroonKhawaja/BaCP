@@ -16,7 +16,7 @@ models, not preserved representations. The variant licensing the stronger claim 
 and teachers --- lost at every measured sparsity (Table~\ref{tab:ablation}): the
 clean interpretation is not the better configuration, and we chose the numbers.
 
-\paragraph{Budget, data, seeds and scope.}
+\paragraph{Budget, data, seeds and scope.} The 25-epoch fine-tune ran on the BaCP arm only, so every $\Delta$ bundles the objective with 25 extra epochs; the two are not separated here.
 Our 50 pruning plus 25 fine-tuning epochs at batch 512 are nearly an order of
 magnitude fewer updates than 160 \citep{liu2021granet} or 250 \citep{li2025east}
 epochs at batch 128; nothing here is a state-of-the-art claim, though both arms
@@ -31,6 +31,6 @@ support-level interventions compose is open.
 \paragraph{Conclusion.}
 We studied CAP's contrastive pruning objective \citep{xu2022cap} --- theirs, not
 ours --- on vision backbones, under three criteria, to 99.9\% sparsity, against
-a baseline matched in schedule, criterion, budget and fine-tune: a controlled measurement of what the
+a baseline matched in schedule, criterion and pruning budget: a controlled measurement of what the
 retraining objective is worth past the point where cross-entropy alone can
 rebuild a pruned network.
