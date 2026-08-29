@@ -1,0 +1,1178 @@
+"""Shared helpers for the per-family test notebooks.
+
+The notebooks in vision_models/, vision_transformers/ and llms/ all do the same
+five things, so they live here once:
+
+    setup()                  find the repo, set paths, print the hardware
+    fetch_imagenet_weights() put real ImageNet weights where the registry looks
+    preflight()              REFUSE to train if the init is not what was asked
+    make_cell()              one test = one config dict, from the paper protocol
+    run() / run_group()      run it, streaming every epoch into the cell
+    results_table()          our numbers next to the paper's published ones
+
+Protocols come from the original paper (Paper/BaCP__Appendix.pdf, Tables 1-3)
+with ONE declared deviation: the pruning regime is modernized to the standard
+gradual schedule (total epochs + prune every delta_T steps, cubic ramp to 80%,
+final 20% recovery) -- see the TRAINING REGIME note below. Static pruning at
+0.95 / 0.97 / 0.99 from a PRETRAINED model. Nothing here touches the
+experiment code.
+
+This file lives under test_notebooks/, which results.code_fingerprint excludes,
+so editing it never invalidates a run record.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+# --- repo bootstrap ---------------------------------------------------------
+
+def find_repo():
+    """Walk up from this file to the repo root.
+
+    Prefer the directory holding .git. Fall back to the one holding
+    project/model_factory.py, because Databricks Git folders do NOT expose
+    .git through the workspace filesystem -- requiring it would crash this
+    module at import time on exactly the machine it is meant to run on.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / '.git').exists():
+            return parent
+    for parent in here.parents:
+        if (parent / 'project' / 'model_factory.py').exists():
+            return parent
+    raise RuntimeError('could not find the repo root above ' + str(here))
+
+
+REPO = find_repo()
+
+for _p in (REPO / 'project', REPO / 'project' / 'scripts'):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
+
+# --- parsing training output ------------------------------------------------
+
+# Matches "Epoch [3/50]" and the prefixed variants "Recovery Epoch [1/10]" /
+# "Fine-tuning Epoch [2/50]" that trainer.py and bacp.py print each epoch.
+_EPOCH = re.compile(r'Epoch \[(\d+)/(\d+)\]')
+
+
+def _field(name, line):
+    """Pull 'name: <number>' out of a log line, or None.
+
+    \\b keeps 'loss:' from matching inside 'val_loss:' (underscore is a word
+    char, so there is no boundary there), and IGNORECASE lets the same name
+    hit both trainer formats: 'loss:'/'accuracy:' from Trainer and
+    'Total Loss:'/'Training Accuracy:' from BaCPTrainer.
+    """
+    m = re.search(rf'\b{name}: (nan|-?[0-9.]+(?:[eE][-+]?\d+)?)', line,
+                  re.IGNORECASE)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return float('nan')
+
+
+def iter_progress(raw_lines):
+    """Turn a training subprocess's raw output into ONE event per epoch.
+
+    tqdm repaints the same "Epoch [k/N]" line many times a second. The stream
+    loop used to print every repaint, which flooded the cell with dozens of
+    identical rows per epoch and made the timing meaningless -- `per` measured
+    the gap between two repaints, so it reported things like "0.2s/ep eta
+    0.0m" instead of the real per-epoch cost.
+
+    Yields:
+        ('line', text)                                  non-epoch output
+        ('epoch', phase, ep, tot, acc, loss, sparsity)  once per epoch
+
+    The epoch event carries the LAST values seen for that epoch, because the
+    final repaint is the one holding the finished-epoch metrics; earlier
+    repaints hold running averages over a partial epoch. A field stays at its
+    most recent non-None value, so a repaint that omits one does not blank it.
+    """
+    pending = None
+    for raw in raw_lines:
+        # \r is tqdm's in-place repaint; treat it as a line break so a single
+        # buffered chunk of repaints does not arrive as one giant line.
+        for seg in raw.replace('\r', '\n').split('\n'):
+            line = seg.rstrip()
+            if not line:
+                continue
+            m = _EPOCH.search(line)
+            if not m:
+                yield ('line', line)
+                continue
+
+            ep, tot = int(m.group(1)), int(m.group(2))
+            phase = line.split('Epoch')[0].strip() or 'train'
+            vals = (_field('accuracy', line), _field('loss', line),
+                    _field('sparsity', line))
+
+            if pending is not None and (pending[0], pending[1]) != (phase, ep):
+                yield ('epoch', *pending)
+                pending = None
+
+            if pending is None:
+                pending = [phase, ep, tot, *vals]
+            else:
+                for i, v in enumerate(vals, start=3):
+                    if v is not None:
+                        pending[i] = v
+
+    if pending is not None:
+        yield ('epoch', *pending)
+
+
+def on_databricks():
+    """True when running on a Databricks cluster."""
+    return bool(os.environ.get('DATABRICKS_RUNTIME_VERSION'))
+
+
+def setup(quiet=False):
+    """Set the environment up and print what machine we are on.
+
+    Results go to BACP_RESULTS_DIR. On Databricks that defaults to
+    /dbfs/research/bacp_results so records survive the cluster; anywhere else
+    it is <repo>/results.
+    """
+    if 'BACP_RESULTS_DIR' not in os.environ:
+        if on_databricks():
+            os.environ['BACP_RESULTS_DIR'] = '/dbfs/research/bacp_results'
+        else:
+            os.environ['BACP_RESULTS_DIR'] = str(REPO / 'results')
+    os.environ['PYTHONUNBUFFERED'] = '1'
+
+    info = {'repo': str(REPO),
+            'results': os.environ['BACP_RESULTS_DIR'],
+            'databricks': on_databricks()}
+    try:
+        import torch
+        info['torch'] = torch.__version__
+        info['cuda'] = torch.cuda.is_available()
+        info['gpus'] = torch.cuda.device_count() if info['cuda'] else 0
+        if info['gpus']:
+            info['gpu_name'] = torch.cuda.get_device_name(0)
+    except Exception as exc:                                       # noqa: BLE001
+        info['torch_error'] = str(exc)
+
+    if not quiet:
+        print(f"repo       {info['repo']}")
+        print(f"results    {info['results']}")
+        print(f"databricks {info['databricks']}")
+        if 'torch' in info:
+            print(f"torch      {info['torch']}  cuda={info['cuda']}  "
+                  f"gpus={info['gpus']} {info.get('gpu_name', '')}")
+        else:
+            print(f"!! torch not importable: {info.get('torch_error')}")
+    return info
+
+
+# --- the protocols, one dict per model --------------------------------------
+#
+# Source: Paper/BaCP__Appendix.pdf Tables 1-3 and the main paper's Training
+# Protocol paragraph (Section 4.1).
+#
+#   base   keys shared by every phase of that model
+#   dense  the pretrained baseline, finetuned on the task   (baseline_script)
+#   prune  I.P.: iterative prune + recovery                  (pruning_script)
+#   bacp   contrastive pruning + AdamW finetune              (bacp_script)
+#
+# TRAINING REGIME (deliberately modernized -- a declared deviation from the
+# appendix's "5 epochs + 10 recovery", whose code interleaved a 10-epoch
+# recovery block after EVERY pruning epoch, a shape no current literature
+# uses). The standard gradual-pruning regime (Zhu & Gupta 2017,
+# arXiv 1710.01878; Gale, Elsen & Hooker 2019, arXiv 1902.09574) is one
+# continuous run:
+#
+#   epochs           total epoch budget for the pruning phase
+#   delta_T          prune every delta_T optimizer steps (~1 epoch here)
+#   cubic ramp       sparsity rises to the target over the FIRST 80% of
+#                    training (BasePruner: end_idx = 0.8 * total_steps)
+#   final 20%        recovery: mask fixed at the target, training continues
+#   recovery_epochs  0 -- the interleaved per-epoch recovery is disabled;
+#                    recovery is the schedule's built-in tail instead
+#
+# delta_T is set to ~one epoch of optimizer steps per family:
+#   resnet/vgg  100  (= 1.15 epochs at 45,000/512 = 87 batches)
+#   vit          175 (= 1.00 epochs at 45,000/256 = 175 batches)
+#   llm         1052 (= 1.00 epochs at 67,349/64; GLUE ships its own splits)
+#
+# 100 rather than the exact 87: Zhu & Gupta tested delta_t between 100 and
+# 1000 training steps and report the impact as negligible, so 100 is the
+# smallest value their result actually covers. 87 would be below anything
+# they measured. Every value above sits inside that verified range.
+
+# num_workers=24: the Standard_NC24ads_A100_v4 node has 24 vCPUs, and one
+# training job owns the box (runs are serialised), so the loaders get all of
+# them. enable_tqdm=True streams a per-batch progress bar; both nb_common.run
+# and runner.run_cell merge stderr into stdout, so the bar reaches the cell
+# and the job log.
+_CV_BASE = dict(model_type='cv', dataset_name='cifar10', num_classes=10,
+                image_size=32, batch_size=512, num_workers=24,
+                enable_tqdm=True)
+
+_CNN_DENSE = dict(optimizer_type='sgd', learning_rate=0.01,
+                  scheduler_type='linear_with_warmup', epochs=100, patience=20)
+# prune_task_head=True for the vision families: the published vision-line
+# comparators prune their output layers (Han et al. prune AlexNet's fc8; SNIP
+# thresholds globally over all weights; RigL/GraNet mask the classifier by
+# default -- see docs/citations.md section 4). The encoder/projection head
+# remains excluded unconditionally (frozen, discarded, never in the
+# denominator). LLM families keep heads dense -- the PLM convention of CAP
+# and WANDA-as-published.
+# MATCHED COMPUTE BUDGET. I.P. runs the same 50-epoch AdamW(1e-4) fine-tune
+# that BaCP runs after its contrastive phase, so both arms see 60 + 50 = 110
+# epochs and the same fine-tuning optimizer. Without this the comparison comes
+# down to "110 epochs of BaCP vs 60 of I.P.", and a reviewer cannot tell the
+# objective from the extra training. With it, the ONLY difference between the
+# arms is the contrastive objective -- which is the claim.
+_CNN_PRUNE = dict(optimizer_type='sgd', learning_rate=0.01,
+                  epochs=50, recovery_epochs=0,
+                  sparsity_scheduler='cubic', delta_T=100, val_split=0.10,
+                  prune_task_head=True,
+                  # wanda_group='global': the project's original adaptation --
+                  # Wanda's metric under the same global-threshold allocation
+                  # as magnitude and SNIP, so the columns differ only in
+                  # score. Ignored by the other pruners.
+                  wanda_group='global')
+_CNN_BACP = dict(optimizer_type='sgd', learning_rate=0.1,
+                 epochs=50, recovery_epochs=0,
+                 sparsity_scheduler='cubic', delta_T=100, val_split=0.10,
+                 prune_task_head=True, wanda_group='global',
+                 # tau=0.15: measured winner over 0.07 at every sparsity.
+                 #
+                 # contrastive_mode='legacy' + proj_mode='current' is THE
+                 # objective, chosen by measurement, not inheritance: a
+                 # two-variable ablation (everything else held identical) put
+                 # it ahead of the rectangular-CAP/frozen-head arm by ~0.65 at
+                 # every sparsity, and ahead of the shared I.P. baseline by
+                 # roughly ten to one. See docs/objective_ablation.md.
+                 tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                 contrastive_mode='legacy', proj_mode='current',
+                 enable_finetune=True, optimizer_type_ft='adamw',
+                 learning_rate_ft=1e-4, epochs_ft=25)
+
+_VIT_BASE = dict(model_type='cv', dataset_name='cifar10', num_classes=10,
+                 image_size=224, batch_size=256, num_workers=24,
+                 enable_tqdm=True)
+
+_LLM_BASE = dict(model_type='llm', dataset_name='sst2', num_classes=2,
+                 batch_size=64, num_workers=24, enable_tqdm=True)
+
+FAMILIES = {
+    'resnet34': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
+                     bacp=_CNN_BACP),
+    'resnet50': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
+                     bacp=_CNN_BACP),
+    'resnet101': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
+                      bacp=_CNN_BACP),
+    # VGG BaCP runs at 0.05, not 0.1. Both VGGs carry ZERO BatchNorm layers
+    # (ResNet-50 has 53), so they cannot absorb the contrastive phase's high
+    # learning rate. Measured on vgg19 magnitude 0.95, everything else held
+    # identical (60+50 epochs, delta_T 88, val_split 0):
+    #     LR 0.10 -> 89.99      LR 0.05 -> 91.88      I.P. -> 91.02
+    # Gradient clipping stops the divergence but does not make 0.1 the right
+    # step size. vgg11 shares the architecture and the symptom (BaCP at 0.1
+    # sat below its own dense), so it takes the same value.
+    'vgg11': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
+                  bacp=dict(_CNN_BACP, learning_rate=0.05)),
+    'vgg19': dict(base=_CV_BASE, dense=_CNN_DENSE, prune=_CNN_PRUNE,
+                  bacp=dict(_CNN_BACP, learning_rate=0.05)),
+
+    # MobileNetV2 runs BOTH arms at SGD 0.1 -- the one family where I.P. does
+    # not use 0.01. This was measured, not assumed. The model first inherited
+    # the ResNet recipe untuned; at that setting its I.P. arm collapses to
+    # chance under magnitude while BaCP does not, which reads as an enormous
+    # win for the objective and is really just an undertrained baseline:
+    #
+    #   sparsity   I.P.@0.01          I.P.@0.1        BaCP@0.1
+    #   0.95       80.06 +/- 11.74    83.46 +/- 1.32  87.38 +/- 0.32
+    #   0.97       56.84 +/- 24.48    82.64 +/- 1.36  85.67 +/- 0.56
+    #   0.99       10.02 +/-  0.03    78.63 +/- 3.51  80.34 +/- 0.23
+    #
+    # At 0.99 that is the difference between a reported +70.3 and the true
+    # +1.7. BaCP was probed too and 0.1 is its optimum as well (0.5 is 7.2
+    # points worse at 0.99), so 0.1 is each arm's measured best, not a
+    # handicap imposed on one of them.
+    #
+    # Setting it here rather than passing learning_rate=0.1 at every call site
+    # is what keeps the record namespace honest: a `variant=` suffix means
+    # "deviates from the family default", so tagging the CORRECT rate as a
+    # deviation is backwards, and it is how magnitude I.P. ended up under
+    # `.lr0.1` keys while SNIP/WANDA I.P. sat under main keys for the same
+    # protocol. Pinned by test_mobilenet_arms_share_learning_rate.
+    #
+    # Sparsity 0.999 is dead for both arms on this architecture at every rate
+    # tried (I.P. 0.001/0.01/0.1, BaCP 0.01/0.1/0.5): ~2,200 of 2.2M weights
+    # survive, about 42 per tensor. Prefer 0.995 as the extreme point.
+    'mobilenet_v2': dict(base=_CV_BASE, dense=_CNN_DENSE,
+                         prune=dict(_CNN_PRUNE, learning_rate=0.1),
+                         bacp=_CNN_BACP),
+    # ViTs: hub weights, 224px inputs, batch 256. I.P. uses AdamW 1e-3 and
+    # BaCP's contrastive phase SGD 0.01 (appendix B.5 note).
+    'vit-tiny': dict(base=_VIT_BASE, dense=_CNN_DENSE,
+                     prune=dict(_CNN_PRUNE, optimizer_type='adamw',
+                                learning_rate=1e-3, delta_T=175),
+                     bacp=dict(_CNN_BACP, learning_rate=0.01, delta_T=175)),
+    'vit-small': dict(base=_VIT_BASE, dense=_CNN_DENSE,
+                      prune=dict(_CNN_PRUNE, optimizer_type='adamw',
+                                 learning_rate=1e-3, delta_T=175),
+                      bacp=dict(_CNN_BACP, learning_rate=0.01, delta_T=175)),
+    # LLMs on SST-2. Dense finetune AdamW 2e-5; I.P. AdamW 5e-5; BaCP's
+    # contrastive LR from appendix Table 3 (DistilBERT 5e-5, RoBERTa 1e-5),
+    # finetune AdamW 1e-4. GLUE's test split is unlabelled, so the reported
+    # "test" accuracy is the validation set -- state that wherever it appears.
+    'distilbert-base-uncased': dict(
+        base=_LLM_BASE,
+        dense=dict(optimizer_type='adamw', learning_rate=2e-5,
+                   scheduler_type='linear_with_warmup', epochs=5),
+        prune=dict(optimizer_type='adamw', learning_rate=5e-5,
+                   epochs=15, recovery_epochs=0,
+                   sparsity_scheduler='cubic', delta_T=1052),
+        bacp=dict(optimizer_type='adamw', learning_rate=5e-5,
+                  epochs=15, recovery_epochs=0,
+                  sparsity_scheduler='cubic', delta_T=1052,
+                  tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                  contrastive_mode='legacy', proj_mode='current',
+                  enable_finetune=True, optimizer_type_ft='adamw',
+                  learning_rate_ft=1e-4, epochs_ft=10)),
+    'roberta-base': dict(
+        base=_LLM_BASE,
+        dense=dict(optimizer_type='adamw', learning_rate=2e-5,
+                   scheduler_type='linear_with_warmup', epochs=5),
+        prune=dict(optimizer_type='adamw', learning_rate=5e-5,
+                   epochs=15, recovery_epochs=0,
+                   sparsity_scheduler='cubic', delta_T=1052),
+        bacp=dict(optimizer_type='adamw', learning_rate=1e-5,
+                  epochs=15, recovery_epochs=0,
+                  sparsity_scheduler='cubic', delta_T=1052,
+                  tau=0.15, lambdas=(0.25, 0.25, 0.25, 0.25),
+                  contrastive_mode='legacy', proj_mode='current',
+                  enable_finetune=True, optimizer_type_ft='adamw',
+                  learning_rate_ft=1e-4, epochs_ft=10)),
+}
+
+SPARSITIES = (0.95, 0.97, 0.99, 0.999)
+PRUNERS = ('magnitude', 'snip', 'wanda')     # names in PRUNER_REGISTRY
+
+
+# --- published numbers (main paper, Table 1; CIFAR-10 / SST-2 rows) ---------
+#
+# {(model, dataset): {'dense': acc, (pruner, sparsity): (I.P., BaCP)}}
+# resnet34 has no published row; the notebooks say so instead of borrowing one.
+
+PAPER = {
+    ('resnet50', 'cifar10'): {
+        'dense': 93.02,
+        ('magnitude', 0.95): (91.97, 93.58), ('snip', 0.95): (90.77, 93.12), ('wanda', 0.95): (91.78, 93.15),
+        ('magnitude', 0.97): (91.39, 93.27), ('snip', 0.97): (90.58, 92.71), ('wanda', 0.97): (90.81, 93.02),
+        ('magnitude', 0.99): (89.87, 92.32), ('snip', 0.99): (88.18, 91.90), ('wanda', 0.99): (86.59, 90.87),
+    },
+    ('resnet101', 'cifar10'): {
+        'dense': 91.80,
+        ('magnitude', 0.95): (90.43, 93.23), ('snip', 0.95): (90.61, 93.75), ('wanda', 0.95): (90.09, 93.09),
+        ('magnitude', 0.97): (90.22, 92.90), ('snip', 0.97): (89.86, 92.64), ('wanda', 0.97): (89.67, 92.75),
+        ('magnitude', 0.99): (89.51, 92.70), ('snip', 0.99): (87.83, 92.20), ('wanda', 0.99): (86.46, 91.92),
+    },
+    ('vgg11', 'cifar10'): {
+        'dense': 89.94,
+        ('magnitude', 0.95): (90.10, 90.44), ('snip', 0.95): (89.60, 90.37), ('wanda', 0.95): (89.49, 90.30),
+        ('magnitude', 0.97): (89.61, 90.65), ('snip', 0.97): (89.64, 90.46), ('wanda', 0.97): (89.04, 90.23),
+        ('magnitude', 0.99): (88.97, 90.44), ('snip', 0.99): (88.24, 90.11), ('wanda', 0.99): (88.28, 89.06),
+    },
+    ('vgg19', 'cifar10'): {
+        'dense': 91.78,
+        ('magnitude', 0.95): (91.53, 92.57), ('snip', 0.95): (91.52, 92.47), ('wanda', 0.95): (91.46, 92.18),
+        ('magnitude', 0.97): (91.66, 92.60), ('snip', 0.97): (91.34, 91.40), ('wanda', 0.97): (90.90, 91.80),
+        ('magnitude', 0.99): (90.56, 92.12), ('snip', 0.99): (89.74, 84.76), ('wanda', 0.99): (90.50, 91.79),
+    },
+    ('vit-tiny', 'cifar10'): {
+        'dense': 97.46,
+        ('magnitude', 0.95): (85.88, 91.57), ('snip', 0.95): (84.46, 90.43), ('wanda', 0.95): (72.48, 85.59),
+        ('magnitude', 0.97): (84.12, 89.78), ('snip', 0.97): (82.64, 88.40), ('wanda', 0.97): (72.04, 83.19),
+        ('magnitude', 0.99): (74.21, 87.01), ('snip', 0.99): (77.60, 85.00), ('wanda', 0.99): (69.79, 81.25),
+    },
+    ('vit-small', 'cifar10'): {
+        'dense': 98.40,
+        ('magnitude', 0.95): (91.19, 92.22), ('snip', 0.95): (91.93, 88.84), ('wanda', 0.95): (88.14, 87.78),
+        ('magnitude', 0.97): (90.58, 92.39), ('snip', 0.97): (90.72, 89.28), ('wanda', 0.97): (84.86, 90.02),
+        ('magnitude', 0.99): (86.28, 90.67), ('snip', 0.99): (88.11, 89.07), ('wanda', 0.99): (80.32, 81.76),
+    },
+    ('distilbert-base-uncased', 'sst2'): {
+        'dense': 91.11,
+        ('magnitude', 0.95): (82.57, 85.46), ('snip', 0.95): (82.09, 84.50), ('wanda', 0.95): (81.97, 84.86),
+        ('magnitude', 0.97): (81.25, 83.29), ('snip', 0.97): (80.05, 84.25), ('wanda', 0.97): (79.93, 82.21),
+        ('magnitude', 0.99): (80.53, 82.33), ('snip', 0.99): (79.93, 81.25), ('wanda', 0.99): (80.41, 81.61),
+    },
+    ('roberta-base', 'sst2'): {
+        'dense': 94.83,
+        ('magnitude', 0.95): (81.85, 83.41), ('snip', 0.95): (87.38, 87.86), ('wanda', 0.95): (82.45, 84.86),
+        ('magnitude', 0.97): (80.77, 83.17), ('snip', 0.97): (85.82, 86.06), ('wanda', 0.97): (81.49, 83.05),
+        ('magnitude', 0.99): (78.12, 82.57), ('snip', 0.99): (81.41, 84.38), ('wanda', 0.99): (80.29, 82.09),
+    },
+}
+
+
+# --- weights ---------------------------------------------------------------
+
+# torchvision constructors matching the local architectures key-for-key
+# (verified: identical state_dict keys and shapes).
+_TORCHVISION = {
+    'resnet34': ('resnet34', 'ResNet34_Weights'),
+    'resnet50': ('resnet50', 'ResNet50_Weights'),
+    'resnet101': ('resnet101', 'ResNet101_Weights'),
+    'vgg11': ('vgg11', 'VGG11_Weights'),
+    'vgg19': ('vgg19', 'VGG19_Weights'),
+    'mobilenet_v2': ('mobilenet_v2', 'MobileNet_V2_Weights'),
+}
+
+
+def fetch_imagenet_weights(model_name):
+    """Put real ImageNet weights at the exact path the registry expects.
+
+    The registry's weight paths point into /dbfs, and load_weights fails SOFT:
+    a missing file warns and the run silently continues from random init. This
+    function downloads the torchvision ImageNet state_dict and saves it where
+    the registry looks, so 'pretrained' actually means pretrained. HF models
+    (ViT, BERT) skip this -- their weights come from the hub automatically.
+    """
+    from model_factory import MODELS
+    spec = MODELS[model_name]
+
+    if spec.weight == '':
+        print(f'{model_name}: weights come from the HF hub, nothing to fetch')
+        return None
+    if os.path.exists(spec.weight):
+        mb = os.path.getsize(spec.weight) / 1e6
+        print(f'{model_name}: weights already at {spec.weight} ({mb:.0f} MB)')
+        return spec.weight
+
+    import torch
+    import torchvision.models as tvm
+    ctor_name, weights_enum = _TORCHVISION[model_name]
+    print(f'{model_name}: downloading torchvision ImageNet weights...')
+    weights = getattr(tvm, weights_enum).IMAGENET1K_V1
+    state = getattr(tvm, ctor_name)(weights=weights).state_dict()
+
+    path = Path(spec.weight)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(state, path)
+    print(f'{model_name}: saved {len(state)} tensors -> {path}')
+    return str(path)
+
+
+def preflight(model_name, num_classes):
+    """Build the model and REFUSE to continue on the wrong init.
+
+    This is the check whose absence cost a day of training: load_weights fails
+    soft, so a run that asked for pretrained weights can silently train from
+    random init. Run this cell before spending any GPU time.
+    """
+    from model_factory import initialize_model_components, MODELS
+    comps = initialize_model_components(model_name, pretrained=True,
+                                        dyrelu_en=False,
+                                        dyrelu_phasing_en=False,
+                                        num_classes=num_classes)
+    expected = 'hf_hub' if MODELS[model_name].weight == '' else 'imagenet_checkpoint'
+    got = comps['init_source']
+    n_params = sum(p.numel() for p in comps['model'].parameters())
+    print(f'{model_name}: {n_params/1e6:.1f}M params, init_source={got}')
+
+    if got != expected:
+        raise RuntimeError(
+            f'\n{"!" * 70}\n'
+            f'{model_name} initialized from {got!r}, expected {expected!r}.\n'
+            f'Training now would produce a "pretrained" baseline that was\n'
+            f'never pretrained. Run fetch_imagenet_weights({model_name!r})\n'
+            f'first, then re-run this cell.\n{"!" * 70}')
+    print('preflight OK: the model is actually pretrained')
+    return {'init_source': got, 'params': n_params}
+
+
+# --- building one test ------------------------------------------------------
+
+def make_cell(model_name, phase, seed=1, pruner=None, sparsity=None,
+              smoke=False, variant=None, **overrides):
+    """One test as a runner-compatible cell dict.
+
+    phase: 'dense' (baseline_script), 'prune' (pruning_script, the I.P.
+    baseline) or 'bacp' (bacp_script). Sparse phases need `pruner` and
+    `sparsity`. `smoke=True` shrinks everything to a 2-batch pipeline check.
+    Any extra keyword overrides the config (e.g. epochs=3).
+
+    variant: optional key suffix (e.g. 'legacy') so an ablation arm's records
+    coexist with the main table's instead of silently satisfying its keys --
+    the same mechanism as the .smoke suffix.
+    """
+    if model_name not in FAMILIES:
+        raise KeyError(f'{model_name!r} not in FAMILIES: {sorted(FAMILIES)}')
+    if phase not in ('dense', 'prune', 'bacp'):
+        raise ValueError(f"phase must be dense|prune|bacp, got {phase!r}")
+
+    family = FAMILIES[model_name]
+    config = dict(family['base'])
+    config.update(family[phase])
+    config['model_name'] = model_name
+    config['experiment_type'] = f'static-{phase}'
+    if on_databricks():
+        config['databricks_env'] = True      # checkpoints under /dbfs
+
+    if phase == 'dense':
+        tag = 'dense'
+    else:
+        if pruner is None or sparsity is None:
+            raise ValueError(f'phase {phase!r} needs pruner= and sparsity=')
+        config['pruning_type'] = pruner
+        config['target_sparsity'] = sparsity
+        tag = f's{sparsity}.{pruner}'
+
+    if smoke:
+        config.update(epochs=2, limit_train_batches=2, limit_eval_batches=2,
+                      num_workers=0)
+        if phase == 'bacp':
+            config.update(epochs_ft=2, recovery_epochs=1)
+        elif phase == 'prune':
+            config['recovery_epochs'] = 1
+
+    config.update(overrides)
+
+    dataset = config['dataset_name']
+    key = f'static.{phase}.{model_name}.{dataset}.{tag}.seed{seed}'
+    if variant:
+        key += f'.{variant}'
+    if smoke:
+        key += '.smoke'
+
+    return {
+        'key': key,
+        'script': 'baseline' if phase == 'dense' else
+                  ('pruning' if phase == 'prune' else 'bacp'),
+        'rung': f'static-{phase}',
+        'label': f'{model_name} {phase} {tag}' + (f' [{variant}]' if variant else ''),
+        'changes': '',
+        'stage': 'static',
+        'seed': seed,
+        'model_name': model_name,
+        'dataset_name': dataset,
+        'sparsity': sparsity,
+        'config': config,
+    }
+
+
+# --- results csv ------------------------------------------------------------
+
+CSV_COLUMNS = ['key', 'model', 'dataset', 'phase', 'pruner', 'sparsity',
+               'seed', 'variant', 'test_acc', 'sparsity_achieved',
+               'contrastive_mode', 'proj_mode', 'tau', 'epochs',
+               'prune_task_head', 'wanda_group', 'ended_at']
+
+
+def _row_from_record(rec):
+    """One CSV row from one run record."""
+    key = rec.get('experiment_group') or ''
+    bits = key.split('.')
+    variant = 'legacy' if key.endswith('.legacy') else ''
+    pruner, sparsity = '', ''
+    for b in bits:
+        if b.startswith('s0.'):
+            sparsity = b[1:]
+    if 'magnitude' in bits: pruner = 'magnitude'
+    elif 'snip' in bits:    pruner = 'snip'
+    elif 'wanda' in bits:   pruner = 'wanda'
+    return {
+        'key': key,
+        'model': rec.get('model_name', ''),
+        'dataset': rec.get('dataset_name', ''),
+        'phase': bits[1] if len(bits) > 1 else '',
+        'pruner': pruner,
+        'sparsity': sparsity,
+        'seed': rec.get('seed', ''),
+        'variant': variant,
+        'test_acc': rec.get('test_acc_pct', ''),
+        'sparsity_achieved': rec.get('sparsity_reported', ''),
+        'contrastive_mode': rec.get('contrastive_mode', ''),
+        'proj_mode': rec.get('proj_mode', ''),
+        'tau': rec.get('tau', ''),
+        'epochs': rec.get('epochs', ''),
+        'prune_task_head': rec.get('prune_task_head', ''),
+        'wanda_group': rec.get('wanda_group', ''),
+        'ended_at': rec.get('ended_at', ''),
+    }
+
+
+def update_results_csv(path=None):
+    """Rewrite results.csv from every run record on disk. Cheap; call it after
+    each run so the file always reflects the truth."""
+    import csv, glob, json, os
+    root = os.environ['BACP_RESULTS_DIR']
+    path = path or os.path.join(root, 'results.csv')
+    rows = []
+    for f in glob.glob(os.path.join(root, 'runs', '*.json')):
+        try:
+            rec = json.load(open(f, encoding='utf-8'))
+        except Exception:                                          # noqa: BLE001
+            continue
+        key = rec.get('experiment_group') or ''
+        if not key or '.smoke' in key:
+            continue
+        rows.append(_row_from_record(rec))
+    rows.sort(key=lambda r: (r['model'], r['phase'], r['pruner'],
+                             str(r['sparsity']), r['variant']))
+    with open(path, 'w', newline='', encoding='utf-8') as fh:
+        w = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+    print(f'results.csv <- {len(rows)} record(s)  [{path}]')
+    return path
+
+
+def verification_table():
+    """legacy vs control BaCP against the shared I.P. baseline."""
+    import glob, json, os
+    root = os.environ['BACP_RESULTS_DIR']
+    by_key = {}
+    for f in glob.glob(os.path.join(root, 'runs', '*.json')):
+        try:
+            rec = json.load(open(f, encoding='utf-8'))
+        except Exception:                                          # noqa: BLE001
+            continue
+        k = rec.get('experiment_group')
+        if k:
+            by_key[k] = rec
+
+    base = 'static.{p}.resnet50.cifar10.s{s}.magnitude.seed1'
+    acc = lambda k: (by_key.get(k) or {}).get('test_acc_pct')
+    fmt = lambda v: ' -  ' if v is None else f'{v:.2f}'
+    print(f'{"sparsity":<9}{"I.P.":>8}{"control":>9}{"legacy":>8}'
+          f'{"d(ctl)":>9}{"d(leg)":>9}{"leg-ctl":>9}')
+    for s in (0.95, 0.97, 0.99):
+        ip  = acc(base.format(p='prune', s=s))
+        ctl = acc(base.format(p='bacp',  s=s))
+        leg = acc(base.format(p='bacp',  s=s) + '.legacy')
+        d_c = None if (ctl is None or ip is None) else ctl - ip
+        d_l = None if (leg is None or ip is None) else leg - ip
+        dd  = None if (leg is None or ctl is None) else leg - ctl
+        sgn = lambda v: ' -  ' if v is None else f'{v:+.2f}'
+        print(f'{s:<9}{fmt(ip):>8}{fmt(ctl):>9}{fmt(leg):>8}'
+              f'{sgn(d_c):>9}{sgn(d_l):>9}{sgn(dd):>9}')
+    print()
+    print('d(ctl), d(leg): each objective\'s gain over the SAME I.P. baseline.')
+    print('leg-ctl > 0  ->  the original objective wins.')
+    update_results_csv()
+
+
+# --- sanity check -----------------------------------------------------------
+
+def sanity_check(cells, control=None):
+    """Verify a batch of cells BEFORE any GPU time is spent. Returns True if
+    everything passes.
+
+    Prints three sections, in this order:
+
+      1. TRAINING PROTOCOL  epochs, delta_T, schedule, recovery, optimiser/LR
+                            per phase, tau, lambdas, prunable scope.
+      2. THE RUN            model, phase, pruner, sparsity, seed, record key,
+                            whether that record already EXISTS (would skip),
+                            and -- when `control` is given -- the exact set of
+                            config keys that differ from it.
+      3. THE DATASET        name, splits, batch size, image size, classes, and
+                            which split the reported accuracy comes from.
+
+    A FAIL is a stop: fix it before submitting.
+    """
+    import runner as R
+
+    cells = list(cells)
+    if not cells:
+        print('SANITY: no cells given'); return False
+    done = R.completed_keys()
+    ok = True
+
+    # -- 1. protocol ---------------------------------------------------------
+    print('=' * 78)
+    print('1. TRAINING PROTOCOL')
+    print('=' * 78)
+    c0 = cells[0]['config']
+    phase = cells[0]['rung'].replace('static-', '')
+    keys = ['epochs', 'delta_T', 'sparsity_scheduler', 'recovery_epochs',
+            'optimizer_type', 'learning_rate', 'patience',
+            'tau', 'lambdas', 'contrastive_mode', 'proj_mode', 'num_snapshots',
+            'enable_finetune', 'optimizer_type_ft', 'learning_rate_ft',
+            'epochs_ft', 'prune_task_head', 'prune_embeddings', 'wanda_group',
+            'num_workers', 'enable_tqdm']
+    for k in keys:
+        if k in c0:
+            print(f'   {k:<20} {c0[k]}')
+    if phase in ('prune', 'bacp'):
+        ep, dt = c0.get('epochs'), c0.get('delta_T')
+        print(f'   -> ramp: cubic to target over first 80% of {ep} epochs, '
+              f'final 20% recovery at fixed mask; mask update every {dt} steps')
+        if c0.get('recovery_epochs'):
+            print('   FAIL  recovery_epochs != 0 re-enables the legacy '
+                  'interleaved recovery block'); ok = False
+
+    # -- 2. the runs ---------------------------------------------------------
+    print()
+    print('=' * 78)
+    print('2. THE RUN(S)')
+    print('=' * 78)
+    for c in cells:
+        exists = c['key'] in done
+        mark = 'EXISTS -> WILL SKIP' if exists else 'will run'
+        print(f'   {c["key"]}')
+        print(f'      model={c["model_name"]} phase={c["rung"]} '
+              f'pruner={c["config"].get("pruning_type", "-")} '
+              f'sparsity={c["sparsity"]} seed={c["seed"]}  [{mark}]')
+        if exists:
+            print('      NOTE  delete its record to force a re-run')
+    if control is not None:
+        a, b = cells[0]['config'], control['config']
+        diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+        print()
+        print(f'   ablation vs control {control["key"]}')
+        print(f'      keys that differ: {diff}')
+        for k in diff:
+            print(f'         {k}: control={b.get(k)!r} -> arm={a.get(k)!r}')
+        if not diff:
+            print('      FAIL  nothing differs; this is not an ablation'); ok = False
+
+    # -- 3. the dataset ------------------------------------------------------
+    print()
+    print('=' * 78)
+    print('3. THE DATASET')
+    print('=' * 78)
+    ds = c0.get('dataset_name')
+    print(f'   dataset       {ds}')
+    print(f'   batch_size    {c0.get("batch_size")}')
+    print(f'   num_classes   {c0.get("num_classes")}')
+    if 'image_size' in c0:
+        print(f'   image_size    {c0["image_size"]}')
+    if ds == 'cifar10':
+        print('   splits        50,000 train -> 45,000 train / 5,000 val '
+              '(0.1 split, GraNet convention); 10,000 test')
+        print('                 the SAME split for both arms -- contrastive '
+              'recipes used to skip it entirely')
+        print('   reported acc  the 10,000-image TEST split, all of it '
+              '(drop_last=False)')
+    elif ds == 'sst2':
+        print('   splits        67,349 train / 872 validation / 1,821 test')
+        print('   reported acc  the VALIDATION split -- GLUE test labels are '
+              'not public. State this wherever the number appears.')
+    else:
+        print('   splits        (not described here; verify before reporting)')
+
+    print()
+    print('=' * 78)
+    print('SANITY: PASS' if ok else 'SANITY: FAIL -- fix before submitting')
+    print('=' * 78)
+    return ok
+
+
+# --- running ---------------------------------------------------------------
+
+def _log_path(key):
+    from results import results_dir
+    d = results_dir() / 'logs'
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f'{key}.log'
+
+
+def run(cell, gpu=0):
+    """Run one cell, streaming every epoch into the notebook output.
+
+    Skips cells that already have an ok run record -- delete the record under
+    results/runs/ to re-run. Output is also written to results/logs/<key>.log.
+    Ctrl-C / interrupt kills the training subprocess cleanly.
+    """
+    import runner as R
+
+    if cell['key'] in R.completed_keys():
+        print(f"SKIP {cell['key']} -- already recorded. "
+              f"Delete its record in results/runs/ to re-run.")
+        return None
+
+    # Sparse cells start from the dense checkpoint of the SAME seed.
+    if cell['script'] != 'baseline':
+        cell = R.attach_checkpoint(cell)
+        print(f"checkpoint  {cell['config'].get('trained_weights')}")
+
+    argv = R.build_command(cell, python=sys.executable)
+    env = {**os.environ,
+           'BACP_EXPERIMENT_GROUP': cell['key'],
+           'CUDA_VISIBLE_DEVICES': str(gpu),
+           'PYTHONUNBUFFERED': '1',
+           'MPLBACKEND': 'Agg'}
+
+    print(f"RUN  {cell['key']}   (gpu {gpu})")
+    hist = {'epoch': [], 'acc': [], 'loss': [], 'sparsity': []}
+    first_nan = None
+    t_prev = time.perf_counter()
+
+    log_file = _log_path(cell['key']).open('w', encoding='utf-8',
+                                           errors='replace')
+    log_file.write(f"=== {cell['key']}\n=== {' '.join(argv)}\n\n")
+
+    proc = subprocess.Popen(argv, cwd=str(REPO / 'project' / 'scripts'),
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1, env=env,
+                            encoding='utf-8', errors='replace')
+    def _tee(stream):
+        for raw in stream:
+            log_file.write(raw)          # the log keeps every repaint verbatim
+            yield raw
+
+    try:
+        for event in iter_progress(_tee(proc.stdout)):
+            if event[0] == 'line':
+                print(event[1])
+                continue
+
+            _, phase_tag, ep, tot, acc, loss, sp = event
+            now = time.perf_counter()
+            per, t_prev = now - t_prev, now
+
+            hist['epoch'].append(ep)
+            hist['acc'].append(acc)
+            hist['loss'].append(loss)
+            hist['sparsity'].append(sp)
+
+            acc_s = f'{acc:6.2f}' if acc is not None else '     -'
+            loss_s = f'{loss:9.4f}' if loss is not None else '        -'
+            sp_s = f'{sp:.4f}' if sp is not None else '-'
+            print(f'{phase_tag:<12} {ep:4d}/{tot}  acc {acc_s}  loss {loss_s}'
+                  f'  sparsity {sp_s}  [{per:5.1f}s/ep'
+                  f'  eta {per * (tot - ep) / 60:5.1f}m]')
+
+            if first_nan is None and loss is not None and loss != loss:
+                first_nan = ep
+                print(f'*** LOSS WENT NaN AT EPOCH {ep}/{tot} ***')
+    except KeyboardInterrupt:
+        proc.terminate()
+        print('interrupted -- subprocess terminated')
+    finally:
+        proc.wait()
+        log_file.close()
+
+    ok = cell['key'] in R.completed_keys()
+    if proc.returncode == 0 and ok:
+        print(f"DONE {cell['key']}")
+        try:
+            update_results_csv()
+        except Exception as exc:                                   # noqa: BLE001
+            print(f'(results.csv not updated: {exc})')
+    elif proc.returncode == 0:
+        print(f"!! exited 0 but wrote no record -- check "
+              f"results/logs/{cell['key']}.log")
+    else:
+        # A failure is a row, on this path too: without the record, a crashed
+        # run is indistinguishable from one that was never scheduled.
+        try:
+            from results import record_failure
+            tail = _log_path(cell['key']).read_text(encoding='utf-8',
+                                                    errors='replace')[-4000:]
+            record_failure(cell, returncode=proc.returncode, log_tail=tail,
+                           experiment_group=cell['key'])
+        except Exception as exc:                                   # noqa: BLE001
+            print(f'(could not write the failure record: {exc})')
+        print(f"FAILED rc={proc.returncode} -- see "
+              f"results/logs/{cell['key']}.log")
+    return hist, first_nan
+
+
+def run_group(cells, gpu=0):
+    """Run several cells back to back, then print a one-line-each summary."""
+    outcomes = []
+    for cell in cells:
+        out = run(cell, gpu=gpu)
+        if out is None:
+            outcomes.append((cell['key'], 'skipped (already recorded)'))
+            continue
+        hist, first_nan = out
+        accs = [a for a in hist['acc'] if a is not None]
+        best = f'best acc {max(accs):.2f}' if accs else 'no acc parsed'
+        nan = f', NaN at epoch {first_nan}' if first_nan else ''
+        outcomes.append((cell['key'], best + nan))
+    print('\n--- group summary ---')
+    for key, verdict in outcomes:
+        print(f'  {key:<60} {verdict}')
+    return outcomes
+
+
+def _latest_epoch_line(path):
+    """The newest 'Epoch [k/N]' line in a log, for the status display."""
+    try:
+        text = path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return ''
+    line = ''
+    for raw in text.replace('\r', '\n').splitlines():
+        if 'Epoch [' in raw:
+            line = raw.strip()
+    return line[:110]
+
+
+def run_parallel(cells, gpu=0, max_parallel=4, poll_s=30):
+    """Run several cells at once on ONE gpu and report what that actually cost.
+
+    run() streams a single cell into the notebook. This runs several and
+    streams none of them -- four interleaved epoch streams are unreadable.
+    Every cell still writes results/logs/<key>.log exactly as before; this
+    prints one status block every poll_s seconds with the newest epoch line
+    from each live cell.
+
+    Why this exists, and what it does NOT assume: a cell peaks around 4 GB on
+    an 80 GB card, so memory is not the thing stopping us running several at
+    once. Whether total throughput improves depends on whether ONE cell leaves
+    the GPU idle -- waiting on the loader or on kernel launches -- and that is
+    a property of this workload, not of the hardware. If a cell already
+    saturates the SMs, four cells each run about four times slower and nothing
+    is gained. So this returns per-cell wall-clock and prints the speedup
+    against the sequential total, rather than claiming one.
+
+    MEASURED ON THIS WORKLOAD, 2026-08-24: four VGG-11 BaCP cells reached
+    ~20.25 of 50 contrastive epochs in 33 min (1.63 min/epoch/cell) against a
+    sequential ~0.354 min/contrastive-epoch -- a 4.6x per-cell slowdown against
+    an ideal 4.0x, so 0.87x AGGREGATE throughput. Four at a time was slower
+    than one at a time. A single cell already saturates the A100; the 4.15 GB
+    peak memory never implied otherwise. Prefer run_group unless you have
+    re-measured and found idle GPU.
+
+    ALSO: on Databricks, /dbfs materialises a file only on CLOSE. An
+    in-progress cell's log is therefore INVISIBLE to dbfs/list, and every log
+    appears at once when the run ends or is killed. Absence of a log file is
+    NOT evidence that a cell is not running -- poll the run records instead.
+
+    IMPORTANT: the cells share the machine. Pass num_workers small enough that
+    max_parallel * num_workers stays at or under the core count, e.g.
+    make_cell(..., num_workers=6) for four cells on 24 vCPUs. Leaving it at 24
+    means 96 loader processes fighting for 24 cores, and every cell gets
+    slower for no reason at all.
+
+    num_workers is not part of a cell's key, so a cell run this way satisfies
+    the same record as a sequential run -- but it IS stored in the record, so
+    the provenance of every number stays visible.
+    """
+    import runner as R
+
+    done = R.completed_keys()
+    queue = []
+    for cell in cells:
+        if cell['key'] in done:
+            print(f"SKIP  {cell['key']} -- already recorded.")
+            continue
+        # Sparse cells start from the dense checkpoint of the SAME seed; this
+        # raises here rather than inside a subprocess if it is missing.
+        if cell['script'] != 'baseline':
+            cell = R.attach_checkpoint(cell)
+        queue.append(cell)
+
+    if not queue:
+        print('nothing to run -- every cell is already recorded')
+        return []
+
+    print(f'{len(queue)} cell(s), {max_parallel} at a time, gpu {gpu}\n',
+          flush=True)
+    live = {}
+    results = []
+    t_start = time.perf_counter()
+
+    def _launch(cell):
+        argv = R.build_command(cell, python=sys.executable)
+        env = {**os.environ,
+               'BACP_EXPERIMENT_GROUP': cell['key'],
+               'CUDA_VISIBLE_DEVICES': str(gpu),
+               'PYTHONUNBUFFERED': '1',
+               'MPLBACKEND': 'Agg'}
+        path = _log_path(cell['key'])
+        fh = path.open('w', encoding='utf-8', errors='replace')
+        fh.write(f"=== {cell['key']}\n=== {' '.join(argv)}\n\n")
+        fh.flush()
+        proc = subprocess.Popen(argv, cwd=str(REPO / 'project' / 'scripts'),
+                                stdout=fh, stderr=subprocess.STDOUT, env=env)
+        live[proc] = {'cell': cell, 'fh': fh, 'path': path,
+                      't0': time.perf_counter()}
+        print(f"START {cell['key']}", flush=True)
+
+    try:
+        while queue or live:
+            while queue and len(live) < max_parallel:
+                _launch(queue.pop(0))
+
+            time.sleep(poll_s)
+
+            for proc in [p for p in live if p.poll() is not None]:
+                info = live.pop(proc)
+                info['fh'].close()
+                dt = time.perf_counter() - info['t0']
+                ok = proc.returncode == 0
+                results.append({'key': info['cell']['key'], 'ok': ok,
+                                'seconds': dt, 'returncode': proc.returncode})
+                verdict = 'done ' if ok else f'FAILED rc={proc.returncode}'
+                print(f"{verdict} {info['cell']['key']}  {dt/60:.1f} min",
+                      flush=True)
+
+            if live:
+                elapsed = (time.perf_counter() - t_start) / 60
+                print(f'--- {elapsed:.0f} min elapsed, {len(live)} running, '
+                      f'{len(queue)} queued ---', flush=True)
+                for info in live.values():
+                    tag = info['cell']['key'].split('.', 2)[-1]
+                    print(f"    {tag:<52} {_latest_epoch_line(info['path'])}")
+
+    except KeyboardInterrupt:
+        print('\ninterrupted -- terminating child processes')
+        for proc, info in live.items():
+            proc.terminate()
+            info['fh'].close()
+        raise
+
+    wall = time.perf_counter() - t_start
+    serial = sum(r['seconds'] for r in results)
+    print('\n--- parallel summary ---')
+    for r in sorted(results, key=lambda r: -r['seconds']):
+        flag = '' if r['ok'] else '   <-- FAILED'
+        print(f"  {r['key']:<58} {r['seconds']/60:6.1f} min{flag}")
+    print(f'\n  wall clock            {wall/60:.1f} min')
+    print(f'  sum of cell times     {serial/60:.1f} min')
+    if wall > 0:
+        print(f'  concurrency gain      {serial/wall:.2f}x')
+    print('\n  NOTE: the gain above is against the SUM OF THESE CELLS AS RUN\n'
+          '  CONCURRENTLY, which is not the sequential baseline -- each cell\n'
+          '  is slower here than it would be alone. To judge whether\n'
+          '  concurrency helped, compare wall clock against the sequential\n'
+          '  time for the same configurations (seed 1, in results/runs/).')
+    return results
+
+
+# --- results ----------------------------------------------------------------
+
+# Which record phase carries the final number, best first.
+_PHASE_PRIORITY = ('finetune', 'prune', 'dense', 'contrastive')
+
+
+def _sparsity_scope(rec):
+    """(prunable share of the model, true whole-model sparsity) for one record.
+
+    sparsity_reported is measured over the PRUNABLE set alone, so on a model
+    where excluded_keywords() holds real weight mass dense it is not the number
+    a reader takes it for; scaling it by the prunable share gives the sparsity
+    of the model as shipped.
+    """
+    total, prunable = rec.get('total_params'), rec.get('prunable_params')
+    if not total or not prunable:
+        return None, None
+    frac = prunable / total
+    reported = rec.get('sparsity_reported')      # null on some older records
+    return frac, (None if reported is None else reported * frac)
+
+
+def _our_numbers(model_name, dataset):
+    """({group: acc}, [(target, prunable share, true sparsity), ...]) from the
+    ok run records of this model."""
+    from results import iter_records
+    prefix = 'static.'
+    out = {}
+    scope = []
+    for rec in iter_records():
+        group = rec.get('experiment_group') or ''
+        if rec.get('status') != 'ok' or not group.startswith(prefix):
+            continue
+        parts = group.split('.')
+        # static.<phase>.<model>.<dataset>.<tag...>.seed<n>[.smoke]
+        if 'smoke' in parts or model_name not in group or dataset not in group:
+            continue
+        # before the acc check on purpose: a run that never reported an accuracy
+        # still says how much of the model the pruner was never allowed to touch
+        frac, true_sparsity = _sparsity_scope(rec)
+        if frac is not None:
+            scope.append((rec.get('sparsity_requested'), frac, true_sparsity))
+        acc = rec.get('test_acc_pct')
+        if acc is None:
+            continue
+        phase = rec.get('phase')
+        prio = (_PHASE_PRIORITY.index(phase)
+                if phase in _PHASE_PRIORITY else len(_PHASE_PRIORITY))
+        best = out.setdefault(group, (prio, acc))
+        if prio < best[0]:
+            out[group] = (prio, acc)
+    return {k: v[1] for k, v in out.items()}, scope
+
+
+def _print_sparsity_scope(model_name, scope):
+    """Footnote for models whose nominal target is not their real sparsity.
+
+    excluded_keywords() holds every 'embedding' parameter dense. That is a
+    rounding error on a CNN and not on a transformer: vgg19 is 99.99% prunable
+    so 0.999 nominal is 0.9989 true, while vit-tiny is 96.09% prunable and the
+    same nominal target lands at 0.9600 -- a different experiment wearing the
+    same label.
+    """
+    fracs = [f for _, f, _ in scope]
+    # 99%: at or above it nominal and true agree to within 0.001, i.e. inside
+    # the precision this table prints, so the CNN rows stay untouched.
+    if not fracs or min(fracs) >= 0.99:
+        return
+    frac = min(fracs)          # they should agree; the lowest never flatters us
+    print(f'note: only {frac * 100:.2f}% of {model_name} is prunable -- '
+          f'embeddings are held dense,')
+    print('      so "@ s" above is s of the PRUNABLE set, not of the model.')
+    achieved = {}
+    for target, _, true_sparsity in scope:
+        if target is not None and true_sparsity is not None:
+            achieved.setdefault(float(target), []).append(true_sparsity)
+    for target, vals in sorted(achieved.items()):
+        print(f'      nominal {target:<6g} -> true whole-model '
+              f'{sum(vals) / len(vals):.4f}')
+
+
+def results_table(model_name, dataset=None):
+    """Print our accuracy per pruner x sparsity next to the paper's numbers."""
+    dataset = dataset or FAMILIES[model_name]['base']['dataset_name']
+    ours, scope = _our_numbers(model_name, dataset)
+    paper = PAPER.get((model_name, dataset), {})
+
+    def mean(keys):
+        vals = [ours[k] for k in keys if k in ours]
+        return (sum(vals) / len(vals), len(vals)) if vals else (None, 0)
+
+    def find(phase, tag):
+        pre = f'static.{phase}.{model_name}.{dataset}.{tag}.'
+        return [k for k in ours if k.startswith(pre)]
+
+    def fmt(x):
+        return f'{x:6.2f}' if x is not None else '     -'
+
+    print(f'{model_name} / {dataset} -- ours vs paper Table 1 '
+          f'(- means not run / not published)')
+    print(f'{"test":<24} {"ours":>8} {"n":>2} {"paper I.P.":>10} '
+          f'{"paper BaCP":>10}')
+
+    acc, n = mean(find('dense', 'dense'))
+    print(f'{"dense":<24} {fmt(acc):>8} {n:>2} '
+          f'{fmt(paper.get("dense")):>10} {"":>10}')
+
+    for pruner in PRUNERS:
+        for sp in SPARSITIES:
+            pub = paper.get((pruner, sp), (None, None))
+            tag = f's{sp}.{pruner}'
+            acc, n = mean(find('prune', tag))
+            print(f'{"I.P. " + pruner + " @ " + str(sp):<24} {fmt(acc):>8} '
+                  f'{n:>2} {fmt(pub[0]):>10} {"":>10}')
+            acc, n = mean(find('bacp', tag))
+            print(f'{"BaCP " + pruner + " @ " + str(sp):<24} {fmt(acc):>8} '
+                  f'{n:>2} {"":>10} {fmt(pub[1]):>10}')
+    _print_sparsity_scope(model_name, scope)
+    if (model_name, dataset) not in PAPER:
+        print('note: no published row for this model/dataset in the paper '
+              '-- the nearest comparator is stated in the notebook header.')
